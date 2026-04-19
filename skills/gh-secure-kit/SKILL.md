@@ -41,6 +41,15 @@ gh secure-kit                      # Root command
     │   └── list                   # List repository submodules
     └── unity                      # Unity project subcommands
         └── list                   # List Unity package dependencies
+├── dependabot                     # Dependabot management subcommands
+│   ├── alerts                     # Dependabot alerts subcommands
+│   │   ├── get                    # Get a single Dependabot alert
+│   │   ├── list                   # List Dependabot alerts
+│   │   └── update                 # Update a Dependabot alert
+│   └── repository-access          # Dependabot repository access subcommands
+│       ├── list                   # List accessible repositories
+│       ├── set-default-level      # Set default access level
+│       └── update                 # Update repository access list
 ```
 
 ## Actions
@@ -301,3 +310,185 @@ gh secure-kit deps unity list --ref main
 | `--ref` | | `""` | Branch, tag, or commit SHA to read from |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template |
+
+## Dependabot
+
+### List Dependabot alerts (gh secure-kit dependabot alerts list)
+
+```sh
+gh secure-kit dependabot alerts list [flags]
+```
+
+List Dependabot alerts for a repository. Supports filtering by state, severity, ecosystem, and scope.
+
+```sh
+# List all Dependabot alerts in the current repository
+gh secure-kit dependabot alerts list
+
+# List alerts for a specific repository
+gh secure-kit dependabot alerts list --repo owner/repo
+
+# Filter by state
+gh secure-kit dependabot alerts list --state open
+
+# Filter by severity
+gh secure-kit dependabot alerts list --severity critical
+
+# Filter by ecosystem
+gh secure-kit dependabot alerts list --ecosystem npm
+
+# JSON output
+gh secure-kit dependabot alerts list --format json
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--direction` | | `""` | Sort direction {asc\|desc} |
+| `--ecosystem` | | `""` | Filter by ecosystem {composer\|go\|maven\|npm\|nuget\|pip\|pub\|rubygems\|rust} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--scope` | | `""` | Filter by scope {development\|runtime} |
+| `--severity` | | `""` | Filter by severity {low\|medium\|high\|critical} |
+| `--sort` | | `""` | Sort by field {created\|updated\|epss_percentage} |
+| `--state` | | `""` | Filter by state {auto_dismissed\|dismissed\|fixed\|open} |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Get a Dependabot alert (gh secure-kit dependabot alerts get)
+
+```sh
+gh secure-kit dependabot alerts get <alert-number> [flags]
+```
+
+Get a single Dependabot alert by its number for a repository.
+
+```sh
+# Get alert #1 in the current repository
+gh secure-kit dependabot alerts get 1
+
+# Get alert for a specific repository
+gh secure-kit dependabot alerts get 42 --repo owner/repo
+
+# JSON output
+gh secure-kit dependabot alerts get 1 --format json
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Update a Dependabot alert (gh secure-kit dependabot alerts update)
+
+```sh
+gh secure-kit dependabot alerts update <alert-number> --state <state> [flags]
+```
+
+Update a Dependabot alert for a repository. Use --state to change the alert state. A --dismissed-reason is required when setting state to dismissed.
+
+```sh
+# Reopen a dismissed alert
+gh secure-kit dependabot alerts update 1 --state open
+
+# Dismiss an alert with a reason
+gh secure-kit dependabot alerts update 1 --state dismissed --dismissed-reason tolerable_risk
+
+# Dismiss with a comment
+gh secure-kit dependabot alerts update 1 --state dismissed --dismissed-reason not_used --dismissed-comment "Not applicable to our usage"
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--dismissed-comment` | | `""` | Optional comment associated with dismissing the alert |
+| `--dismissed-reason` | | `""` | Reason for dismissing; required when state is dismissed {fix_started\|inaccurate\|no_bandwidth\|not_used\|tolerable_risk} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--state` | | | The state to set {dismissed\|open} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### List Dependabot accessible repositories (gh secure-kit dependabot repository-access list)
+
+```sh
+gh secure-kit dependabot repository-access list [flags]
+```
+
+Lists repositories that organization admins have allowed Dependabot to access when updating dependencies.
+
+```sh
+# List accessible repositories for the current repository's organization
+gh secure-kit dependabot repository-access list
+
+# List accessible repositories for a specific organization
+gh secure-kit dependabot repository-access list --owner my-org
+
+# JSON output
+gh secure-kit dependabot repository-access list --owner my-org --format json
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Set Dependabot default repository access level (gh secure-kit dependabot repository-access set-default-level)
+
+```sh
+gh secure-kit dependabot repository-access set-default-level --level <level> [flags]
+```
+
+Sets the default level of repository access Dependabot will have while performing an update. Available values are 'public' (only public repositories) and 'internal' (public and internal repositories).
+
+```sh
+# Set default level to public
+gh secure-kit dependabot repository-access set-default-level --level public --owner my-org
+
+# Set default level to internal
+gh secure-kit dependabot repository-access set-default-level --level internal --owner my-org
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--level` | | | The default access level {public\|internal} (required) |
+| `--owner` | `-o` | `""` | The organization name |
+
+### Update Dependabot repository access list (gh secure-kit dependabot repository-access update)
+
+```sh
+gh secure-kit dependabot repository-access update [flags]
+```
+
+Updates repositories according to the list of repositories that organization admins have given Dependabot access to when they've updated dependencies. Use --add to add repository IDs and --remove to remove repository IDs.
+
+```sh
+# Add repositories by ID
+gh secure-kit dependabot repository-access update --owner my-org --add 123 --add 456
+
+# Remove repositories by ID
+gh secure-kit dependabot repository-access update --owner my-org --remove 789
+
+# Add and remove in one operation
+gh secure-kit dependabot repository-access update --owner my-org --add 123 --remove 789
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--add` | | | Repository IDs to add (can be specified multiple times) |
+| `--owner` | `-o` | `""` | The organization name |
+| `--remove` | | | Repository IDs to remove (can be specified multiple times) |
