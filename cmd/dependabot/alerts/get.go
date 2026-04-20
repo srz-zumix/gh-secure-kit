@@ -45,7 +45,7 @@ func NewGetCmd() *cobra.Command {
 			ctx := cmd.Context()
 			alert, err := gh.GetDependabotAlert(ctx, client, repository, alertNumber)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to fetch Dependabot alert: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
