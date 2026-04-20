@@ -53,7 +53,7 @@ func NewListCmd() *cobra.Command {
 			ctx := cmd.Context()
 			alerts, err := gh.ListDependabotAlerts(ctx, client, repository, alertOpts)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to list Dependabot alerts: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
