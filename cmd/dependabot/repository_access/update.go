@@ -37,7 +37,7 @@ func NewUpdateCmd() *cobra.Command {
 			ctx := cmd.Context()
 			err = gh.UpdateOrgDependabotRepositoryAccess(ctx, client, repository.Owner, addIDs, removeIDs)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to update Dependabot repository access: %w", err)
 			}
 
 			fmt.Println("Dependabot repository access updated successfully.")
