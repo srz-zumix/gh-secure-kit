@@ -39,7 +39,7 @@ func NewListCmd() *cobra.Command {
 			ctx := cmd.Context()
 			access, err := gh.ListOrgDependabotRepositoryAccess(ctx, client, repository.Owner)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to list Dependabot repository access: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
