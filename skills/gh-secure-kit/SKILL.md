@@ -32,15 +32,6 @@ gh secure-kit                      # Root command
 ├── actions                        # GitHub Actions security subcommands
 │   ├── lint                       # Lint workflow/action YAML files
 │   └── workflow                   # List action deps from workflow YAML
-└── deps                           # Dependency management subcommands
-    ├── list                       # List dependency packages (SBOM)
-    ├── actions                    # GitHub Actions dependency subcommands
-    │   ├── graph                  # Graph Actions dependencies
-    │   └── list                   # List Actions packages from SBOM
-    ├── submodule                  # Git submodule subcommands
-    │   └── list                   # List repository submodules
-    └── unity                      # Unity project subcommands
-        └── list                   # List Unity package dependencies
 ├── dependabot                     # Dependabot management subcommands
 │   ├── alerts                     # Dependabot alerts subcommands
 │   │   ├── get                    # Get a single Dependabot alert
@@ -50,6 +41,15 @@ gh secure-kit                      # Root command
 │       ├── list                   # List accessible repositories
 │       ├── set-default-level      # Set default access level
 │       └── update                 # Update repository access list
+└── deps                           # Dependency management subcommands
+    ├── list                       # List dependency packages (SBOM)
+    ├── actions                    # GitHub Actions dependency subcommands
+    │   ├── graph                  # Graph Actions dependencies
+    │   └── list                   # List Actions packages from SBOM
+    ├── submodule                  # Git submodule subcommands
+    │   └── list                   # List repository submodules
+    └── unity                      # Unity project subcommands
+        └── list                   # List Unity package dependencies
 ```
 
 ## Actions
