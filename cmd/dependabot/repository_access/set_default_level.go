@@ -33,7 +33,7 @@ func NewSetDefaultLevelCmd() *cobra.Command {
 			ctx := cmd.Context()
 			err = gh.SetOrgDependabotDefaultLevel(ctx, client, repository.Owner, level)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to set Dependabot default access level: %w", err)
 			}
 
 			fmt.Printf("Dependabot default repository access level set to %q for org %q.\n", level, repository.Owner)
