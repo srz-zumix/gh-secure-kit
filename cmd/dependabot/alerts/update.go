@@ -54,7 +54,7 @@ func NewUpdateCmd() *cobra.Command {
 			ctx := cmd.Context()
 			alert, err := gh.UpdateDependabotAlert(ctx, client, repository, alertNumber, updateOpts)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to update Dependabot alert: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
