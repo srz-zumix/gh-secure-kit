@@ -55,7 +55,7 @@ func NewListCmd() *cobra.Command {
 			ctx := cmd.Context()
 			alerts, err := gh.ListCodeScanningAlerts(ctx, client, repository, alertOpts)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to list code scanning alerts: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
@@ -71,7 +71,6 @@ func NewListCmd() *cobra.Command {
 	f.StringVar(&ref, "ref", "", "Filter by Git ref (branch, tag, or pull request)")
 	cmdutil.StringEnumFlag(cmd, &sort, "sort", "", "", gh.CodeScanningAlertSortOptions, "Sort by field")
 	cmdutil.StringEnumFlag(cmd, &direction, "direction", "", "", []string{"asc", "desc"}, "Sort direction")
-	_ = f
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 	return cmd
 }
