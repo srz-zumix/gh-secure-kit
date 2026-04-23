@@ -54,7 +54,7 @@ func NewUpdateCmd() *cobra.Command {
 			ctx := cmd.Context()
 			alert, err := gh.UpdateCodeScanningAlert(ctx, client, repository, alertNumber, updateOpts)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to update code scanning alert: %w", err)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
