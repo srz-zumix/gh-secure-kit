@@ -294,3 +294,66 @@ Updates repositories according to the list of repositories that organization adm
 | `--add` | | | Repository IDs to add (can be specified multiple times) |
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
+
+## Code Scanning
+
+### List code scanning alerts
+
+```sh
+gh secure-kit code-scanning alerts list [flags]
+```
+
+List code scanning alerts for a repository. Supports filtering by state, severity, tool, and ref.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--direction` | | `""` | Sort direction {asc\|desc} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch, tag, or pull request) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--severity` | | `""` | Filter by severity {critical\|error\|high\|low\|medium\|note\|warning} |
+| `--sort` | | `""` | Sort by field {created\|updated} |
+| `--state` | | `""` | Filter by state {closed\|dismissed\|fixed\|open} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--tool-guid` | | `""` | Filter by tool GUID |
+| `--tool-name` | | `""` | Filter by tool name |
+
+### Get a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts get <alert-number> [flags]
+```
+
+Get a single code scanning alert by its number for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts update <alert-number> --state <state> [flags]
+```
+
+Update a code scanning alert for a repository. Use --state to change the alert state. A --dismissed-reason is required when setting state to dismissed.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--dismissed-comment` | | `""` | Optional comment associated with dismissing the alert |
+| `--dismissed-reason` | | `""` | Reason for dismissing; required when state is dismissed {false positive\|used in tests\|won't fix} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--state` | | | The state to set {dismissed\|open} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |

@@ -41,6 +41,11 @@ gh secure-kit                      # Root command
 │       ├── list                   # List accessible repositories
 │       ├── set-default-level      # Set default access level
 │       └── update                 # Update repository access list
+├── code-scanning                  # Code scanning alert subcommands
+│   └── alerts                     # Code scanning alerts subcommands
+│       ├── get                    # Get a single code scanning alert
+│       ├── list                   # List code scanning alerts
+│       └── update                 # Update a code scanning alert
 └── deps                           # Dependency management subcommands
     ├── list                       # List dependency packages (SBOM)
     ├── actions                    # GitHub Actions dependency subcommands
@@ -492,3 +497,108 @@ gh secure-kit dependabot repository-access update --owner my-org --add 123 --rem
 | `--add` | | | Repository IDs to add (can be specified multiple times) |
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
+
+## Code Scanning
+
+### List code scanning alerts (gh secure-kit code-scanning alerts list)
+
+```sh
+gh secure-kit code-scanning alerts list [flags]
+```
+
+List code scanning alerts for a repository. Supports filtering by state, severity, tool, and ref.
+
+```sh
+# List all code scanning alerts in the current repository
+gh secure-kit code-scanning alerts list
+
+# Filter by state
+gh secure-kit code-scanning alerts list --state open
+
+# Filter by severity
+gh secure-kit code-scanning alerts list --severity high
+
+# Filter by tool name
+gh secure-kit code-scanning alerts list --tool-name CodeQL
+
+# Filter by ref
+gh secure-kit code-scanning alerts list --ref main
+
+# Sort by updated date, descending
+gh secure-kit code-scanning alerts list --sort updated --direction desc
+
+# List for a specific repository
+gh secure-kit code-scanning alerts list --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--direction` | | `""` | Sort direction {asc\|desc} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch, tag, or pull request) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--severity` | | `""` | Filter by severity {critical\|error\|high\|low\|medium\|note\|warning} |
+| `--sort` | | `""` | Sort by field {created\|updated} |
+| `--state` | | `""` | Filter by state {closed\|dismissed\|fixed\|open} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--tool-guid` | | `""` | Filter by tool GUID |
+| `--tool-name` | | `""` | Filter by tool name |
+
+### Get a code scanning alert (gh secure-kit code-scanning alerts get)
+
+```sh
+gh secure-kit code-scanning alerts get <alert-number> [flags]
+```
+
+Get a single code scanning alert by its number for a repository.
+
+```sh
+# Get alert #42 in the current repository
+gh secure-kit code-scanning alerts get 42
+
+# Get alert in a specific repository
+gh secure-kit code-scanning alerts get 42 --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update a code scanning alert (gh secure-kit code-scanning alerts update)
+
+```sh
+gh secure-kit code-scanning alerts update <alert-number> --state <state> [flags]
+```
+
+Update a code scanning alert for a repository. Use --state to change the alert state. A --dismissed-reason is required when setting state to dismissed.
+
+```sh
+# Dismiss alert #42 with reason
+gh secure-kit code-scanning alerts update 42 --state dismissed --dismissed-reason "false positive"
+
+# Re-open alert #42
+gh secure-kit code-scanning alerts update 42 --state open
+
+# Dismiss with comment
+gh secure-kit code-scanning alerts update 42 --state dismissed --dismissed-reason "won't fix" --dismissed-comment "Not exploitable in our context"
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--dismissed-comment` | | `""` | Optional comment associated with dismissing the alert |
+| `--dismissed-reason` | | `""` | Reason for dismissing; required when state is dismissed {false positive\|used in tests\|won't fix} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--state` | | | The state to set {dismissed\|open} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
