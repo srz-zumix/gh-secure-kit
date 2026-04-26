@@ -16,5 +16,8 @@ func NewCodeScanningCmd() *cobra.Command {
 		Short: "Manage code scanning alerts",
 	}
 	cmd.AddCommand(codescanning.NewAlertsCmd())
+	cmd.AddCommand(codescanning.NewAnalysesCmd())
+	cmd.AddCommand(codescanning.NewCodeqlCmd())
+	cmd.AddCommand(codescanning.NewSarifCmd())
 	return cmd
 }

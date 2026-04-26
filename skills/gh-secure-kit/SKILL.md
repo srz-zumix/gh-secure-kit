@@ -41,11 +41,20 @@ gh secure-kit                      # Root command
 │       ├── list                   # List accessible repositories
 │       ├── set-default-level      # Set default access level
 │       └── update                 # Update repository access list
-├── code-scanning                  # Code scanning alert subcommands
-│   └── alerts                     # Code scanning alerts subcommands
-│       ├── get                    # Get a single code scanning alert
-│       ├── list                   # List code scanning alerts
-│       └── update                 # Update a code scanning alert
+├── code-scanning                  # Code scanning subcommands
+│   ├── alerts                     # Code scanning alerts subcommands
+│   │   ├── get                    # Get a single code scanning alert
+│   │   ├── list                   # List code scanning alerts
+│   │   └── update                 # Update a code scanning alert
+│   ├── analyses                   # Code scanning analyses subcommands
+│   │   ├── get                    # Get a code scanning analysis
+│   │   └── list                   # List code scanning analyses
+│   ├── codeql                     # CodeQL database subcommands
+│   │   ├── get                    # Get a CodeQL database by language
+│   │   └── list                   # List CodeQL databases
+│   └── sarif                      # SARIF upload subcommands
+│       ├── get                    # Get SARIF upload info
+│       └── upload                 # Upload SARIF data
 └── deps                           # Dependency management subcommands
     ├── list                       # List dependency packages (SBOM)
     ├── actions                    # GitHub Actions dependency subcommands
@@ -602,3 +611,175 @@ gh secure-kit code-scanning alerts update 42 --state dismissed --dismissed-reaso
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--state` | | | The state to set {dismissed\|open} (required) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List code scanning analyses (gh secure-kit code-scanning analyses list)
+
+```sh
+gh secure-kit code-scanning analyses list [flags]
+```
+
+Lists the details of all code scanning analyses for a repository, starting with the most recent.
+
+```sh
+# List all analyses in the current repository
+gh secure-kit code-scanning analyses list
+
+# Filter by ref
+gh secure-kit code-scanning analyses list --ref main
+
+# Filter by SARIF upload ID
+gh secure-kit code-scanning analyses list --sarif-id 47177e22-5596-11eb-80a1-c1e54ef945c6
+
+# List for a specific repository
+gh secure-kit code-scanning analyses list --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch or tag) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sarif-id` | | `""` | Filter analyses belonging to the same SARIF upload |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a code scanning analysis (gh secure-kit code-scanning analyses get)
+
+```sh
+gh secure-kit code-scanning analyses get <analysis-id> [flags]
+```
+
+Gets a specified code scanning analysis for a repository.
+
+```sh
+# Get analysis #201
+gh secure-kit code-scanning analyses get 201
+
+# Get analysis in a specific repository
+gh secure-kit code-scanning analyses get 201 --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List CodeQL databases (gh secure-kit code-scanning codeql list)
+
+```sh
+gh secure-kit code-scanning codeql list [flags]
+```
+
+Lists the CodeQL databases that are available in a repository.
+
+```sh
+# List CodeQL databases in the current repository
+gh secure-kit code-scanning codeql list
+
+# List for a specific repository
+gh secure-kit code-scanning codeql list --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a CodeQL database (gh secure-kit code-scanning codeql get)
+
+```sh
+gh secure-kit code-scanning codeql get <language> [flags]
+```
+
+Gets a CodeQL database for a language in a repository.
+
+```sh
+# Get the Java CodeQL database
+gh secure-kit code-scanning codeql get java
+
+# Get from a specific repository
+gh secure-kit code-scanning codeql get python --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get information about a SARIF upload (gh secure-kit code-scanning sarif get)
+
+```sh
+gh secure-kit code-scanning sarif get <sarif-id> [flags]
+```
+
+Gets information about a SARIF upload, including the processing status and the URL of the analysis.
+
+```sh
+# Get SARIF upload status
+gh secure-kit code-scanning sarif get 47177e22-5596-11eb-80a1-c1e54ef945c6
+
+# Get for a specific repository
+gh secure-kit code-scanning sarif get 47177e22-5596-11eb-80a1-c1e54ef945c6 --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Upload SARIF data (gh secure-kit code-scanning sarif upload)
+
+```sh
+gh secure-kit code-scanning sarif upload --commit-sha <sha> --ref <ref> --sarif <data> [flags]
+```
+
+Uploads SARIF data containing the results of a code scanning analysis. The --sarif value must be a base64-encoded SARIF payload, and GitHub typically expects gzip-compressed SARIF content encoded as base64 rather than raw JSON.
+
+```sh
+# Upload SARIF data
+gh secure-kit code-scanning sarif upload \
+  --commit-sha 4b6472266afd7b471e86085a6659e8c7f2b119da \
+  --ref refs/heads/main \
+  --sarif "H4sICMLGdF4AA2V4YW1wbGUu..."
+
+# Upload with tool name and start time
+gh secure-kit code-scanning sarif upload \
+  --commit-sha abc123 \
+  --ref refs/heads/main \
+  --sarif "H4sICMLGdF4AA2V4YW1wbGUu..." \
+  --tool-name "my-scanner" \
+  --started-at "2024-01-01T00:00:00Z"
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--checkout-uri` | | `""` | The base directory used in the analysis |
+| `--commit-sha` | | | The SHA of the commit to which the analysis relates (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | | The full Git reference (e.g. refs/heads/main) (required) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sarif` | | | Base64-encoded SARIF payload; typically gzip-compressed before encoding (required) |
+| `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--tool-name` | | `""` | The name of the tool used to generate the analysis |
