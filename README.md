@@ -451,7 +451,7 @@ Gets information about a SARIF upload, including the processing status and the U
 gh secure-kit code-scanning sarif upload --commit-sha <sha> --ref <ref> --sarif <data> [flags]
 ```
 
-Uploads SARIF data containing the results of a code scanning analysis. The --sarif value must be a base64-encoded SARIF payload, and GitHub typically expects gzip-compressed SARIF content encoded as base64 rather than raw JSON.
+Uploads SARIF data containing the results of a code scanning analysis. The --sarif value must be a base64-encoded gzip-compressed SARIF payload rather than raw JSON.
 
 **Flags:**
 
@@ -463,7 +463,7 @@ Uploads SARIF data containing the results of a code scanning analysis. The --sar
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--ref` | | | The full Git reference (e.g. refs/heads/main) (required) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
-| `--sarif` | | | Base64-encoded SARIF payload; typically gzip-compressed before encoding (required) |
+| `--sarif` | | | Base64-encoded gzip-compressed SARIF payload (required) |
 | `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--tool-name` | | `""` | The name of the tool used to generate the analysis |

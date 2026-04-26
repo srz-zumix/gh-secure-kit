@@ -13,7 +13,8 @@ func init() {
 func NewCodeScanningCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "code-scanning",
-		Short: "Manage code scanning alerts",
+		Short: "Manage code scanning alerts, analyses, CodeQL, and SARIF",
+		Long:  "Manage code scanning alerts, analyses, CodeQL databases, and SARIF uploads.",
 	}
 	cmd.AddCommand(codescanning.NewAlertsCmd())
 	cmd.AddCommand(codescanning.NewAnalysesCmd())
