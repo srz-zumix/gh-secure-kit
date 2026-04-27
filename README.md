@@ -357,3 +357,113 @@ Update a code scanning alert for a repository. Use --state to change the alert s
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--state` | | | The state to set {dismissed\|open} (required) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List code scanning analyses
+
+```sh
+gh secure-kit code-scanning analyses list [flags]
+```
+
+Lists the details of all code scanning analyses for a repository, starting with the most recent.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch or tag) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sarif-id` | | `""` | Filter analyses belonging to the same SARIF upload |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a code scanning analysis
+
+```sh
+gh secure-kit code-scanning analyses get <analysis-id> [flags]
+```
+
+Gets a specified code scanning analysis for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List CodeQL databases
+
+```sh
+gh secure-kit code-scanning codeql list [flags]
+```
+
+Lists the CodeQL databases that are available in a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a CodeQL database
+
+```sh
+gh secure-kit code-scanning codeql get <language> [flags]
+```
+
+Gets a CodeQL database for a language in a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get information about a SARIF upload
+
+```sh
+gh secure-kit code-scanning sarif get <sarif-id> [flags]
+```
+
+Gets information about a SARIF upload, including the processing status and the URL of the analysis.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Upload SARIF data
+
+```sh
+gh secure-kit code-scanning sarif upload --commit-sha <sha> --ref <ref> --sarif <data> [flags]
+```
+
+Uploads SARIF data containing the results of a code scanning analysis. The --sarif value must be a base64-encoded gzip-compressed SARIF payload rather than raw JSON.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--checkout-uri` | | `""` | The base directory used in the analysis |
+| `--commit-sha` | | | The SHA of the commit to which the analysis relates (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | | The full Git reference (e.g. refs/heads/main) (required) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sarif` | | | Base64-encoded gzip-compressed SARIF payload (required) |
+| `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--tool-name` | | `""` | The name of the tool used to generate the analysis |
