@@ -783,3 +783,186 @@ gh secure-kit code-scanning sarif upload \
 | `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--tool-name` | | `""` | The name of the tool used to generate the analysis |
+
+## Code Security
+
+### List code security configurations (gh secure-kit code-security configurations list)
+
+```sh
+gh secure-kit code-security configurations list [flags]
+```
+
+Lists all code security configurations available in an organization.
+
+```sh
+# List all configurations for an organization
+gh secure-kit code-security configurations list --owner my-org
+
+# Show only the global GitHub-recommended configurations
+gh secure-kit code-security configurations list --owner my-org --target-type global
+
+# Output JSON
+gh secure-kit code-security configurations list --owner my-org --format json
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--target-type` | | `""` | Filter by target type {all\|global} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a code security configuration (gh secure-kit code-security configurations get)
+
+```sh
+gh secure-kit code-security configurations get <configuration-id> [flags]
+```
+
+Gets a code security configuration in an organization by ID.
+
+```sh
+gh secure-kit code-security configurations get 1325 --owner my-org
+```
+
+### Create a code security configuration (gh secure-kit code-security configurations create)
+
+```sh
+gh secure-kit code-security configurations create --name <name> --description <desc> [feature flags] [flags]
+```
+
+Creates a code security configuration in an organization. `--name` and `--description` are required. Use feature flags to configure individual features (each accepts `enabled`, `disabled`, or `not_set`).
+
+```sh
+# Minimal create
+gh secure-kit code-security configurations create \
+  --owner my-org \
+  --name "octo-org recommended" \
+  --description "Recommended settings"
+
+# Create with several features enabled
+gh secure-kit code-security configurations create \
+  --owner my-org \
+  --name "high risk" \
+  --description "Stricter settings" \
+  --advanced-security enabled \
+  --dependabot-alerts enabled \
+  --secret-scanning enabled \
+  --secret-scanning-push-protection enabled \
+  --enforcement enforced
+```
+
+See README for the full list of feature flags. The same set is accepted by `update`.
+
+### Update a code security configuration (gh secure-kit code-security configurations update)
+
+```sh
+gh secure-kit code-security configurations update <configuration-id> [feature flags] [flags]
+```
+
+Updates a code security configuration. Only specified fields are sent.
+
+```sh
+gh secure-kit code-security configurations update 1325 \
+  --owner my-org \
+  --secret-scanning disabled \
+  --code-scanning-default-setup enabled
+```
+
+### Delete a code security configuration (gh secure-kit code-security configurations delete)
+
+```sh
+gh secure-kit code-security configurations delete <configuration-id> [flags]
+```
+
+Deletes a code security configuration. Repositories attached to the configuration retain their settings but are no longer associated with it.
+
+```sh
+gh secure-kit code-security configurations delete 1325 --owner my-org
+```
+
+### Attach a configuration to repositories (gh secure-kit code-security configurations attach)
+
+```sh
+gh secure-kit code-security configurations attach <configuration-id> --scope <scope> [--repo-id <id>...] [flags]
+```
+
+Attaches a code security configuration to a set of repositories. `--scope=selected` requires one or more `--repo-id` values.
+
+```sh
+# Attach to all repositories without an existing configuration
+gh secure-kit code-security configurations attach 1325 \
+  --owner my-org --scope all_without_configurations
+
+# Attach to specific repositories
+gh secure-kit code-security configurations attach 1325 \
+  --owner my-org --scope selected --repo-id 32 --repo-id 91
+```
+
+### Detach configurations from repositories (gh secure-kit code-security configurations detach)
+
+```sh
+gh secure-kit code-security configurations detach --repo-id <id>... [flags]
+```
+
+Detaches code security configurations from a set of repositories.
+
+```sh
+gh secure-kit code-security configurations detach \
+  --owner my-org --repo-id 32 --repo-id 91
+```
+
+### List default code security configurations (gh secure-kit code-security configurations defaults)
+
+```sh
+gh secure-kit code-security configurations defaults [flags]
+```
+
+Lists the default code security configurations applied to new repositories in an organization.
+
+```sh
+gh secure-kit code-security configurations defaults --owner my-org
+```
+
+### Set a code security configuration as default (gh secure-kit code-security configurations set-default)
+
+```sh
+gh secure-kit code-security configurations set-default <configuration-id> --default-for-new-repos <scope> [flags]
+```
+
+Sets a code security configuration as a default to be applied to new repositories.
+
+```sh
+gh secure-kit code-security configurations set-default 1325 \
+  --owner my-org --default-for-new-repos all
+```
+
+### List repositories attached to a configuration (gh secure-kit code-security configurations repositories)
+
+```sh
+gh secure-kit code-security configurations repositories <configuration-id> [flags]
+```
+
+Lists the repositories associated with a code security configuration.
+
+```sh
+gh secure-kit code-security configurations repositories 1325 --owner my-org
+
+# Filter by attachment status
+gh secure-kit code-security configurations repositories 1325 \
+  --owner my-org --status attached
+```
+
+### Get the configuration attached to a repository (gh secure-kit code-security configurations repo-config)
+
+```sh
+gh secure-kit code-security configurations repo-config [flags]
+```
+
+Gets the code security configuration that manages a repository's code security settings.
+
+```sh
+gh secure-kit code-security configurations repo-config --repo owner/repo
+```
