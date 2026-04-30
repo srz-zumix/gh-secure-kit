@@ -833,7 +833,7 @@ gh secure-kit code-security configurations get 1325 --owner my-org
 gh secure-kit code-security configurations create --name <name> --description <desc> [feature flags] [flags]
 ```
 
-Creates a code security configuration in an organization. `--name` and `--description` are required. Use feature flags to configure individual features (each accepts `enabled`, `disabled`, or `not_set`).
+Creates a code security configuration in an organization. `--name` and `--description` are required. Use feature flags to configure individual features. Most feature flags accept `enabled`, `disabled`, or `not_set`, while `--advanced-security` also accepts `code_security` and `secret_protection`.
 
 ```sh
 # Minimal create
