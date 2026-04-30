@@ -467,3 +467,200 @@ Uploads SARIF data containing the results of a code scanning analysis. The --sar
 | `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--tool-name` | | `""` | The name of the tool used to generate the analysis |
+
+## Code Security
+
+### List code security configurations
+
+```sh
+gh secure-kit code-security configurations list [flags]
+```
+
+Lists all code security configurations available in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--target-type` | | `""` | Filter by target type {all\|global} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get a code security configuration
+
+```sh
+gh secure-kit code-security configurations get <configuration-id> [flags]
+```
+
+Gets a code security configuration in an organization by ID.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Create a code security configuration
+
+```sh
+gh secure-kit code-security configurations create --name <name> --description <desc> [feature flags] [flags]
+```
+
+Creates a code security configuration in an organization. `--name` and `--description` are required. Use feature flags below to configure individual features.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--advanced-security` | | `""` | Enablement status of GitHub Advanced Security {code_security\|disabled\|enabled\|secret_protection} |
+| `--code-scanning-default-setup` | | `""` | Enablement status of code scanning default setup {disabled\|enabled\|not_set} |
+| `--code-scanning-delegated-alert-dismissal` | | `""` | Enablement status of code scanning delegated alert dismissal {disabled\|enabled\|not_set} |
+| `--code-security` | | `""` | Enablement status of GitHub Code Security {disabled\|enabled\|not_set} |
+| `--dependabot-alerts` | | `""` | Enablement status of Dependabot alerts {disabled\|enabled\|not_set} |
+| `--dependabot-security-updates` | | `""` | Enablement status of Dependabot security updates {disabled\|enabled\|not_set} |
+| `--dependency-graph` | | `""` | Enablement status of Dependency Graph {disabled\|enabled\|not_set} |
+| `--dependency-graph-autosubmit-action` | | `""` | Enablement status of automatic dependency submission {disabled\|enabled\|not_set} |
+| `--description` | | | A description of the code security configuration (required) |
+| `--enforcement` | | `""` | Enforcement status {enforced\|unenforced} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--name` | | | The name of the code security configuration (required) |
+| `--owner` | `-o` | `""` | The organization name |
+| `--private-vulnerability-reporting` | | `""` | Enablement status of private vulnerability reporting {disabled\|enabled\|not_set} |
+| `--secret-protection` | | `""` | Enablement status of GitHub Secret Protection {disabled\|enabled\|not_set} |
+| `--secret-scanning` | | `""` | Enablement status of secret scanning {disabled\|enabled\|not_set} |
+| `--secret-scanning-delegated-alert-dismissal` | | `""` | Enablement status of secret scanning delegated alert dismissal {disabled\|enabled\|not_set} |
+| `--secret-scanning-delegated-bypass` | | `""` | Enablement status of secret scanning delegated bypass {disabled\|enabled\|not_set} |
+| `--secret-scanning-generic-secrets` | | `""` | Enablement status of Copilot secret scanning {disabled\|enabled\|not_set} |
+| `--secret-scanning-non-provider-patterns` | | `""` | Enablement status of secret scanning non-provider patterns {disabled\|enabled\|not_set} |
+| `--secret-scanning-push-protection` | | `""` | Enablement status of secret scanning push protection {disabled\|enabled\|not_set} |
+| `--secret-scanning-validity-checks` | | `""` | Enablement status of secret scanning validity checks {disabled\|enabled\|not_set} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update a code security configuration
+
+```sh
+gh secure-kit code-security configurations update <configuration-id> [feature flags] [flags]
+```
+
+Updates a code security configuration in an organization. Only specified fields are sent. The same feature flags as `create` are accepted; only `--name` and `--description` are not required.
+
+### Delete a code security configuration
+
+```sh
+gh secure-kit code-security configurations delete <configuration-id> [flags]
+```
+
+Deletes a code security configuration. Repositories attached to the configuration retain their settings but are no longer associated with it.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | `""` | The organization name |
+
+### Attach a code security configuration to repositories
+
+```sh
+gh secure-kit code-security configurations attach <configuration-id> --scope <scope> [--repo-id <id>...] [flags]
+```
+
+Attaches a code security configuration to a set of repositories in an organization. `--scope=selected` requires one or more `--repo-id` values.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | `""` | The organization name |
+| `--repo-id` | | `[]` | Repository IDs to attach (only with `--scope=selected`, repeatable) |
+| `--scope` | | | Type of repositories to attach to {all\|all_without_configurations\|private_or_internal\|public\|selected} (required) |
+
+### Detach code security configurations from repositories
+
+```sh
+gh secure-kit code-security configurations detach --repo-id <id>... [flags]
+```
+
+Detaches code security configurations from a set of repositories. Repositories retain their settings but are no longer associated with any configuration.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | `""` | The organization name |
+| `--repo-id` | | `[]` | Repository IDs to detach (repeatable, up to 250) (required) |
+
+### List default code security configurations
+
+```sh
+gh secure-kit code-security configurations defaults [flags]
+```
+
+Lists the default code security configurations applied to new repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Set a code security configuration as default
+
+```sh
+gh secure-kit code-security configurations set-default <configuration-id> --default-for-new-repos <scope> [flags]
+```
+
+Sets a code security configuration as a default to be applied to new repositories in the organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--default-for-new-repos` | | | Repository types this configuration applies to by default {all\|none\|private_and_internal\|public} (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List repositories attached to a code security configuration
+
+```sh
+gh secure-kit code-security configurations repositories <configuration-id> [flags]
+```
+
+Lists the repositories associated with a code security configuration in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--status` | | `""` | Filter by attachment status {all\|attached\|attaching\|detached\|enforced\|failed\|removed\|removed_by_enterprise\|updating} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the code security configuration attached to a repository
+
+```sh
+gh secure-kit code-security configurations repo-config [flags]
+```
+
+Gets the code security configuration that manages a repository's code security settings.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
