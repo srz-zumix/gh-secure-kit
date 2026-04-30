@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -37,7 +38,7 @@ func NewDeleteCmd() *cobra.Command {
 			if err := gh.DeleteCodeSecurityConfiguration(ctx, client, repository, id); err != nil {
 				return fmt.Errorf("failed to delete code security configuration: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Deleted code security configuration #%d in %s\n", id, repository.Owner)
+			logger.Info("Deleted code security configuration", "id", id, "owner", repository.Owner)
 			return nil
 		},
 	}

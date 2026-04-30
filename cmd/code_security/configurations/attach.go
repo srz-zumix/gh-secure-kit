@@ -7,6 +7,7 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -46,7 +47,7 @@ func NewAttachCmd() *cobra.Command {
 			if err := gh.AttachCodeSecurityConfiguration(ctx, client, repository, id, scope, repoIDs); err != nil {
 				return fmt.Errorf("failed to attach code security configuration: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Attached code security configuration #%d in %s (scope=%s)\n", id, repository.Owner, scope)
+			logger.Info("Attached code security configuration", "id", id, "owner", repository.Owner, "scope", scope)
 			return nil
 		},
 	}

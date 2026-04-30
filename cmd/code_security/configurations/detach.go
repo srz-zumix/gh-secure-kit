@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -36,7 +37,7 @@ func NewDetachCmd() *cobra.Command {
 			if err := gh.DetachCodeSecurityConfigurations(ctx, client, repository, repoIDs); err != nil {
 				return fmt.Errorf("failed to detach code security configurations: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Detached code security configurations from %d repositories in %s\n", len(repoIDs), repository.Owner)
+			logger.Info("Detached code security configurations", "count", len(repoIDs), "owner", repository.Owner)
 			return nil
 		},
 	}
