@@ -827,6 +827,14 @@ Gets a code security configuration in an organization by ID.
 gh secure-kit code-security configurations get 1325 --owner my-org
 ```
 
+**Flags**
+
+| Flag | Shorthand | Default | Description |
+| ---- | --------- | ------- | ----------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 ### Create a code security configuration (gh secure-kit code-security configurations create)
 
 ```sh
