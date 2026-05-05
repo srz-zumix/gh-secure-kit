@@ -974,3 +974,44 @@ Gets the code security configuration that manages a repository's code security s
 ```sh
 gh secure-kit code-security configurations repo-config --repo owner/repo
 ```
+
+## Secret Scanning
+
+### List secret scanning push protection pattern configurations (gh secure-kit secret-scanning push-protection list)
+
+```sh
+gh secure-kit secret-scanning push-protection list [flags]
+```
+
+List secret scanning push protection pattern configurations for an organization, including provider and custom pattern overrides.
+
+```sh
+gh secure-kit secret-scanning push-protection list --owner my-org
+
+# Output as JSON
+gh secure-kit secret-scanning push-protection list --owner my-org --format json
+```
+
+### Update secret scanning push protection pattern configurations (gh secure-kit secret-scanning push-protection update)
+
+```sh
+gh secure-kit secret-scanning push-protection update [flags]
+```
+
+Update secret scanning push protection pattern configurations for an organization. Use `--provider-pattern` in `TOKEN_TYPE=SETTING` format and `--custom-pattern` in `TOKEN_TYPE=SETTING` or `TOKEN_TYPE:VERSION=SETTING` format. Valid settings: `enabled`, `disabled`, `not_set`. The pattern config version must be obtained from the list command and passed via `--pattern-config-version`.
+
+```sh
+# Update a provider pattern
+gh secure-kit secret-scanning push-protection update \
+  --owner my-org \
+  --pattern-config-version v1 \
+  --provider-pattern "github_token=enabled"
+
+# Update multiple patterns
+gh secure-kit secret-scanning push-protection update \
+  --owner my-org \
+  --pattern-config-version v1 \
+  --provider-pattern "github_token=enabled" \
+  --custom-pattern "my_pattern=disabled" \
+  --custom-pattern "other_pattern:2=not_set"
+```

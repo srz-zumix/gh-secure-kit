@@ -48,7 +48,7 @@ Obtain the pattern config version from the list command and pass it via --patter
 			for _, p := range providerPatterns {
 				setting, err := gh.ParseProviderPattern(p)
 				if err != nil {
-					return err
+					return fmt.Errorf("invalid --provider-pattern value %q: %w", p, err)
 				}
 				updateOpts.ProviderPatternSettings = append(updateOpts.ProviderPatternSettings, setting)
 			}
@@ -56,7 +56,7 @@ Obtain the pattern config version from the list command and pass it via --patter
 			for _, p := range customPatterns {
 				setting, err := gh.ParseCustomPattern(p)
 				if err != nil {
-					return err
+					return fmt.Errorf("invalid --custom-pattern value %q: %w", p, err)
 				}
 				updateOpts.CustomPatternSettings = append(updateOpts.CustomPatternSettings, setting)
 			}

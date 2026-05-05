@@ -664,3 +664,39 @@ Gets the code security configuration that manages a repository's code security s
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+## Secret Scanning
+
+### List secret scanning push protection pattern configurations
+
+```sh
+gh secure-kit secret-scanning push-protection list [flags]
+```
+
+List secret scanning push protection pattern configurations for an organization, including provider and custom pattern overrides.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update secret scanning push protection pattern configurations
+
+```sh
+gh secure-kit secret-scanning push-protection update [flags]
+```
+
+Update secret scanning push protection pattern configurations for an organization. Use `--provider-pattern` to update provider patterns in `TOKEN_TYPE=SETTING` format. Use `--custom-pattern` to update custom patterns in `TOKEN_TYPE=SETTING` or `TOKEN_TYPE:VERSION=SETTING` format. Valid settings: `enabled`, `disabled`, `not_set`. Obtain the pattern config version from the list command and pass it via `--pattern-config-version`.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--custom-pattern` | | | Custom pattern setting in TOKEN_TYPE=SETTING or TOKEN_TYPE:VERSION=SETTING format (repeatable) |
+| `--owner` | `-o` | `""` | The organization name |
+| `--pattern-config-version` | | `""` | The pattern config version (from list command) |
+| `--provider-pattern` | | | Provider pattern setting in TOKEN_TYPE=SETTING format (repeatable) |
