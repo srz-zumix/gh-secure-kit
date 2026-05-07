@@ -667,6 +667,84 @@ Gets the code security configuration that manages a repository's code security s
 
 ## Secret Scanning
 
+### List secret scanning alerts
+
+```sh
+gh secure-kit secret-scanning alerts list [flags]
+```
+
+List secret scanning alerts for a repository or organization. Use `--repo` for repository-level alerts or `--owner` for all alerts across an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--direction` | | `""` | Sort direction {asc\|desc} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists alerts for all repositories in the org) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--resolution` | | `""` | Filter by resolution {false_positive\|wont_fix\|revoked\|used_in_tests\|pattern_edited\|pattern_deleted} |
+| `--secret-type` | | `""` | Filter by secret type (comma-separated) |
+| `--sort` | | `""` | Sort by field {created\|updated} |
+| `--state` | | `""` | Filter by state {open\|resolved} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--validity` | | `""` | Filter by validity {active\|inactive\|unknown} |
+
+### Get a secret scanning alert
+
+```sh
+gh secure-kit secret-scanning alerts get <alert-number> [flags]
+```
+
+Get a single secret scanning alert by its number for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List locations for a secret scanning alert
+
+```sh
+gh secure-kit secret-scanning alerts locations <alert-number> [flags]
+```
+
+List all locations where a secret scanning alert was detected in the repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update a secret scanning alert
+
+```sh
+gh secure-kit secret-scanning alerts update <alert-number> [flags]
+```
+
+Update a secret scanning alert for a repository. Use `--state` to change the alert state. A `--resolution` is required when setting state to `resolved`.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--resolution` | | `""` | Reason for resolving; required when state is resolved {false_positive\|wont_fix\|revoked\|used_in_tests} |
+| `--resolution-comment` | | `""` | Optional comment associated with resolving the alert |
+| `--state` | | | The state to set {open\|resolved} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### List secret scanning push protection pattern configurations
 
 ```sh
@@ -700,3 +778,21 @@ Update secret scanning push protection pattern configurations for an organizatio
 | `--owner` | `-o` | `""` | The organization name |
 | `--pattern-config-version` | | `""` | The pattern config version (from list command) |
 | `--provider-pattern` | | | Provider pattern setting in TOKEN_TYPE=SETTING format (repeatable) |
+
+### Get secret scanning scan history for a repository
+
+```sh
+gh secure-kit secret-scanning scan-history [flags]
+```
+
+Get the latest default incremental and backfill secret scanning scan history for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+

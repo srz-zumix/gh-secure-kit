@@ -977,6 +977,72 @@ gh secure-kit code-security configurations repo-config --repo owner/repo
 
 ## Secret Scanning
 
+### List secret scanning alerts (gh secure-kit secret-scanning alerts list)
+
+```sh
+gh secure-kit secret-scanning alerts list [flags]
+```
+
+List secret scanning alerts for a repository (use `--repo`) or for all repositories in an organization (use `--owner`). Supports filtering by state, secret type, resolution, and validity.
+
+```sh
+# List alerts for a repository
+gh secure-kit secret-scanning alerts list --repo owner/repo
+
+# List open alerts for an organization
+gh secure-kit secret-scanning alerts list --owner my-org --state open
+
+# Filter by validity and output as JSON
+gh secure-kit secret-scanning alerts list --repo owner/repo --validity active --format json
+```
+
+### Get a secret scanning alert (gh secure-kit secret-scanning alerts get)
+
+```sh
+gh secure-kit secret-scanning alerts get <alert-number> [flags]
+```
+
+Get a single secret scanning alert by its number for a repository.
+
+```sh
+gh secure-kit secret-scanning alerts get 42 --repo owner/repo
+
+# Output as JSON
+gh secure-kit secret-scanning alerts get 42 --repo owner/repo --format json
+```
+
+### List locations for a secret scanning alert (gh secure-kit secret-scanning alerts locations)
+
+```sh
+gh secure-kit secret-scanning alerts locations <alert-number> [flags]
+```
+
+List all locations where a secret scanning alert was detected in the repository.
+
+```sh
+gh secure-kit secret-scanning alerts locations 42 --repo owner/repo
+```
+
+### Update a secret scanning alert (gh secure-kit secret-scanning alerts update)
+
+```sh
+gh secure-kit secret-scanning alerts update <alert-number> [flags]
+```
+
+Update the state of a secret scanning alert. A `--resolution` is required when setting state to `resolved`.
+
+```sh
+# Resolve an alert
+gh secure-kit secret-scanning alerts update 42 \
+  --repo owner/repo \
+  --state resolved \
+  --resolution false_positive \
+  --resolution-comment "This is a test secret"
+
+# Reopen an alert
+gh secure-kit secret-scanning alerts update 42 --repo owner/repo --state open
+```
+
 ### List secret scanning push protection pattern configurations (gh secure-kit secret-scanning push-protection list)
 
 ```sh
@@ -1014,4 +1080,19 @@ gh secure-kit secret-scanning push-protection update \
   --provider-pattern "github_token=enabled" \
   --custom-pattern "my_pattern=disabled" \
   --custom-pattern "other_pattern:2=not_set"
+```
+
+### Get secret scanning scan history for a repository (gh secure-kit secret-scanning scan-history)
+
+```sh
+gh secure-kit secret-scanning scan-history [flags]
+```
+
+Get the latest default incremental and backfill secret scanning scan history for a repository.
+
+```sh
+gh secure-kit secret-scanning scan-history --repo owner/repo
+
+# Output as JSON
+gh secure-kit secret-scanning scan-history --repo owner/repo --format json
 ```
