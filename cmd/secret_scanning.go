@@ -14,7 +14,7 @@ func NewSecretScanningCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret-scanning",
 		Short: "Manage secret scanning configurations",
-		Long:  "Manage secret scanning alerts and push protection pattern configurations for organizations and repositories.",
+		Long:  "Manage secret scanning alerts, scan history, and push protection pattern configurations for organizations and repositories.",
 	}
 	cmd.AddCommand(secretscanning.NewAlertsCmd())
 	cmd.AddCommand(secretscanning.NewPushProtectionCmd())
