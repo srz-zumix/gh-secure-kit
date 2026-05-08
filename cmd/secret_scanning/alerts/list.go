@@ -34,8 +34,19 @@ func NewListCmd() *cobra.Command {
 
 Use --repo to list alerts for a specific repository.
 Use --owner to list alerts across all repositories in an organization.
-At most one of --repo and --owner may target different scopes simultaneously.`,
+--repo and --owner are mutually exclusive.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// RepositoryInput(repo) takes priority; RepositoryOwner(owner) is applied only when repo is empty.
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
+			if err != nil {
+				return fmt.Errorf("failed to parse repository: %w", err)
+			}
+
+			client, err := gh.NewGitHubClientWithRepo(repository)
+			if err != nil {
+				return fmt.Errorf("failed to create GitHub client: %w", err)
+			}
+
 			alertOpts := &gh.ListSecretScanningAlertsOptions{
 				State:      state,
 				SecretType: secretType,
@@ -46,36 +57,11 @@ At most one of --repo and --owner may target different scopes simultaneously.`,
 			}
 
 			ctx := cmd.Context()
-
-			if cmd.Flags().Changed("owner") && !cmd.Flags().Changed("repo") {
-				repository, err := parser.Repository(parser.RepositoryOwner(owner))
-				if err != nil {
-					return fmt.Errorf("failed to parse owner: %w", err)
-				}
-				client, err := gh.NewGitHubClientWithRepo(repository)
-				if err != nil {
-					return fmt.Errorf("failed to create GitHub client: %w", err)
-				}
-				alerts, err := gh.ListSecretScanningOrgAlerts(ctx, client, repository, alertOpts)
-				if err != nil {
-					return fmt.Errorf("failed to list secret scanning alerts: %w", err)
-				}
-				renderer := render.NewRenderer(opts.Exporter)
-				return renderer.RenderSecretScanningAlerts(alerts)
-			}
-
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
-			if err != nil {
-				return fmt.Errorf("failed to parse repository: %w", err)
-			}
-			client, err := gh.NewGitHubClientWithRepo(repository)
-			if err != nil {
-				return fmt.Errorf("failed to create GitHub client: %w", err)
-			}
 			alerts, err := gh.ListSecretScanningAlerts(ctx, client, repository, alertOpts)
 			if err != nil {
 				return fmt.Errorf("failed to list secret scanning alerts: %w", err)
 			}
+
 			renderer := render.NewRenderer(opts.Exporter)
 			return renderer.RenderSecretScanningAlerts(alerts)
 		},
@@ -90,5 +76,6 @@ At most one of --repo and --owner may target different scopes simultaneously.`,
 	cmdutil.StringEnumFlag(cmd, &sort, "sort", "", "", gh.SecretScanningAlertSortOptions, "Sort by field")
 	cmdutil.StringEnumFlag(cmd, &direction, "direction", "", "", []string{"asc", "desc"}, "Sort direction")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd
 }
