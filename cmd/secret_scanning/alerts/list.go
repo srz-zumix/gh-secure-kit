@@ -36,7 +36,7 @@ Use --repo to list alerts for a specific repository.
 Use --owner to list alerts across all repositories in an organization.
 --repo and --owner are mutually exclusive.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// RepositoryInput(repo) takes priority; RepositoryOwner(owner) is applied only when repo is empty.
+			// Build the repository selector from either --repo or --owner.
 			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
