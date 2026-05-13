@@ -975,6 +975,48 @@ Gets the code security configuration that manages a repository's code security s
 gh secure-kit code-security configurations repo-config --repo owner/repo
 ```
 
+## Security Advisories
+
+### Create temporary private fork (gh secure-kit security-advisories create-fork)
+
+```sh
+gh secure-kit security-advisories create-fork <ghsa-id> [--repo <owner/repo>]
+```
+
+Create a temporary private fork of the repository to collaborate on fixing a security vulnerability.
+
+### Get security advisory (gh secure-kit security-advisories get)
+
+```sh
+gh secure-kit security-advisories get <ghsa-id> [--repo <owner/repo>]
+```
+
+Get a repository security advisory by its GHSA identifier.
+
+### List security advisories (gh secure-kit security-advisories list)
+
+```sh
+gh secure-kit security-advisories list [--repo <owner/repo>] [--owner <org>] [--state <state>] [--sort <field>] [--direction <asc|desc>]
+```
+
+List repository security advisories for a repository or organization. Use `--owner` for org-wide listing.
+
+### Request CVE for security advisory (gh secure-kit security-advisories request-cve)
+
+```sh
+gh secure-kit security-advisories request-cve <ghsa-id> [--repo <owner/repo>]
+```
+
+Request a CVE identifier for a repository security advisory.
+
+### Update security advisory (gh secure-kit security-advisories update)
+
+```sh
+gh secure-kit security-advisories update <ghsa-id> [--repo <owner/repo>] [--state <state>] [--severity <severity>]
+```
+
+Update a repository security advisory by its GHSA identifier. Supports updating state (published, closed, draft) and severity (critical, high, medium, low).
+
 ## Secret Scanning
 
 ### List secret scanning alerts (gh secure-kit secret-scanning alerts list)
