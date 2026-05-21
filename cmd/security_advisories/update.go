@@ -6,7 +6,6 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
-	"github.com/srz-zumix/go-gh-extension/pkg/gh/client"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
@@ -44,12 +43,12 @@ Use --severity to change the advisory severity (critical, high, medium, low).`,
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			updateOpts := &client.RepositorySecurityAdvisoryUpdateOptions{}
+			updateOpts := &gh.RepositorySecurityAdvisoryUpdateOptions{}
 			if state != "" {
-				updateOpts.State = &state
+				updateOpts.State = state
 			}
 			if severity != "" {
-				updateOpts.Severity = &severity
+				updateOpts.Severity = severity
 			}
 
 			ctx := cmd.Context()
