@@ -31,6 +31,10 @@ Use --state to change the advisory state (published, closed, draft).
 Use --severity to change the advisory severity (critical, high, medium, low).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if state == "" && severity == "" {
+				return fmt.Errorf("at least one of --state or --severity must be specified")
+			}
+
 			ghsaID := args[0]
 
 			repository, err := parser.Repository(parser.RepositoryInput(repo))

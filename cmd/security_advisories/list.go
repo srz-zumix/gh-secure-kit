@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
-	"github.com/google/go-github/v84/github"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
@@ -44,7 +43,7 @@ Use --owner to list advisories across all repositories in an organization.
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			listOpts := &github.ListRepositorySecurityAdvisoriesOptions{
+			listOpts := &gh.ListRepositorySecurityAdvisoriesOptions{
 				State:     state,
 				Sort:      sort,
 				Direction: direction,
