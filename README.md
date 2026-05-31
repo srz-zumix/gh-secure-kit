@@ -665,6 +665,117 @@ Gets the code security configuration that manages a repository's code security s
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+## Security Advisories
+
+### Create temporary private fork
+
+```sh
+gh secure-kit security-advisories create-fork <ghsa-id> [--repo <owner/repo>]
+```
+
+Create a temporary private fork of the repository to collaborate on fixing a security vulnerability. The `--repo` flag is optional and defaults to the current repository.
+
+**Arguments:**
+
+| Argument | Description |
+| -------- | ----------- |
+| `ghsa-id` | The GHSA identifier of the advisory (required) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+
+### Get security advisory
+
+```sh
+gh secure-kit security-advisories get <ghsa-id> [--repo <owner/repo>]
+```
+
+Get a repository security advisory by its GHSA identifier. The `--repo` flag is optional and defaults to the current repository.
+
+**Arguments:**
+
+| Argument | Description |
+| -------- | ----------- |
+| `ghsa-id` | The GHSA identifier of the advisory (required) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List security advisories
+
+```sh
+gh secure-kit security-advisories list [--repo <owner/repo>] [--owner <org>] [--state <state>] [--sort <field>] [--direction <asc|desc>]
+```
+
+List repository security advisories for a repository or organization. Use `--repo` to list advisories for a specific repository, or `--owner` to list advisories across all repositories in an organization. `--repo` and `--owner` are mutually exclusive. If neither is specified, the current repository is used.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--direction` | | `""` | Sort direction: {asc\|desc} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists advisories for all repositories in the org) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sort` | | `""` | Sort by field: {created\|updated\|published} |
+| `--state` | | `""` | Filter by state: {triage\|draft\|published\|closed} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Request CVE for security advisory
+
+```sh
+gh secure-kit security-advisories request-cve <ghsa-id> [--repo <owner/repo>]
+```
+
+Request a CVE (Common Vulnerabilities and Exposures) identifier for a repository security advisory. The `--repo` flag is optional and defaults to the current repository.
+
+**Arguments:**
+
+| Argument | Description |
+| -------- | ----------- |
+| `ghsa-id` | The GHSA identifier of the advisory (required) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+
+### Update security advisory
+
+```sh
+gh secure-kit security-advisories update <ghsa-id> [--repo <owner/repo>] [--state <state>] [--severity <severity>]
+```
+
+Update a repository security advisory by its GHSA identifier. Use `--state` to change the state (published, closed, draft) and `--severity` to change the severity. The `--repo` flag is optional and defaults to the current repository.
+
+**Arguments:**
+
+| Argument | Description |
+| -------- | ----------- |
+| `ghsa-id` | The GHSA identifier of the advisory (required) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--severity` | | `""` | The severity: {critical\|high\|medium\|low} |
+| `--state` | | `""` | The new state: {published\|closed\|draft} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ## Secret Scanning
 
 ### List secret scanning alerts
