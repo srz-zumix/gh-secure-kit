@@ -41,6 +41,10 @@ gh secure-kit                      # Root command
 │       ├── list                   # List accessible repositories
 │       ├── set-default-level      # Set default access level
 │       └── update                 # Update repository access list
+├── code-quality                   # Code quality subcommands
+│   └── setup                      # Code quality setup subcommands
+│       ├── get                    # Get code quality setup configuration
+│       └── update                 # Update code quality setup configuration
 ├── code-scanning                  # Code scanning subcommands
 │   ├── alerts                     # Code scanning alerts subcommands
 │   │   ├── get                    # Get a single code scanning alert
@@ -506,6 +510,57 @@ gh secure-kit dependabot repository-access update --owner my-org --add 123 --rem
 | `--add` | | | Repository IDs to add (can be specified multiple times) |
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
+
+## Code Quality
+
+### Get code quality setup configuration (gh secure-kit code-quality setup get)
+
+```sh
+gh secure-kit code-quality setup get [flags]
+```
+
+Gets the code quality setup configuration for a repository.
+
+**Examples:**
+
+```sh
+gh secure-kit code-quality setup get
+gh secure-kit code-quality setup get --repo owner/repo
+gh secure-kit code-quality setup get --json state,languages
+```
+
+**Key Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--repo` / `-R` | The repository in the format `owner/repo` |
+| `--json` | Output JSON (specify fields) |
+
+### Update code quality setup configuration (gh secure-kit code-quality setup update)
+
+```sh
+gh secure-kit code-quality setup update [flags]
+```
+
+Updates the code quality setup configuration for a repository. Supported languages: `csharp`, `go`, `java-kotlin`, `javascript-typescript`, `python`, `ruby`.
+
+**Examples:**
+
+```sh
+gh secure-kit code-quality setup update --state configured --language javascript-typescript --language python
+gh secure-kit code-quality setup update --state not-configured
+gh secure-kit code-quality setup update --runner-type labeled --runner-label my-runner
+```
+
+**Key Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--repo` / `-R` | The repository in the format `owner/repo` |
+| `--state` | The desired state: `configured` or `not-configured` |
+| `--language` | Language to analyze (can be specified multiple times) |
+| `--runner-type` | Runner type: `standard` or `labeled` |
+| `--runner-label` | Runner label (required when `--runner-type` is `labeled`) |
 
 ## Code Scanning
 
