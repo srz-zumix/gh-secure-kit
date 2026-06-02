@@ -24,7 +24,7 @@ func NewUpdateCmd() *cobra.Command {
 		Long: `Updates the code quality setup configuration for a repository.
 
 Use --state to enable or disable code quality analysis.
-Use --languages to specify which languages to analyze.
+Use --language to specify which languages to analyze (can be specified multiple times).
 Use --runner-type to set the runner type (standard or labeled).
 Use --runner-label to specify the runner label when runner-type is labeled.`,
 		Args: cobra.NoArgs,
