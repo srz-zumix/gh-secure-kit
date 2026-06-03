@@ -295,6 +295,43 @@ Updates repositories according to the list of repositories that organization adm
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
 
+## Code Quality
+
+### Get code quality setup configuration
+
+```sh
+gh secure-kit code-quality setup get [flags]
+```
+
+Gets the code quality setup configuration for a repository. Returns the current state, configured languages, runner type, and schedule.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--repo` | `-R` | | The repository in the format `owner/repo` |
+| `--json` | | | Output JSON (specify fields) |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Update code quality setup configuration
+
+```sh
+gh secure-kit code-quality setup update [flags]
+```
+
+Updates the code quality setup configuration for a repository. Use `--state` to enable or disable code quality analysis, `--language` to specify languages (can be repeated), and `--runner-type` to set the runner type.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--repo` | `-R` | | The repository in the format `owner/repo` |
+| `--state` | | | The desired state: `configured` or `not-configured` |
+| `--language` | | | Language to analyze (can be specified multiple times). Supported: `csharp`, `go`, `java-kotlin`, `javascript-typescript`, `python`, `ruby` |
+| `--runner-type` | | | Runner type to use: `standard` or `labeled` |
+| `--runner-label` | | | Runner label to use when `--runner-type` is `labeled` |
+
 ## Code Scanning
 
 ### List code scanning alerts
