@@ -6,7 +6,6 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
-	"github.com/srz-zumix/go-gh-extension/pkg/gh/client"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -39,7 +38,7 @@ Use --runner-label to specify the runner label when runner-type is labeled.`,
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			update := &client.CodeQualitySetupUpdate{
+			update := &gh.UpdateCodeQualitySetupOptions{
 				State:      state,
 				RunnerType: runnerType,
 				Languages:  languages,
