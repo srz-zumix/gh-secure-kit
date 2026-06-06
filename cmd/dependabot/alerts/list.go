@@ -17,6 +17,7 @@ type ListOptions struct {
 
 // NewListCmd returns the dependabot alerts list command
 func NewListCmd() *cobra.Command {
+	var owner string
 	var repo string
 	var state string
 	var severity string
@@ -29,9 +30,13 @@ func NewListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List Dependabot alerts",
-		Long:  "List Dependabot alerts for a repository. Supports filtering by state, severity, ecosystem, and scope.",
+		Long: `List Dependabot alerts for a repository or organization.
+
+Use --repo to list alerts for a specific repository.
+Use --owner to list alerts across all repositories in an organization.
+--repo and --owner are mutually exclusive.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
 			}
@@ -55,12 +60,12 @@ func NewListCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to list Dependabot alerts: %w", err)
 			}
-
 			renderer := render.NewRenderer(opts.Exporter)
 			return renderer.RenderDependabotAlerts(alerts, nil)
 		},
 	}
 	f := cmd.Flags()
+	f.StringVarP(&owner, "owner", "o", "", "The organization name (lists alerts for all repositories in the org)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo'")
 	cmdutil.StringEnumFlag(cmd, &state, "state", "", "", gh.DependabotAlertStates, "Filter by state")
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", gh.DependabotAlertSeverities, "Filter by severity")
@@ -69,5 +74,6 @@ func NewListCmd() *cobra.Command {
 	cmdutil.StringEnumFlag(cmd, &sort, "sort", "", "", gh.DependabotAlertSortOptions, "Sort by field")
 	cmdutil.StringEnumFlag(cmd, &direction, "direction", "", "", []string{"asc", "desc"}, "Sort direction")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd
 }
