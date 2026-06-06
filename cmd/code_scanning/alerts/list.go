@@ -62,8 +62,12 @@ Use --owner to list alerts across all repositories in an organization.
 			if err != nil {
 				return fmt.Errorf("failed to list code scanning alerts: %w", err)
 			}
+			var headers []string
+			if owner != "" {
+				headers = []string{"Repository", "Number", "State", "Severity", "Rule", "Tool", "Description"}
+			}
 			renderer := render.NewRenderer(opts.Exporter)
-			return renderer.RenderCodeScanningAlerts(alerts, nil)
+			return renderer.RenderCodeScanningAlerts(alerts, headers)
 		},
 	}
 	f := cmd.Flags()

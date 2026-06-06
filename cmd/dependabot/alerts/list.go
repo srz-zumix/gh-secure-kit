@@ -60,8 +60,12 @@ Use --owner to list alerts across all repositories in an organization.
 			if err != nil {
 				return fmt.Errorf("failed to list Dependabot alerts: %w", err)
 			}
+			var headers []string
+			if owner != "" {
+				headers = []string{"Repository", "Number", "State", "Package", "Ecosystem", "Severity", "Summary"}
+			}
 			renderer := render.NewRenderer(opts.Exporter)
-			return renderer.RenderDependabotAlerts(alerts, nil)
+			return renderer.RenderDependabotAlerts(alerts, headers)
 		},
 	}
 	f := cmd.Flags()
