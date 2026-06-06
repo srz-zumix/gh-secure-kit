@@ -17,6 +17,7 @@ type ListOptions struct {
 
 // NewListCmd returns the code-scanning alerts list command
 func NewListCmd() *cobra.Command {
+	var owner string
 	var repo string
 	var state string
 	var severity string
@@ -30,9 +31,13 @@ func NewListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List code scanning alerts",
-		Long:  "List code scanning alerts for a repository. Supports filtering by state, severity, tool, and ref.",
+		Long: `List code scanning alerts for a repository or organization.
+
+Use --repo to list alerts for a specific repository.
+Use --owner to list alerts across all repositories in an organization.
+--repo and --owner are mutually exclusive.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
 			}
@@ -57,12 +62,16 @@ func NewListCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to list code scanning alerts: %w", err)
 			}
-
+			var headers []string
+			if owner != "" {
+				headers = []string{"Repository", "Number", "State", "Severity", "Rule", "Tool", "Description"}
+			}
 			renderer := render.NewRenderer(opts.Exporter)
-			return renderer.RenderCodeScanningAlerts(alerts, nil)
+			return renderer.RenderCodeScanningAlerts(alerts, headers)
 		},
 	}
 	f := cmd.Flags()
+	f.StringVarP(&owner, "owner", "o", "", "The organization name (lists alerts for all repositories in the org)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo'")
 	cmdutil.StringEnumFlag(cmd, &state, "state", "", "", gh.CodeScanningAlertStates, "Filter by state")
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", gh.CodeScanningAlertSeverities, "Filter by severity")
@@ -72,5 +81,6 @@ func NewListCmd() *cobra.Command {
 	cmdutil.StringEnumFlag(cmd, &sort, "sort", "", "", gh.CodeScanningAlertSortOptions, "Sort by field")
 	cmdutil.StringEnumFlag(cmd, &direction, "direction", "", "", []string{"asc", "desc"}, "Sort direction")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd
 }
