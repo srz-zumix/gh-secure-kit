@@ -11,6 +11,7 @@ func NewAlertsCmd() *cobra.Command {
 		Use:   "alerts",
 		Short: "Manage code scanning alerts",
 	}
+	cmd.AddCommand(alerts.NewAutofixCmd())
 	cmd.AddCommand(alerts.NewGetCmd())
 	cmd.AddCommand(alerts.NewListCmd())
 	cmd.AddCommand(alerts.NewUpdateCmd())
