@@ -193,7 +193,7 @@ List dependency packages defined in a Unity project's Packages/manifest.json. Th
 gh secure-kit dependabot alerts list [flags]
 ```
 
-List Dependabot alerts for a repository. Supports filtering by state, severity, ecosystem, and scope.
+List Dependabot alerts for a repository or organization. Use `--repo` to list alerts for a specific repository, or `--owner` to list alerts across all repositories in an organization. `--repo` and `--owner` are mutually exclusive.
 
 **Flags:**
 
@@ -203,6 +203,7 @@ List Dependabot alerts for a repository. Supports filtering by state, severity, 
 | `--ecosystem` | | `""` | Filter by ecosystem {composer\|go\|maven\|npm\|nuget\|pip\|pub\|rubygems\|rust} |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists alerts for all repositories in the org) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--scope` | | `""` | Filter by scope {development\|runtime} |
 | `--severity` | | `""` | Filter by severity {low\|medium\|high\|critical} |
@@ -340,7 +341,7 @@ Updates the code quality setup configuration for a repository. Use `--state` to 
 gh secure-kit code-scanning alerts list [flags]
 ```
 
-List code scanning alerts for a repository. Supports filtering by state, severity, tool, and ref.
+List code scanning alerts for a repository or organization. Use `--repo` to list alerts for a specific repository, or `--owner` to list alerts across all repositories in an organization. `--repo` and `--owner` are mutually exclusive.
 
 **Flags:**
 
@@ -349,6 +350,7 @@ List code scanning alerts for a repository. Supports filtering by state, severit
 | `--direction` | | `""` | Sort direction {asc\|desc} |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists alerts for all repositories in the org) |
 | `--ref` | | `""` | Filter by Git ref (branch, tag, or pull request) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--severity` | | `""` | Filter by severity {critical\|error\|high\|low\|medium\|note\|warning} |
@@ -393,6 +395,59 @@ Update a code scanning alert for a repository. Use --state to change the alert s
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--state` | | | The state to set {dismissed\|open} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the autofix status for a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts autofix get <alert-number> [flags]
+```
+
+Get the status and description of an autofix for a code scanning alert on the repository's default branch.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Create an autofix for a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts autofix create <alert-number> [flags]
+```
+
+Create an autofix for a code scanning alert. Returns 200 OK if an autofix already exists, or 202 Accepted if a new one is being generated.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Commit an autofix for a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts autofix commit <alert-number> [--target-ref <ref>] [--message <msg>] [flags]
+```
+
+Commit an autofix for a code scanning alert from the repository's default branch. The target branch must already exist. If `--target-ref` is omitted, the default branch is used.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--message` | | `""` | Commit message for the autofix commit |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--target-ref` | | `""` | The Git reference of the target branch for the commit (e.g. refs/heads/my-fix) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### List code scanning analyses

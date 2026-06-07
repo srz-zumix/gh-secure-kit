@@ -47,6 +47,10 @@ gh secure-kit                      # Root command
 │       └── update                 # Update code quality setup configuration
 ├── code-scanning                  # Code scanning subcommands
 │   ├── alerts                     # Code scanning alerts subcommands
+│   │   ├── autofix                # Code scanning autofix subcommands
+│   │   │   ├── commit             # Commit an autofix
+│   │   │   ├── create             # Create an autofix
+│   │   │   └── get                # Get autofix status
 │   │   ├── get                    # Get a single code scanning alert
 │   │   ├── list                   # List code scanning alerts
 │   │   └── update                 # Update a code scanning alert
@@ -337,7 +341,7 @@ gh secure-kit deps unity list --ref main
 gh secure-kit dependabot alerts list [flags]
 ```
 
-List Dependabot alerts for a repository. Supports filtering by state, severity, ecosystem, and scope.
+List Dependabot alerts for a repository or organization. Use `--repo` to list alerts for a specific repository, or `--owner` to list alerts across all repositories in an organization. `--repo` and `--owner` are mutually exclusive.
 
 ```sh
 # List all Dependabot alerts in the current repository
@@ -345,6 +349,9 @@ gh secure-kit dependabot alerts list
 
 # List alerts for a specific repository
 gh secure-kit dependabot alerts list --repo owner/repo
+
+# List alerts across all repositories in an organization
+gh secure-kit dependabot alerts list --owner my-org
 
 # Filter by state
 gh secure-kit dependabot alerts list --state open
@@ -367,6 +374,7 @@ gh secure-kit dependabot alerts list --format json
 | `--ecosystem` | | `""` | Filter by ecosystem {composer\|go\|maven\|npm\|nuget\|pip\|pub\|rubygems\|rust} |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists alerts for all repositories in the org) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--scope` | | `""` | Filter by scope {development\|runtime} |
 | `--severity` | | `""` | Filter by severity {low\|medium\|high\|critical} |
@@ -570,11 +578,14 @@ gh secure-kit code-quality setup update --runner-type labeled --runner-label my-
 gh secure-kit code-scanning alerts list [flags]
 ```
 
-List code scanning alerts for a repository. Supports filtering by state, severity, tool, and ref.
+List code scanning alerts for a repository or organization. Use `--repo` to list alerts for a specific repository, or `--owner` to list alerts across all repositories in an organization. `--repo` and `--owner` are mutually exclusive.
 
 ```sh
 # List all code scanning alerts in the current repository
 gh secure-kit code-scanning alerts list
+
+# List alerts across all repositories in an organization
+gh secure-kit code-scanning alerts list --owner my-org
 
 # Filter by state
 gh secure-kit code-scanning alerts list --state open
@@ -602,6 +613,7 @@ gh secure-kit code-scanning alerts list --repo owner/repo
 | `--direction` | | `""` | Sort direction {asc\|desc} |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (lists alerts for all repositories in the org) |
 | `--ref` | | `""` | Filter by Git ref (branch, tag, or pull request) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--severity` | | `""` | Filter by severity {critical\|error\|high\|low\|medium\|note\|warning} |
@@ -665,6 +677,78 @@ gh secure-kit code-scanning alerts update 42 --state dismissed --dismissed-reaso
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--state` | | | The state to set {dismissed\|open} (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the autofix status for a code scanning alert (gh secure-kit code-scanning alerts autofix get)
+
+```sh
+gh secure-kit code-scanning alerts autofix get <alert-number> [flags]
+```
+
+Get the status and description of an autofix for a code scanning alert on the repository's default branch.
+
+```sh
+gh secure-kit code-scanning alerts autofix get 42 --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Create an autofix for a code scanning alert (gh secure-kit code-scanning alerts autofix create)
+
+```sh
+gh secure-kit code-scanning alerts autofix create <alert-number> [flags]
+```
+
+Create an autofix for a code scanning alert. Returns 200 OK if an autofix already exists, or 202 Accepted if a new one is being generated.
+
+```sh
+gh secure-kit code-scanning alerts autofix create 42 --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Commit an autofix for a code scanning alert (gh secure-kit code-scanning alerts autofix commit)
+
+```sh
+gh secure-kit code-scanning alerts autofix commit <alert-number> [--target-ref <ref>] [--message <msg>] [flags]
+```
+
+Commit an autofix for a code scanning alert from the repository's default branch. The target branch must already exist. If `--target-ref` is omitted, the default branch is used.
+
+```sh
+# Commit to the default branch
+gh secure-kit code-scanning alerts autofix commit 42 --repo owner/repo
+
+# Commit to a specific branch with a custom message
+gh secure-kit code-scanning alerts autofix commit 42 \
+  --repo owner/repo \
+  --target-ref refs/heads/fix/alert-42 \
+  --message "fix: apply autofix for alert #42"
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--message` | | `""` | Commit message for the autofix commit |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--target-ref` | | `""` | The Git reference of the target branch for the commit (e.g. refs/heads/my-fix) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### List code scanning analyses (gh secure-kit code-scanning analyses list)
