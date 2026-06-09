@@ -87,6 +87,43 @@ Use `--filter-using` to filter by `runs.using` type; prefix match is supported (
 
 ## Deps
 
+### Create dependency snapshot
+
+```sh
+gh secure-kit deps snapshot --file <file> [flags]
+```
+
+Create a new dependency graph snapshot for a repository. The snapshot body must be provided as a JSON file via `--file`.
+The JSON must conform to the [GitHub dependency submission API schema](https://docs.github.com/rest/dependency-graph/dependency-submission).
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--file` | `-f` | | Path to a JSON file containing the snapshot body (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Diff dependency changes
+
+```sh
+gh secure-kit deps diff <basehead> [flags]
+```
+
+Show dependency changes between two commits, tags, or branches using the GitHub dependency-graph compare API.
+The `basehead` argument must be in the format `<base>...<head>` (e.g. `main...feature/branch`).
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### List dependency packages
 
 ```sh
