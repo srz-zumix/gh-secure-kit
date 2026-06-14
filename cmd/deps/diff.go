@@ -21,7 +21,7 @@ func NewDiffCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "diff <basehead>",
-		Short: "Show dependency diff between two commits or branches",
+		Short: "Show dependency diff between two commits, tags, or branches",
 		Long:  "Show dependency changes between two commits, tags, or branches using the GitHub dependency-graph compare API.\nThe basehead argument must be in the format <base>...<head> (e.g. main...feature/branch).",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
