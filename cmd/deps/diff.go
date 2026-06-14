@@ -2,6 +2,7 @@ package deps
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
