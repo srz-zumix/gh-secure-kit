@@ -26,7 +26,9 @@ func NewDiffCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			basehead := args[0]
-			repository, err := parser.Repository(parser.RepositoryInput(repo))
+			if parts := strings.Split(basehead, "..."); len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				return fmt.Errorf("invalid <basehead> %q: expected <base>...<head>", basehead)
+			}
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
 			}
