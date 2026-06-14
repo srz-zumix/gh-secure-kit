@@ -30,6 +30,7 @@ func NewDiffCmd() *cobra.Command {
 			if parts := strings.Split(basehead, "..."); len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 				return fmt.Errorf("invalid <basehead> %q: expected <base>...<head>", basehead)
 			}
+			repository, err := parser.Repository(parser.RepositoryInput(repo))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
 			}
