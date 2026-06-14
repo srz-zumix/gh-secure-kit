@@ -64,7 +64,9 @@ gh secure-kit                      # Root command
 │       ├── get                    # Get SARIF upload info
 │       └── upload                 # Upload SARIF data
 └── deps                           # Dependency management subcommands
+    ├── diff                       # Show dependency diff between two commits or branches
     ├── list                       # List dependency packages (SBOM)
+    ├── snapshot                   # Create a dependency graph snapshot
     ├── actions                    # GitHub Actions dependency subcommands
     │   ├── graph                  # Graph Actions dependencies
     │   └── list                   # List Actions packages from SBOM
@@ -172,6 +174,44 @@ gh secure-kit actions workflow --ref v1.2.3
 | `--template` | `-t` | | Format JSON output using a Go template |
 
 ## Deps
+
+### Create dependency snapshot (gh secure-kit deps snapshot)
+
+```sh
+gh secure-kit deps snapshot --file <file> [flags]
+```
+
+Create a new dependency graph snapshot for a repository using the GitHub dependency submission API.
+The snapshot body must be provided as a JSON file via `--file`.
+
+**Key flags:** `--file` (required), `--repo`, `--format`
+
+**Examples:**
+
+```sh
+gh secure-kit deps snapshot --file snapshot.json
+gh secure-kit deps snapshot --repo owner/repo --file snapshot.json
+gh secure-kit deps snapshot --file snapshot.json --format json
+```
+
+### Diff dependency changes (gh secure-kit deps diff)
+
+```sh
+gh secure-kit deps diff <basehead> [flags]
+```
+
+Show dependency changes between two commits, tags, or branches.
+The `basehead` argument must be in the format `<base>...<head>`.
+
+**Key flags:** `--repo`, `--format`
+
+**Examples:**
+
+```sh
+gh secure-kit deps diff main...feature/branch
+gh secure-kit deps diff v1.0.0...v2.0.0
+gh secure-kit deps diff main...HEAD --format json
+```
 
 ### List dependency packages (gh secure-kit deps list)
 

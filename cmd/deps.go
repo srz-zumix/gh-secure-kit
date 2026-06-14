@@ -17,6 +17,8 @@ func NewDepsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(deps.NewListCmd())
 	cmd.AddCommand(deps.NewActionsCmd())
+	cmd.AddCommand(deps.NewDiffCmd())
+	cmd.AddCommand(deps.NewSnapshotCmd())
 	cmd.AddCommand(deps.NewSubmoduleCmd())
 	cmd.AddCommand(deps.NewUnityCmd())
 	return cmd
