@@ -20,5 +20,6 @@ func NewCodeScanningCmd() *cobra.Command {
 	cmd.AddCommand(codescanning.NewAnalysesCmd())
 	cmd.AddCommand(codescanning.NewCodeqlCmd())
 	cmd.AddCommand(codescanning.NewSarifCmd())
+	cmd.AddCommand(codescanning.NewDefaultSetupCmd())
 	return cmd
 }

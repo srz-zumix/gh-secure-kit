@@ -17,5 +17,6 @@ func NewDependabotCmd() *cobra.Command {
 	}
 	cmd.AddCommand(dependabot.NewAlertsCmd())
 	cmd.AddCommand(dependabot.NewRepositoryAccessCmd())
+	cmd.AddCommand(dependabot.NewSecurityUpdatesCmd())
 	return cmd
 }

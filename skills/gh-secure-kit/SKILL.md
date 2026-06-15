@@ -32,15 +32,23 @@ gh secure-kit                      # Root command
 ├── actions                        # GitHub Actions security subcommands
 │   ├── lint                       # Lint workflow/action YAML files
 │   └── workflow                   # List action deps from workflow YAML
+├── advanced-security              # GitHub Advanced Security subcommands
+│   ├── disable                    # Disable GitHub Advanced Security for an org
+│   └── enable                     # Enable GitHub Advanced Security for an org
 ├── dependabot                     # Dependabot management subcommands
 │   ├── alerts                     # Dependabot alerts subcommands
+│   │   ├── disable                # Disable Dependabot alerts for an org
+│   │   ├── enable                 # Enable Dependabot alerts for an org
 │   │   ├── get                    # Get a single Dependabot alert
 │   │   ├── list                   # List Dependabot alerts
 │   │   └── update                 # Update a Dependabot alert
-│   └── repository-access          # Dependabot repository access subcommands
-│       ├── list                   # List accessible repositories
-│       ├── set-default-level      # Set default access level
-│       └── update                 # Update repository access list
+│   ├── repository-access          # Dependabot repository access subcommands
+│   │   ├── list                   # List accessible repositories
+│   │   ├── set-default-level      # Set default access level
+│   │   └── update                 # Update repository access list
+│   └── security-updates           # Dependabot security updates subcommands
+│       ├── disable                # Disable Dependabot security updates for an org
+│       └── enable                 # Enable Dependabot security updates for an org
 ├── code-quality                   # Code quality subcommands
 │   └── setup                      # Code quality setup subcommands
 │       ├── get                    # Get code quality setup configuration
@@ -60,20 +68,52 @@ gh secure-kit                      # Root command
 │   ├── codeql                     # CodeQL database subcommands
 │   │   ├── get                    # Get a CodeQL database by language
 │   │   └── list                   # List CodeQL databases
+│   ├── default-setup              # Code scanning default setup subcommands
+│   │   ├── disable                # Disable code scanning default setup for an org
+│   │   └── enable                 # Enable code scanning default setup for an org
 │   └── sarif                      # SARIF upload subcommands
 │       ├── get                    # Get SARIF upload info
 │       └── upload                 # Upload SARIF data
-└── deps                           # Dependency management subcommands
-    ├── diff                       # Show dependency diff between two commits or branches
-    ├── list                       # List dependency packages (SBOM)
-    ├── snapshot                   # Create a dependency graph snapshot
-    ├── actions                    # GitHub Actions dependency subcommands
-    │   ├── graph                  # Graph Actions dependencies
-    │   └── list                   # List Actions packages from SBOM
-    ├── submodule                  # Git submodule subcommands
-    │   └── list                   # List repository submodules
-    └── unity                      # Unity project subcommands
-        └── list                   # List Unity package dependencies
+├── code-security                  # Code security subcommands
+│   └── configurations             # Code security configurations subcommands
+│       ├── list                   # List configurations
+│       ├── get                    # Get a configuration by ID
+│       ├── create                 # Create a configuration
+│       ├── update                 # Update a configuration
+│       ├── delete                 # Delete a configuration
+│       ├── attach                 # Attach a configuration to repositories
+│       ├── detach                 # Detach configurations from repositories
+│       ├── defaults               # List default configurations
+│       ├── set-default            # Set a default configuration
+│       ├── repositories           # List repositories attached to a configuration
+│       └── repo-config            # Get repository's attached configuration
+├── deps                           # Dependency management subcommands
+│   ├── diff                       # Show dependency diff between two commits or branches
+│   ├── disable                    # Disable dependency graph for an org
+│   ├── enable                     # Enable dependency graph for an org
+│   ├── list                       # List dependency packages (SBOM)
+│   ├── snapshot                   # Create a dependency graph snapshot
+│   ├── actions                    # GitHub Actions dependency subcommands
+│   │   ├── graph                  # Graph Actions dependencies
+│   │   └── list                   # List Actions packages from SBOM
+│   ├── submodule                  # Git submodule subcommands
+│   │   └── list                   # List repository submodules
+│   └── unity                      # Unity project subcommands
+│       └── list                   # List Unity package dependencies
+└── secret-scanning                # Secret scanning subcommands
+    ├── disable                    # Disable secret scanning for an org
+    ├── enable                     # Enable secret scanning for an org
+    ├── alerts                     # Secret scanning alerts subcommands
+    │   ├── get                    # Get a single secret scanning alert
+    │   ├── list                   # List secret scanning alerts
+    │   ├── locations              # List locations for a secret scanning alert
+    │   └── update                 # Update a secret scanning alert
+    ├── push-protection            # Secret scanning push protection subcommands
+    │   ├── disable                # Disable push protection for an org
+    │   ├── enable                 # Enable push protection for an org
+    │   ├── list                   # List push protection configurations
+    │   └── update                 # Update push protection configurations
+    └── scan-history               # Get secret scanning scan history
 ```
 
 ## Actions
@@ -373,6 +413,34 @@ gh secure-kit deps unity list --ref main
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template |
 
+### Disable dependency graph for an organization (gh secure-kit deps disable)
+
+```sh
+gh secure-kit deps disable --owner <org>
+```
+
+Disable the dependency graph for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable dependency graph for an organization (gh secure-kit deps enable)
+
+```sh
+gh secure-kit deps enable --owner <org>
+```
+
+Enable the dependency graph for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ## Dependabot
 
 ### List Dependabot alerts (gh secure-kit dependabot alerts list)
@@ -558,6 +626,62 @@ gh secure-kit dependabot repository-access update --owner my-org --add 123 --rem
 | `--add` | | | Repository IDs to add (can be specified multiple times) |
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
+
+### Disable Dependabot alerts for an organization (gh secure-kit dependabot alerts disable)
+
+```sh
+gh secure-kit dependabot alerts disable --owner <org>
+```
+
+Disable Dependabot alerts for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable Dependabot alerts for an organization (gh secure-kit dependabot alerts enable)
+
+```sh
+gh secure-kit dependabot alerts enable --owner <org>
+```
+
+Enable Dependabot alerts for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Disable Dependabot security updates for an organization (gh secure-kit dependabot security-updates disable)
+
+```sh
+gh secure-kit dependabot security-updates disable --owner <org>
+```
+
+Disable Dependabot security updates for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable Dependabot security updates for an organization (gh secure-kit dependabot security-updates enable)
+
+```sh
+gh secure-kit dependabot security-updates enable --owner <org>
+```
+
+Enable Dependabot security updates for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
 
 ## Code Quality
 
@@ -963,6 +1087,36 @@ gh secure-kit code-scanning sarif upload \
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--tool-name` | | `""` | The name of the tool used to generate the analysis |
 
+### Disable code scanning default setup for an organization (gh secure-kit code-scanning default-setup disable)
+
+```sh
+gh secure-kit code-scanning default-setup disable --owner <org>
+```
+
+Disable code scanning default setup for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable code scanning default setup for an organization (gh secure-kit code-scanning default-setup enable)
+
+```sh
+gh secure-kit code-scanning default-setup enable --owner <org> [--query-suite <suite>]
+```
+
+Enable code scanning default setup for all eligible repositories in an organization.
+Use `--query-suite` to specify the CodeQL query suite (default or extended).
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+| `--query-suite` | | `""` | CodeQL query suite {default\|extended} |
+
 ## Code Security
 
 ### List code security configurations (gh secure-kit code-security configurations list)
@@ -1198,6 +1352,34 @@ Update a repository security advisory by its GHSA identifier. Supports updating 
 
 ## Secret Scanning
 
+### Disable secret scanning for an organization (gh secure-kit secret-scanning disable)
+
+```sh
+gh secure-kit secret-scanning disable --owner <org>
+```
+
+Disable secret scanning for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable secret scanning for an organization (gh secure-kit secret-scanning enable)
+
+```sh
+gh secure-kit secret-scanning enable --owner <org>
+```
+
+Enable secret scanning for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ### List secret scanning alerts (gh secure-kit secret-scanning alerts list)
 
 ```sh
@@ -1264,6 +1446,34 @@ gh secure-kit secret-scanning alerts update 42 \
 gh secure-kit secret-scanning alerts update 42 --repo owner/repo --state open
 ```
 
+### Disable secret scanning push protection for an organization (gh secure-kit secret-scanning push-protection disable)
+
+```sh
+gh secure-kit secret-scanning push-protection disable --owner <org>
+```
+
+Disable secret scanning push protection for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable secret scanning push protection for an organization (gh secure-kit secret-scanning push-protection enable)
+
+```sh
+gh secure-kit secret-scanning push-protection enable --owner <org>
+```
+
+Enable secret scanning push protection for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ### List secret scanning push protection pattern configurations (gh secure-kit secret-scanning push-protection list)
 
 ```sh
@@ -1317,3 +1527,33 @@ gh secure-kit secret-scanning scan-history --repo owner/repo
 # Output as JSON
 gh secure-kit secret-scanning scan-history --repo owner/repo --format json
 ```
+
+## Advanced Security
+
+### Disable GitHub Advanced Security for an organization (gh secure-kit advanced-security disable)
+
+```sh
+gh secure-kit advanced-security disable --owner <org>
+```
+
+Disable GitHub Advanced Security for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable GitHub Advanced Security for an organization (gh secure-kit advanced-security enable)
+
+```sh
+gh secure-kit advanced-security enable --owner <org>
+```
+
+Enable GitHub Advanced Security for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |

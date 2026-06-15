@@ -19,6 +19,8 @@ func NewSecretScanningCmd() *cobra.Command {
 	cmd.AddCommand(secretscanning.NewAlertsCmd())
 	cmd.AddCommand(secretscanning.NewPushProtectionCmd())
 	cmd.AddCommand(secretscanning.NewScanHistoryCmd())
+	cmd.AddCommand(secretscanning.NewEnableCmd())
+	cmd.AddCommand(secretscanning.NewDisableCmd())
 	return cmd
 }
 

@@ -13,5 +13,7 @@ func NewPushProtectionCmd() *cobra.Command {
 	}
 	cmd.AddCommand(pushprotection.NewListCmd())
 	cmd.AddCommand(pushprotection.NewUpdateCmd())
+	cmd.AddCommand(pushprotection.NewEnableCmd())
+	cmd.AddCommand(pushprotection.NewDisableCmd())
 	return cmd
 }
