@@ -222,6 +222,34 @@ List dependency packages defined in a Unity project's Packages/manifest.json. Th
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Disable dependency graph for an organization
+
+```sh
+gh secure-kit deps disable --owner <org>
+```
+
+Disable the dependency graph for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable dependency graph for an organization
+
+```sh
+gh secure-kit deps enable --owner <org>
+```
+
+Enable the dependency graph for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ## Dependabot
 
 ### List Dependabot alerts
@@ -332,6 +360,62 @@ Updates repositories according to the list of repositories that organization adm
 | `--add` | | | Repository IDs to add (can be specified multiple times) |
 | `--owner` | `-o` | `""` | The organization name |
 | `--remove` | | | Repository IDs to remove (can be specified multiple times) |
+
+### Disable Dependabot alerts for an organization
+
+```sh
+gh secure-kit dependabot alerts disable --owner <org>
+```
+
+Disable Dependabot alerts for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable Dependabot alerts for an organization
+
+```sh
+gh secure-kit dependabot alerts enable --owner <org>
+```
+
+Enable Dependabot alerts for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Disable Dependabot security updates for an organization
+
+```sh
+gh secure-kit dependabot security-updates disable --owner <org>
+```
+
+Disable Dependabot security updates for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable Dependabot security updates for an organization
+
+```sh
+gh secure-kit dependabot security-updates enable --owner <org>
+```
+
+Enable Dependabot security updates for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
 
 ## Code Quality
 
@@ -596,6 +680,36 @@ Uploads SARIF data containing the results of a code scanning analysis. The --sar
 | `--started-at` | | `""` | The time the analysis started (ISO 8601 format) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--tool-name` | | `""` | The name of the tool used to generate the analysis |
+
+### Disable code scanning default setup for an organization
+
+```sh
+gh secure-kit code-scanning default-setup disable --owner <org>
+```
+
+Disable code scanning default setup for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable code scanning default setup for an organization
+
+```sh
+gh secure-kit code-scanning default-setup enable --owner <org> [--query-suite <suite>]
+```
+
+Enable code scanning default setup for all eligible repositories in an organization.
+Use `--query-suite` to specify the CodeQL query suite.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+| `--query-suite` | | `""` | CodeQL query suite {default\|extended} |
 
 ## Code Security
 
@@ -907,6 +1021,34 @@ Update a repository security advisory by its GHSA identifier. Use `--state` to c
 
 ## Secret Scanning
 
+### Disable secret scanning for an organization
+
+```sh
+gh secure-kit secret-scanning disable --owner <org>
+```
+
+Disable secret scanning for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable secret scanning for an organization
+
+```sh
+gh secure-kit secret-scanning enable --owner <org>
+```
+
+Enable secret scanning for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ### List secret scanning alerts
 
 ```sh
@@ -985,6 +1127,34 @@ Update a secret scanning alert for a repository. Use `--state` to change the ale
 | `--state` | | | The state to set {open\|resolved} (required) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Disable secret scanning push protection for an organization
+
+```sh
+gh secure-kit secret-scanning push-protection disable --owner <org>
+```
+
+Disable secret scanning push protection for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable secret scanning push protection for an organization
+
+```sh
+gh secure-kit secret-scanning push-protection enable --owner <org>
+```
+
+Enable secret scanning push protection for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
 ### List secret scanning push protection pattern configurations
 
 ```sh
@@ -1036,3 +1206,33 @@ Get the latest default incremental and backfill secret scanning scan history for
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+
+## Advanced Security
+
+### Disable GitHub Advanced Security for an organization
+
+```sh
+gh secure-kit advanced-security disable --owner <org>
+```
+
+Disable GitHub Advanced Security for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
+
+### Enable GitHub Advanced Security for an organization
+
+```sh
+gh secure-kit advanced-security enable --owner <org>
+```
+
+Enable GitHub Advanced Security for all eligible repositories in an organization.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (required) |
