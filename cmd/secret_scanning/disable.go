@@ -35,6 +35,5 @@ func NewDisableCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVarP(&owner, "owner", "o", "", "The organization name")
-	_ = cmd.MarkFlagRequired("owner")
 	return cmd
 }
