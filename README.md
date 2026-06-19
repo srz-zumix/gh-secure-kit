@@ -930,6 +930,56 @@ Create a temporary private fork of the repository to collaborate on fixing a sec
 | ------ | ------- | --------- | ------------- |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 
+### Create security advisory
+
+```sh
+gh secure-kit security-advisories create --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--cve-id <id>] [--severity <severity>] [--cvss-vector-string <string>] [--package-name <name>] [--vulnerable-version-range <range>] [--patched-versions <versions>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Create a new repository security advisory. Requires `--summary`, `--description`, and `--ecosystem`. The `--repo` flag is optional and defaults to the current repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--cve-id` | | `""` | The CVE identifier to associate with the advisory |
+| `--cwe-ids` | | `""` | Comma-separated list of CWE identifiers (e.g. CWE-79,CWE-284) |
+| `--cvss-vector-string` | | `""` | The CVSS vector string for the advisory |
+| `--description` | | `""` | A detailed description of the advisory (required) |
+| `--ecosystem` | | `""` | The package ecosystem: {actions\|composer\|erlang\|go\|maven\|npm\|nuget\|other\|pip\|pub\|rubygems\|rust} (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--package-name` | | `""` | The name of the affected package |
+| `--patched-versions` | | `""` | The version(s) that fix the vulnerability |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--severity` | | `""` | The severity: {critical\|high\|medium\|low} |
+| `--start-private-fork` | | `false` | Create a temporary private fork to collaborate on a fix |
+| `--summary` | | `""` | A short description of the advisory (required) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--vulnerable-version-range` | | `""` | The version range of the vulnerable package |
+
+### Get global security advisory
+
+```sh
+gh secure-kit security-advisories global get <ghsa-id>
+```
+
+Get a global security advisory from the GitHub Advisory Database by its GHSA identifier.
+
+**Arguments:**
+
+| Argument | Description |
+| -------- | ----------- |
+| `ghsa-id` | The GHSA identifier of the advisory (required) |
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### Get security advisory
 
 ```sh
@@ -953,6 +1003,27 @@ Get a repository security advisory by its GHSA identifier. The `--repo` flag is 
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### List global security advisories
+
+```sh
+gh secure-kit security-advisories global list [--type <type>] [--severity <severity>] [--ecosystem <ecosystem>] [--ghsa-id <id>] [--cve-id <id>]
+```
+
+List global security advisories from the GitHub Advisory Database. Use `--type` to filter by advisory type (reviewed, malware, unreviewed), `--severity` to filter by severity, `--ecosystem` to filter by package ecosystem, `--ghsa-id` to filter by GHSA identifier, or `--cve-id` to filter by CVE identifier.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--cve-id` | | `""` | Filter by CVE identifier |
+| `--ecosystem` | | `""` | Filter by package ecosystem: {actions\|composer\|erlang\|go\|maven\|npm\|nuget\|other\|pip\|pub\|rubygems\|rust} |
+| `--format` | | | Output format: {json} |
+| `--ghsa-id` | | `""` | Filter by GHSA identifier |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--severity` | | `""` | Filter by severity: {critical\|high\|medium\|low} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--type` | | `""` | Filter by advisory type: {reviewed\|malware\|unreviewed} |
+
 ### List security advisories
 
 ```sh
@@ -972,6 +1043,31 @@ List repository security advisories for a repository or organization. Use `--rep
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--sort` | | `""` | Sort by field: {created\|updated\|published} |
 | `--state` | | `""` | Filter by state: {triage\|draft\|published\|closed} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Report vulnerability in a repository
+
+```sh
+gh secure-kit security-advisories report --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--package-name <name>] [--severity <severity>] [--cvss-vector-string <string>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Report a vulnerability in an open source repository to the maintainers privately. Requires `--summary`, `--description`, and `--ecosystem`. The `--repo` flag is optional and defaults to the current repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--cwe-ids` | | `""` | Comma-separated list of CWE identifiers (e.g. CWE-79,CWE-284) |
+| `--cvss-vector-string` | | `""` | The CVSS vector string for the vulnerability |
+| `--description` | | `""` | A detailed description of the vulnerability, max 10000 characters (required) |
+| `--ecosystem` | | `""` | The package ecosystem: {actions\|composer\|erlang\|go\|maven\|npm\|nuget\|other\|pip\|pub\|rubygems\|rust} (required) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--package-name` | | `""` | The name of the affected package |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--severity` | | `""` | The severity: {critical\|high\|medium\|low} |
+| `--start-private-fork` | | `false` | Request creation of a temporary private fork |
+| `--summary` | | `""` | A short description of the vulnerability, max 180 characters (required) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### Request CVE for security advisory

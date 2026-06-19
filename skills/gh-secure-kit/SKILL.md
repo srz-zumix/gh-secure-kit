@@ -100,20 +100,31 @@ gh secure-kit                      # Root command
 │   │   └── list                   # List repository submodules
 │   └── unity                      # Unity project subcommands
 │       └── list                   # List Unity package dependencies
-└── secret-scanning                # Secret scanning subcommands
-    ├── disable                    # Disable secret scanning for an org
-    ├── enable                     # Enable secret scanning for an org
-    ├── alerts                     # Secret scanning alerts subcommands
-    │   ├── get                    # Get a single secret scanning alert
-    │   ├── list                   # List secret scanning alerts
-    │   ├── locations              # List locations for a secret scanning alert
-    │   └── update                 # Update a secret scanning alert
-    ├── push-protection            # Secret scanning push protection subcommands
-    │   ├── disable                # Disable push protection for an org
-    │   ├── enable                 # Enable push protection for an org
-    │   ├── list                   # List push protection configurations
-    │   └── update                 # Update push protection configurations
-    └── scan-history               # Get secret scanning scan history
+├── secret-scanning                # Secret scanning subcommands
+│   ├── disable                    # Disable secret scanning for an org
+│   ├── enable                     # Enable secret scanning for an org
+│   ├── alerts                     # Secret scanning alerts subcommands
+│   │   ├── get                    # Get a single secret scanning alert
+│   │   ├── list                   # List secret scanning alerts
+│   │   ├── locations              # List locations for a secret scanning alert
+│   │   └── update                 # Update a secret scanning alert
+│   ├── push-protection            # Secret scanning push protection subcommands
+│   │   ├── disable                # Disable push protection for an org
+│   │   ├── enable                 # Enable push protection for an org
+│   │   ├── list                   # List push protection configurations
+│   │   └── update                 # Update push protection configurations
+│   └── scan-history               # Get secret scanning scan history
+└── security-advisories            # Repository security advisories subcommands
+    ├── create                     # Create a repository security advisory
+    ├── create-fork                # Create a temporary private fork for an advisory
+    ├── get                        # Get a repository security advisory
+    ├── global                     # Global security advisories subcommands
+    │   ├── get                    # Get a global security advisory by GHSA ID
+    │   └── list                   # List global security advisories
+    ├── list                       # List repository security advisories
+    ├── report                     # Report a vulnerability in a repository
+    ├── request-cve                # Request a CVE for a security advisory
+    └── update                     # Update a repository security advisory
 ```
 
 ## Actions
@@ -1318,6 +1329,22 @@ gh secure-kit security-advisories create-fork <ghsa-id> [--repo <owner/repo>]
 
 Create a temporary private fork of the repository to collaborate on fixing a security vulnerability.
 
+### Create security advisory (gh secure-kit security-advisories create)
+
+```sh
+gh secure-kit security-advisories create --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--cve-id <id>] [--severity <severity>] [--package-name <name>] [--vulnerable-version-range <range>] [--patched-versions <versions>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Create a new repository security advisory. Requires `--summary`, `--description`, and `--ecosystem`.
+
+### Get global security advisory (gh secure-kit security-advisories global get)
+
+```sh
+gh secure-kit security-advisories global get <ghsa-id>
+```
+
+Get a global security advisory from the GitHub Advisory Database by its GHSA identifier.
+
 ### Get security advisory (gh secure-kit security-advisories get)
 
 ```sh
@@ -1326,6 +1353,14 @@ gh secure-kit security-advisories get <ghsa-id> [--repo <owner/repo>]
 
 Get a repository security advisory by its GHSA identifier.
 
+### List global security advisories (gh secure-kit security-advisories global list)
+
+```sh
+gh secure-kit security-advisories global list [--type <type>] [--severity <severity>] [--ecosystem <ecosystem>] [--ghsa-id <id>] [--cve-id <id>]
+```
+
+List global security advisories from the GitHub Advisory Database. Filter by type, severity, ecosystem, GHSA ID, or CVE ID.
+
 ### List security advisories (gh secure-kit security-advisories list)
 
 ```sh
@@ -1333,6 +1368,14 @@ gh secure-kit security-advisories list [--repo <owner/repo>] [--owner <org>] [--
 ```
 
 List repository security advisories for a repository or organization. Use `--owner` for org-wide listing.
+
+### Report vulnerability in a repository (gh secure-kit security-advisories report)
+
+```sh
+gh secure-kit security-advisories report --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--package-name <name>] [--severity <severity>] [--cvss-vector-string <string>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Report a vulnerability in an open source repository to the maintainers privately. Requires `--summary`, `--description`, and `--ecosystem`.
 
 ### Request CVE for security advisory (gh secure-kit security-advisories request-cve)
 

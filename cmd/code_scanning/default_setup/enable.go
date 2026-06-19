@@ -37,7 +37,6 @@ func NewEnableCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVarP(&owner, "owner", "o", "", "The organization name")
 	f.StringVar(&querySuite, "query-suite", "", "CodeQL query suite {default|extended}")
-	_ = cmd.MarkFlagRequired("owner")
 	_ = cmd.RegisterFlagCompletionFunc("query-suite", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 		return gh.CodeScanningQuerySuites, cobra.ShellCompDirectiveNoFileComp
 	})
