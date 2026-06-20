@@ -1,5 +1,4 @@
 package globaladvisories
-package globaladvisories
 
 import (
 	"fmt"
