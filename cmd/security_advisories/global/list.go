@@ -29,7 +29,7 @@ func NewListCmd() *cobra.Command {
 		Long: `List global security advisories from the GitHub Advisory Database.
 
 Use --type to filter by advisory type (reviewed, malware, unreviewed).
-Use --severity to filter by severity (unknown, low, medium, high, critical).
+Use --severity to filter by severity (critical, high, medium, low).
 Use --ecosystem to filter by package ecosystem.
 Use --ghsa-id to filter by GHSA identifier.
 Use --cve-id to filter by CVE identifier.`,
