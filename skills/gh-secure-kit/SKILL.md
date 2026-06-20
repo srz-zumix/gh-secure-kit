@@ -1332,7 +1332,7 @@ Create a temporary private fork of the repository to collaborate on fixing a sec
 ### Create security advisory (gh secure-kit security-advisories create)
 
 ```sh
-gh secure-kit security-advisories create --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--cve-id <id>] [--severity <severity>] [--package-name <name>] [--vulnerable-version-range <range>] [--patched-versions <versions>] [--cwe-ids <ids>] [--start-private-fork]
+gh secure-kit security-advisories create --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--cve-id <id>] [--severity <severity>] [--cvss-vector-string <string>] [--package-name <name>] [--vulnerable-version-range <range>] [--patched-versions <versions>] [--cwe-ids <ids>] [--start-private-fork]
 ```
 
 Create a new repository security advisory. Requires `--summary`, `--description`, and `--ecosystem`.
