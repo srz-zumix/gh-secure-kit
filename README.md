@@ -234,7 +234,7 @@ Disable the dependency graph for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable dependency graph for an organization
 
@@ -248,7 +248,7 @@ Enable the dependency graph for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ## Dependabot
 
@@ -373,7 +373,7 @@ Disable Dependabot alerts for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable Dependabot alerts for an organization
 
@@ -387,7 +387,7 @@ Enable Dependabot alerts for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Disable Dependabot security updates for an organization
 
@@ -401,7 +401,7 @@ Disable Dependabot security updates for all eligible repositories in an organiza
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable Dependabot security updates for an organization
 
@@ -415,7 +415,7 @@ Enable Dependabot security updates for all eligible repositories in an organizat
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ## Code Quality
 
@@ -693,7 +693,7 @@ Disable code scanning default setup for all eligible repositories in an organiza
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable code scanning default setup for an organization
 
@@ -708,7 +708,7 @@ Use `--query-suite` to specify the CodeQL query suite.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 | `--query-suite` | | `""` | CodeQL query suite {default\|extended} |
 
 ## Code Security
@@ -1129,7 +1129,7 @@ Disable secret scanning for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable secret scanning for an organization
 
@@ -1143,7 +1143,7 @@ Enable secret scanning for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### List secret scanning alerts
 
@@ -1235,7 +1235,7 @@ Disable secret scanning push protection for all eligible repositories in an orga
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable secret scanning push protection for an organization
 
@@ -1249,7 +1249,7 @@ Enable secret scanning push protection for all eligible repositories in an organ
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### List secret scanning push protection pattern configurations
 
@@ -1317,7 +1317,7 @@ Disable GitHub Advanced Security for all eligible repositories in an organizatio
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable GitHub Advanced Security for an organization
 
@@ -1331,4 +1331,4 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
