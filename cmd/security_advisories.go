@@ -21,5 +21,8 @@ func NewSecurityAdvisoriesCmd() *cobra.Command {
 	cmd.AddCommand(securityadvisories.NewUpdateCmd())
 	cmd.AddCommand(securityadvisories.NewRequestCVECmd())
 	cmd.AddCommand(securityadvisories.NewCreateForkCmd())
+	cmd.AddCommand(securityadvisories.NewGlobalCmd())
+	cmd.AddCommand(securityadvisories.NewCreateCmd())
+	cmd.AddCommand(securityadvisories.NewReportCmd())
 	return cmd
 }

@@ -100,20 +100,31 @@ gh secure-kit                      # Root command
 │   │   └── list                   # List repository submodules
 │   └── unity                      # Unity project subcommands
 │       └── list                   # List Unity package dependencies
-└── secret-scanning                # Secret scanning subcommands
-    ├── disable                    # Disable secret scanning for an org
-    ├── enable                     # Enable secret scanning for an org
-    ├── alerts                     # Secret scanning alerts subcommands
-    │   ├── get                    # Get a single secret scanning alert
-    │   ├── list                   # List secret scanning alerts
-    │   ├── locations              # List locations for a secret scanning alert
-    │   └── update                 # Update a secret scanning alert
-    ├── push-protection            # Secret scanning push protection subcommands
-    │   ├── disable                # Disable push protection for an org
-    │   ├── enable                 # Enable push protection for an org
-    │   ├── list                   # List push protection configurations
-    │   └── update                 # Update push protection configurations
-    └── scan-history               # Get secret scanning scan history
+├── secret-scanning                # Secret scanning subcommands
+│   ├── disable                    # Disable secret scanning for an org
+│   ├── enable                     # Enable secret scanning for an org
+│   ├── alerts                     # Secret scanning alerts subcommands
+│   │   ├── get                    # Get a single secret scanning alert
+│   │   ├── list                   # List secret scanning alerts
+│   │   ├── locations              # List locations for a secret scanning alert
+│   │   └── update                 # Update a secret scanning alert
+│   ├── push-protection            # Secret scanning push protection subcommands
+│   │   ├── disable                # Disable push protection for an org
+│   │   ├── enable                 # Enable push protection for an org
+│   │   ├── list                   # List push protection configurations
+│   │   └── update                 # Update push protection configurations
+│   └── scan-history               # Get secret scanning scan history
+└── security-advisories            # Repository security advisories subcommands
+    ├── create                     # Create a repository security advisory
+    ├── create-fork                # Create a temporary private fork for an advisory
+    ├── get                        # Get a repository security advisory
+    ├── global                     # Global security advisories subcommands
+    │   ├── get                    # Get a global security advisory by GHSA ID
+    │   └── list                   # List global security advisories
+    ├── list                       # List repository security advisories
+    ├── report                     # Report a vulnerability in a repository
+    ├── request-cve                # Request a CVE for a security advisory
+    └── update                     # Update a repository security advisory
 ```
 
 ## Actions
@@ -425,7 +436,7 @@ Disable the dependency graph for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable dependency graph for an organization (gh secure-kit deps enable)
 
@@ -439,7 +450,7 @@ Enable the dependency graph for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ## Dependabot
 
@@ -639,7 +650,7 @@ Disable Dependabot alerts for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable Dependabot alerts for an organization (gh secure-kit dependabot alerts enable)
 
@@ -653,7 +664,7 @@ Enable Dependabot alerts for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Disable Dependabot security updates for an organization (gh secure-kit dependabot security-updates disable)
 
@@ -667,7 +678,7 @@ Disable Dependabot security updates for all eligible repositories in an organiza
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable Dependabot security updates for an organization (gh secure-kit dependabot security-updates enable)
 
@@ -681,7 +692,7 @@ Enable Dependabot security updates for all eligible repositories in an organizat
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ## Code Quality
 
@@ -1099,7 +1110,7 @@ Disable code scanning default setup for all eligible repositories in an organiza
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable code scanning default setup for an organization (gh secure-kit code-scanning default-setup enable)
 
@@ -1114,7 +1125,7 @@ Use `--query-suite` to specify the CodeQL query suite (default or extended).
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 | `--query-suite` | | `""` | CodeQL query suite {default\|extended} |
 
 ## Code Security
@@ -1318,6 +1329,22 @@ gh secure-kit security-advisories create-fork <ghsa-id> [--repo <owner/repo>]
 
 Create a temporary private fork of the repository to collaborate on fixing a security vulnerability.
 
+### Create security advisory (gh secure-kit security-advisories create)
+
+```sh
+gh secure-kit security-advisories create --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--cve-id <id>] [--severity <severity>] [--cvss-vector-string <string>] [--package-name <name>] [--vulnerable-version-range <range>] [--patched-versions <versions>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Create a new repository security advisory. Requires `--summary`, `--description`, and `--ecosystem`.
+
+### Get global security advisory (gh secure-kit security-advisories global get)
+
+```sh
+gh secure-kit security-advisories global get <ghsa-id>
+```
+
+Get a global security advisory from the GitHub Advisory Database by its GHSA identifier.
+
 ### Get security advisory (gh secure-kit security-advisories get)
 
 ```sh
@@ -1326,6 +1353,14 @@ gh secure-kit security-advisories get <ghsa-id> [--repo <owner/repo>]
 
 Get a repository security advisory by its GHSA identifier.
 
+### List global security advisories (gh secure-kit security-advisories global list)
+
+```sh
+gh secure-kit security-advisories global list [--type <type>] [--severity <severity>] [--ecosystem <ecosystem>] [--ghsa-id <id>] [--cve-id <id>]
+```
+
+List global security advisories from the GitHub Advisory Database. Filter by type, severity, ecosystem, GHSA ID, or CVE ID.
+
 ### List security advisories (gh secure-kit security-advisories list)
 
 ```sh
@@ -1333,6 +1368,14 @@ gh secure-kit security-advisories list [--repo <owner/repo>] [--owner <org>] [--
 ```
 
 List repository security advisories for a repository or organization. Use `--owner` for org-wide listing.
+
+### Report vulnerability in a repository (gh secure-kit security-advisories report)
+
+```sh
+gh secure-kit security-advisories report --summary <text> --description <text> --ecosystem <ecosystem> [--repo <owner/repo>] [--package-name <name>] [--severity <severity>] [--cvss-vector-string <string>] [--cwe-ids <ids>] [--start-private-fork]
+```
+
+Report a vulnerability in an open source repository to the maintainers privately. Requires `--summary`, `--description`, and `--ecosystem`.
 
 ### Request CVE for security advisory (gh secure-kit security-advisories request-cve)
 
@@ -1364,7 +1407,7 @@ Disable secret scanning for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable secret scanning for an organization (gh secure-kit secret-scanning enable)
 
@@ -1378,7 +1421,7 @@ Enable secret scanning for all eligible repositories in an organization.
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### List secret scanning alerts (gh secure-kit secret-scanning alerts list)
 
@@ -1458,7 +1501,7 @@ Disable secret scanning push protection for all eligible repositories in an orga
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable secret scanning push protection for an organization (gh secure-kit secret-scanning push-protection enable)
 
@@ -1472,7 +1515,7 @@ Enable secret scanning push protection for all eligible repositories in an organ
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### List secret scanning push protection pattern configurations (gh secure-kit secret-scanning push-protection list)
 
@@ -1542,7 +1585,7 @@ Disable GitHub Advanced Security for all eligible repositories in an organizatio
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
 
 ### Enable GitHub Advanced Security for an organization (gh secure-kit advanced-security enable)
 
@@ -1556,4 +1599,4 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
-| `--owner` | `-o` | | The organization name (required) |
+| `--owner` | `-o` | | The organization name (optional) |
