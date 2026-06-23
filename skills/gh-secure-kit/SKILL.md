@@ -1725,7 +1725,7 @@ Get the status of vulnerability alerts for a repository.
 gh secure-kit repo vulnerability-alerts status --repo owner/repo
 
 # Output as JSON
-gh secure-kit repo va status --repo owner/repo --format json
+gh secure-kit repo vulnerability-alerts status --repo owner/repo --format json
 ```
 
 **Flags:**
