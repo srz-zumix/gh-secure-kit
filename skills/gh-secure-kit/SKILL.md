@@ -1700,7 +1700,7 @@ Get the status of private vulnerability reporting for a repository.
 gh secure-kit repo private-vulnerability-reporting status --repo owner/repo
 
 # Output as JSON
-gh secure-kit repo pvr status --repo owner/repo --format json
+gh secure-kit repo private-vulnerability-reporting status --repo owner/repo --format json
 ```
 
 **Flags:**
