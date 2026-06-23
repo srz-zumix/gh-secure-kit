@@ -1675,7 +1675,7 @@ Get the status of automated security fixes for a repository, including whether i
 gh secure-kit repo automated-security-fixes status --repo owner/repo
 
 # Output as JSON
-gh secure-kit repo asf status --repo owner/repo --format json
+gh secure-kit repo automated-security-fixes status --repo owner/repo --format json
 ```
 
 **Flags:**
