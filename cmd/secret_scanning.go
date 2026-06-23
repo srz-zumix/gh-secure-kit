@@ -23,4 +23,3 @@ func NewSecretScanningCmd() *cobra.Command {
 	cmd.AddCommand(secretscanning.NewDisableCmd())
 	return cmd
 }
-
