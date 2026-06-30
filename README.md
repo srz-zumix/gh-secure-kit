@@ -1303,6 +1303,152 @@ Get the latest default incremental and backfill secret scanning scan history for
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 
+## Repository Security Feature Toggles
+
+### Disable automated security fixes for a repository
+
+```sh
+gh secure-kit repo automated-security-fixes disable [--owner <org>] [--repo <owner/repo>]
+```
+
+Disable automated security fixes for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Disable private vulnerability reporting for a repository
+
+```sh
+gh secure-kit repo private-vulnerability-reporting disable [--owner <org>] [--repo <owner/repo>]
+```
+
+Disable private vulnerability reporting for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Disable vulnerability alerts for a repository
+
+```sh
+gh secure-kit repo vulnerability-alerts disable [--owner <org>] [--repo <owner/repo>]
+```
+
+Disable vulnerability alerts for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Enable automated security fixes for a repository
+
+```sh
+gh secure-kit repo automated-security-fixes enable [--owner <org>] [--repo <owner/repo>]
+```
+
+Enable automated security fixes for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Enable private vulnerability reporting for a repository
+
+```sh
+gh secure-kit repo private-vulnerability-reporting enable [--owner <org>] [--repo <owner/repo>]
+```
+
+Enable private vulnerability reporting for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Enable vulnerability alerts for a repository
+
+```sh
+gh secure-kit repo vulnerability-alerts enable [--owner <org>] [--repo <owner/repo>]
+```
+
+Enable vulnerability alerts for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+
+### Get the status of automated security fixes for a repository
+
+```sh
+gh secure-kit repo automated-security-fixes status [--owner <org>] [--repo <owner/repo>]
+```
+
+Get the status of automated security fixes for a repository, including whether it is enabled and paused.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the status of private vulnerability reporting for a repository
+
+```sh
+gh secure-kit repo private-vulnerability-reporting status [--owner <org>] [--repo <owner/repo>]
+```
+
+Get the status of private vulnerability reporting for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the status of vulnerability alerts for a repository
+
+```sh
+gh secure-kit repo vulnerability-alerts status [--owner <org>] [--repo <owner/repo>]
+```
+
+Get the status of vulnerability alerts for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--repo` | `-R` | | The repository in the format 'owner/repo' (optional) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ## Advanced Security
 
 ### Disable GitHub Advanced Security for an organization

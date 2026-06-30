@@ -1,0 +1,41 @@
+package automatedsecurityfixes
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
+	"github.com/srz-zumix/go-gh-extension/pkg/parser"
+)
+
+// NewEnableCmd returns the automated-security-fixes enable command.
+func NewEnableCmd() *cobra.Command {
+	var owner string
+	var repo string
+
+	cmd := &cobra.Command{
+		Use:   "enable",
+		Short: "Enable automated security fixes for a repository",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
+			if err != nil {
+				return fmt.Errorf("failed to parse repository: %w", err)
+			}
+			client, err := gh.NewGitHubClientWithRepo(repository)
+			if err != nil {
+				return fmt.Errorf("failed to create GitHub client: %w", err)
+			}
+			if err := gh.EnableAutomatedSecurityFixes(cmd.Context(), client, repository); err != nil {
+				return fmt.Errorf("failed to enable automated security fixes: %w", err)
+			}
+			logger.Info("Enabled automated security fixes", "repo", repository.Owner+"/"+repository.Name)
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVarP(&owner, "owner", "o", "", "The organization name")
+	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo'")
+	return cmd
+}
