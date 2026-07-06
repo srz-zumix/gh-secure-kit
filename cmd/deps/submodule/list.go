@@ -20,12 +20,13 @@ func NewListCmd() *cobra.Command {
 	var repo string
 	var recursive bool
 	var nameOnly bool
+	var ignoreMissing bool
 	opts := &ListOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List repository submodules",
-		Long:  `List submodules of the specified repository. Use --recursive to include nested submodules.`,
+		Long:  `List submodules of the specified repository. Use --recursive to include nested submodules. Use --ignore-missing to skip submodules whose repository cannot be resolved.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			repository, err := parser.Repository(parser.RepositoryInput(repo))
 			if err != nil {
@@ -38,7 +39,7 @@ func NewListCmd() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			submodules, err := gh.GetRepositorySubmodules(ctx, client, repository, recursive)
+			submodules, err := gh.GetRepositorySubmodules(ctx, client, repository, recursive, ignoreMissing)
 			if err != nil {
 				return fmt.Errorf("failed to get submodules: %w", err)
 			}
@@ -58,6 +59,7 @@ func NewListCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.BoolVar(&nameOnly, "name-only", false, "Output only submodule names")
 	f.BoolVarP(&recursive, "recursive", "r", false, "Recursively list nested submodules")
+	f.BoolVar(&ignoreMissing, "ignore-missing", false, "Skip submodules whose repository cannot be resolved")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo'")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 	return cmd
