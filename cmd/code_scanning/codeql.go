@@ -13,5 +13,7 @@ func NewCodeqlCmd() *cobra.Command {
 	}
 	cmd.AddCommand(codeql.NewListCmd())
 	cmd.AddCommand(codeql.NewGetCmd())
+	cmd.AddCommand(codeql.NewDeleteCmd())
+	cmd.AddCommand(codeql.NewVariantAnalysesCmd())
 	return cmd
 }
