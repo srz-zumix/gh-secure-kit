@@ -1,5 +1,4 @@
 package variantanalyses
-package variantanalyses
 
 import (
 	"encoding/base64"
