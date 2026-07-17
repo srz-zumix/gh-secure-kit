@@ -51,6 +51,6 @@ func NewDeleteCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo'")
-	f.BoolVar(&confirmDelete, "confirm-delete", false, "Allow deletion if the specified analysis is the last in a set (default: false)")
+	f.BoolVar(&confirmDelete, "confirm-delete", false, "Allow deletion if the specified analysis is the last in a set")
 	return cmd
 }
