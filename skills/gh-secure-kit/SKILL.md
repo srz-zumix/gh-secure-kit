@@ -992,7 +992,9 @@ gh secure-kit code-scanning analyses list --repo owner/repo
 | ------ | ------- | --------- | ------------- |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch or tag) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--sarif-id` | | `""` | Filter analyses belonging to the same SARIF upload |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### Get a code scanning analysis (gh secure-kit code-scanning analyses get)

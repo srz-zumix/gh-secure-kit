@@ -82,5 +82,6 @@ must be specified to select the target repositories.`,
 	_ = cmd.MarkFlagRequired("language")
 	_ = cmd.MarkFlagRequired("query-pack")
 	cmd.MarkFlagsMutuallyExclusive("repositories", "repository-owners", "repository-lists")
+	cmd.MarkFlagsOneRequired("repositories", "repository-owners", "repository-lists")
 	return cmd
 }
