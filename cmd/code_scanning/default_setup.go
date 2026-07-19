@@ -13,5 +13,7 @@ func NewDefaultSetupCmd() *cobra.Command {
 	}
 	cmd.AddCommand(defaultsetup.NewEnableCmd())
 	cmd.AddCommand(defaultsetup.NewDisableCmd())
+	cmd.AddCommand(defaultsetup.NewGetCmd())
+	cmd.AddCommand(defaultsetup.NewUpdateCmd())
 	return cmd
 }

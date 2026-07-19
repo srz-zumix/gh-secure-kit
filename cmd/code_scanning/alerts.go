@@ -13,6 +13,7 @@ func NewAlertsCmd() *cobra.Command {
 	}
 	cmd.AddCommand(alerts.NewAutofixCmd())
 	cmd.AddCommand(alerts.NewGetCmd())
+	cmd.AddCommand(alerts.NewInstancesCmd())
 	cmd.AddCommand(alerts.NewListCmd())
 	cmd.AddCommand(alerts.NewUpdateCmd())
 	return cmd

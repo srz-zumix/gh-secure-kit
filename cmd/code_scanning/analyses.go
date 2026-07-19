@@ -13,5 +13,6 @@ func NewAnalysesCmd() *cobra.Command {
 	}
 	cmd.AddCommand(analyses.NewListCmd())
 	cmd.AddCommand(analyses.NewGetCmd())
+	cmd.AddCommand(analyses.NewDeleteCmd())
 	return cmd
 }

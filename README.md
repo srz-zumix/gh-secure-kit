@@ -498,6 +498,24 @@ Get a single code scanning alert by its number for a repository.
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### List instances of a code scanning alert
+
+```sh
+gh secure-kit code-scanning alerts instances <alert-number> [flags]
+```
+
+Lists all instances of the specified code scanning alert for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--ref` | | `""` | Filter by Git ref (branch, tag, or pull request) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### Update a code scanning alert
 
 ```sh
@@ -607,6 +625,21 @@ Gets a specified code scanning analysis for a repository.
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Delete a code scanning analysis
+
+```sh
+gh secure-kit code-scanning analyses delete <analysis-id> [flags]
+```
+
+Deletes a specified code scanning analysis from a repository. You can delete one analysis at a time, starting with the most recent. Use `--confirm-delete` to allow deleting the last analysis in a set.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--confirm-delete` | | `false` | Allow deletion if the specified analysis is the last in a set |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+
 ### List CodeQL databases
 
 ```sh
@@ -639,6 +672,77 @@ Gets a CodeQL database for a language in a repository.
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Delete a CodeQL database
+
+```sh
+gh secure-kit code-scanning codeql delete <language> [flags]
+```
+
+Deletes a CodeQL database for a language in a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+
+### Create a CodeQL variant analysis
+
+```sh
+gh secure-kit code-scanning codeql variant-analyses create --language <language> --query-pack <file> [--repositories <list> | --repository-owners <list> | --repository-lists <list>] [flags]
+```
+
+Creates a new CodeQL variant analysis, which runs a CodeQL query against one or more repositories. `--repo` specifies the controller repository that runs the GitHub Actions workflow and stores the results. Exactly one of `--repositories`, `--repository-owners` or `--repository-lists` must be specified.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--language` | | | The CodeQL query language (required) |
+| `--query-pack` | | | Path to a zipped CodeQL query pack file to upload (required) |
+| `--repo` | `-R` | `""` | The controller repository in the format 'owner/repo' |
+| `--repositories` | | | Repositories to analyze, in 'owner/repo' format (comma-separated) |
+| `--repository-lists` | | | Names of repository lists to analyze (comma-separated) |
+| `--repository-owners` | | | Organizations or users whose repositories to analyze (comma-separated) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the summary of a CodeQL variant analysis
+
+```sh
+gh secure-kit code-scanning codeql variant-analyses get <variant-analysis-id> [flags]
+```
+
+Gets the summary of a CodeQL variant analysis for the controller repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The controller repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Get the analysis status of a repository in a CodeQL variant analysis
+
+```sh
+gh secure-kit code-scanning codeql variant-analyses repo-status <variant-analysis-id> --target-repo <owner/repo> [flags]
+```
+
+Gets the analysis status of a specific repository that was scanned as part of a CodeQL variant analysis.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The controller repository in the format 'owner/repo' |
+| `--target-repo` | | | The scanned repository in the format 'owner/repo' (required) |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### Get information about a SARIF upload
@@ -710,6 +814,43 @@ Use `--query-suite` to specify the CodeQL query suite.
 | ------ | ------- | --------- | ------------- |
 | `--owner` | `-o` | | The organization name (optional) |
 | `--query-suite` | | `""` | CodeQL query suite {default\|extended} |
+
+### Get a code scanning default setup configuration
+
+```sh
+gh secure-kit code-scanning default-setup get [flags]
+```
+
+Gets the code scanning default setup configuration for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Update a code scanning default setup configuration
+
+```sh
+gh secure-kit code-scanning default-setup update --state <state> [flags]
+```
+
+Updates the code scanning default setup configuration for a repository.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--languages` | | | CodeQL languages to be analyzed (comma-separated, defaults to auto-detected languages) |
+| `--query-suite` | | `""` | CodeQL query suite to be used {default\|extended} |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--state` | | | The desired state of code scanning default setup (required) {configured\|not-configured} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ## Code Security
 
