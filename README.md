@@ -182,6 +182,40 @@ List dependency packages related to GitHub Actions in the repository's SBOM. Use
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Request SBOM report generation
+
+```sh
+gh secure-kit deps sbom generate-report [flags]
+```
+
+Trigger a job to generate a software bill of materials (SBOM) report for a repository in SPDX JSON format. Use `deps sbom fetch-report` to retrieve the result once ready.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Fetch SBOM report
+
+```sh
+gh secure-kit deps sbom fetch-report <sbom-uuid> [flags]
+```
+
+Fetch a software bill of materials (SBOM) report previously requested via `deps sbom generate-report`. If the report is not ready yet, a pending message is shown; retry later.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### List repository submodules
 
 ```sh
