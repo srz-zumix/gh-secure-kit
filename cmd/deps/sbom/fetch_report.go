@@ -25,6 +25,11 @@ func NewFetchReportCmd() *cobra.Command {
 		Long:  "Fetch a software bill of materials (SBOM) report previously requested via \"deps sbom generate-report\". If the report is not ready yet, a pending message is shown; retry later.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			sbomUUID, err := parser.UUID(args[0])
+			if err != nil {
+				return fmt.Errorf("invalid SBOM UUID %q: %w", args[0], err)
+			}
+
 			repository, err := parser.Repository(parser.RepositoryInput(repo))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)
@@ -36,7 +41,7 @@ func NewFetchReportCmd() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			result, err := gh.FetchRepositoryDependencyGraphSBOMReport(ctx, client, repository, args[0])
+			result, err := gh.FetchRepositoryDependencyGraphSBOMReport(ctx, client, repository, sbomUUID)
 			if err != nil {
 				return fmt.Errorf("failed to fetch SBOM report: %w", err)
 			}
