@@ -105,6 +105,9 @@ gh secure-kit                      # Root command
 │   ├── actions                    # GitHub Actions dependency subcommands
 │   │   ├── graph                  # Graph Actions dependencies
 │   │   └── list                   # List Actions packages from SBOM
+│   ├── sbom                       # SBOM report subcommands
+│   │   ├── generate-report        # Request generation of an SBOM report
+│   │   └── fetch-report           # Fetch a previously generated SBOM report
 │   ├── submodule                  # Git submodule subcommands
 │   │   └── list                   # List repository submodules
 │   └── unity                      # Unity project subcommands
@@ -371,6 +374,55 @@ gh secure-kit deps actions list --format json
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--name-only` | | `false` | Output only package names |
 | `--recursive` | `-r` | `false` | Recursively traverse referenced action repositories |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Request SBOM report generation (gh secure-kit deps sbom generate-report)
+
+```sh
+gh secure-kit deps sbom generate-report [flags]
+```
+
+Trigger a job to generate a software bill of materials (SBOM) report for a repository in SPDX JSON format.
+Use `deps sbom fetch-report` to retrieve the result once ready.
+
+```sh
+# Request an SBOM report for the current repository
+gh secure-kit deps sbom generate-report
+
+# Request an SBOM report for a specific repository
+gh secure-kit deps sbom generate-report --repo owner/repo
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
+| `--template` | `-t` | | Format JSON output using a Go template |
+
+### Fetch SBOM report (gh secure-kit deps sbom fetch-report)
+
+```sh
+gh secure-kit deps sbom fetch-report <sbom-uuid> [flags]
+```
+
+Fetch a software bill of materials (SBOM) report previously requested via `deps sbom generate-report`.
+If the report is not ready yet, a pending message is shown; retry later.
+
+```sh
+# Fetch a previously requested SBOM report
+gh secure-kit deps sbom fetch-report 00000000-0000-0000-0000-000000000000
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template |
 
