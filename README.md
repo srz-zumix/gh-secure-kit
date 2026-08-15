@@ -1842,3 +1842,80 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--owner` | `-o` | | The organization name (optional) |
+
+## Recommended
+
+Checks and applies a catalog of GitHub security best-practice recommendations, inspired by [microsoft/ghqr](https://github.com/microsoft/ghqr). See [docs/rules](docs/rules/README.md) for detailed, per-rule documentation similar to [ShellCheck's wiki](https://www.shellcheck.net/wiki/).
+
+### Check a repository or organization against recommended settings
+
+```sh
+gh secure-kit recommended check --repo <owner/repo> [flags]
+gh secure-kit recommended check --owner <org> [flags]
+```
+
+Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--exit-code` | | `false` | Exit with status 1 if any rule fails; default: always exit 0 |
+| `--fixable-only` | | `false` | Only show rules that can be fixed with `recommended apply` |
+| `--format` | | | Output format: {json} |
+| `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (checks organization-scoped rules) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (checks repository-scoped rules) |
+| `--rule` | | | Only evaluate the given rule ID (can be specified multiple times); default: all rules |
+| `--severity` | | `""` | Only show findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Apply fixes for failing recommendations
+
+```sh
+gh secure-kit recommended apply --repo <owner/repo> [flags]
+gh secure-kit recommended apply --owner <org> [flags]
+```
+
+Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Rules without an automated fix are reported but left untouched. Refuses to run when `--read-only` is set.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (applies organization-scoped fixes) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (applies repository-scoped fixes) |
+| `--rule` | | | Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules |
+| `--severity` | | `""` | Only fix findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List the catalog of recommended rules
+
+```sh
+gh secure-kit recommended list [flags]
+```
+
+List the catalog of recommended GitHub security rules, with their severity, scope, category, and whether they can be automatically fixed.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--fixable-only` | | `false` | Only list rules that can be fixed with `recommended apply` |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--scope` | | `""` | Only list rules for this scope {repository\|organization} |
+| `--severity` | | `""` | Only list rules at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Show detailed documentation for a rule
+
+```sh
+gh secure-kit recommended explain <ID>
+```
+
+Show detailed documentation for a recommended rule, similar to `shellcheck --wiki`.

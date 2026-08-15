@@ -1,12 +1,12 @@
 ---
 name: gh-secure-kit
-description: gh-secure-kit is a GitHub CLI extension for security-related dependency management and workflow analysis. Use it to lint GitHub Actions workflows, analyze workflow dependencies, list SBOM packages, Git submodules, and Unity package manifests — all directly from the command line via `gh secure-kit`.
+description: gh-secure-kit is a GitHub CLI extension for security-related dependency management and workflow analysis. Use it to lint GitHub Actions workflows, analyze workflow dependencies, list SBOM packages, Git submodules, and Unity package manifests, and check/apply recommended GitHub security settings — all directly from the command line via `gh secure-kit`.
 ---
 
 # gh-secure-kit
 
 A GitHub CLI extension (`gh secure-kit`) to manage and inspect GitHub security-related dependencies and workflows.
-It supports GitHub Actions workflow linting and dependency analysis, SBOM-based package listing, Git submodule listing, and Unity package inspection.
+It supports GitHub Actions workflow linting and dependency analysis, SBOM-based package listing, Git submodule listing, Unity package inspection, and checking/applying a catalog of recommended GitHub security settings.
 
 ## Prerequisites
 
@@ -133,6 +133,11 @@ gh secure-kit                      # Root command
 │   │   ├── list                   # List push protection configurations
 │   │   └── update                 # Update push protection configurations
 │   └── scan-history               # Get secret scanning scan history
+├── recommended                    # Recommended security settings subcommands
+│   ├── check                      # Check a repository or organization against recommended settings
+│   ├── apply                      # Apply fixes for failing recommendations
+│   ├── list                       # List the catalog of recommended rules
+│   └── explain                    # Show detailed documentation for a rule
 └── security-advisories            # Repository security advisories subcommands
     ├── create                     # Create a repository security advisory
     ├── create-fork                # Create a temporary private fork for an advisory
@@ -2160,3 +2165,128 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--owner` | `-o` | | The organization name (optional) |
+
+## Recommended
+
+Checks and applies a catalog of GitHub security best-practice recommendations, inspired by [microsoft/ghqr](https://github.com/microsoft/ghqr). Each rule has detailed documentation (similar to ShellCheck's wiki) embedded in the extension and viewable with `recommended explain <ID>`; see [docs/rules](../../docs/rules/README.md) for the full catalog.
+
+### Check a repository or organization against recommended settings (gh secure-kit recommended check)
+
+```sh
+gh secure-kit recommended check --repo <owner/repo> [flags]
+gh secure-kit recommended check --owner <org> [flags]
+```
+
+Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
+
+```sh
+# Check the current repository
+gh secure-kit recommended check
+
+# Check a specific repository, only high severity and above
+gh secure-kit recommended check --repo octo-org/octo-repo --severity high
+
+# Check an organization
+gh secure-kit recommended check --owner octo-org
+
+# Only show fixable findings, and exit 1 if anything fails
+gh secure-kit recommended check --fixable-only --exit-code
+
+# Check only specific rules, ignoring others
+gh secure-kit recommended check --rule GSK101 --rule GSK102
+gh secure-kit recommended check --ignore GSK105
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--exit-code` | | `false` | Exit with status 1 if any rule fails; default: always exit 0 |
+| `--fixable-only` | | `false` | Only show rules that can be fixed with `recommended apply` |
+| `--format` | | | Output format: {json} |
+| `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (checks organization-scoped rules) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (checks repository-scoped rules) |
+| `--rule` | | | Only evaluate the given rule ID (can be specified multiple times); default: all rules |
+| `--severity` | | `""` | Only show findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Apply fixes for failing recommendations (gh secure-kit recommended apply)
+
+```sh
+gh secure-kit recommended apply --repo <owner/repo> [flags]
+gh secure-kit recommended apply --owner <org> [flags]
+```
+
+Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Rules without an automated fix are reported but left untouched. Refuses to run when `--read-only` is set.
+
+```sh
+# Apply all fixable recommendations to the current repository
+gh secure-kit recommended apply
+
+# Apply fixes to a specific repository
+gh secure-kit recommended apply --repo octo-org/octo-repo
+
+# Apply organization-scoped fixes
+gh secure-kit recommended apply --owner octo-org
+
+# Apply the fix for a single rule only
+gh secure-kit recommended apply --rule GSK503
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name (applies organization-scoped fixes) |
+| `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (applies repository-scoped fixes) |
+| `--rule` | | | Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules |
+| `--severity` | | `""` | Only fix findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### List the catalog of recommended rules (gh secure-kit recommended list)
+
+```sh
+gh secure-kit recommended list [flags]
+```
+
+List the catalog of recommended GitHub security rules, with their severity, scope, category, and whether they can be automatically fixed.
+
+```sh
+# List all rules
+gh secure-kit recommended list
+
+# List only organization-scoped rules
+gh secure-kit recommended list --scope organization
+
+# List only fixable rules at or above medium severity
+gh secure-kit recommended list --fixable-only --severity medium
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--fixable-only` | | `false` | Only list rules that can be fixed with `recommended apply` |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--scope` | | `""` | Only list rules for this scope {repository\|organization} |
+| `--severity` | | `""` | Only list rules at or above this severity {critical\|high\|medium\|low\|info} |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Show detailed documentation for a rule (gh secure-kit recommended explain)
+
+```sh
+gh secure-kit recommended explain <ID>
+```
+
+Show detailed documentation for a recommended rule, similar to `shellcheck --wiki`.
+
+```sh
+# Show detailed documentation for rule GSK101
+gh secure-kit recommended explain GSK101
+```

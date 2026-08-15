@@ -1,0 +1,89 @@
+package recommended
+
+import (
+	"fmt"
+
+	"github.com/cli/cli/v2/pkg/cmdutil"
+	"github.com/spf13/cobra"
+	"github.com/srz-zumix/gh-secure-kit/recommended"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh/guardrails"
+	"github.com/srz-zumix/go-gh-extension/pkg/parser"
+)
+
+// NewApplyCmd returns the recommended apply command
+func NewApplyCmd() *cobra.Command {
+	var owner string
+	var repo string
+	var severity string
+	var ruleIDs []string
+	var ignoreIDs []string
+	var exporter cmdutil.Exporter
+
+	cmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Apply fixes for failing, fixable recommended GitHub security settings",
+		Long: `Evaluate recommended GitHub security settings and apply the fix for every
+failing rule that supports automated remediation.
+
+Use --repo to fix a single repository. Use --owner to fix an organization.
+--repo and --owner are mutually exclusive.
+Rules without an automated fix are reported but left untouched; run
+'recommended check' to see the full list of findings.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if guardrails.IsReadonly() {
+				return fmt.Errorf("cannot apply fixes: running in read-only mode (--read-only)")
+			}
+
+			target, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
+			if err != nil {
+				return fmt.Errorf("failed to parse repository: %w", err)
+			}
+
+			client, err := gh.NewGitHubClientWithRepo(target)
+			if err != nil {
+				return fmt.Errorf("failed to create GitHub client: %w", err)
+			}
+
+			filter := recommended.Filter{
+				MinSeverity: recommended.Severity(severity),
+				IDs:         ruleIDs,
+				IgnoreIDs:   ignoreIDs,
+				OnlyFixable: true,
+			}
+
+			ctx := cmd.Context()
+			var results []recommended.ApplyResult
+			if target.Name != "" {
+				filter.Scope = recommended.ScopeRepository
+				rules := filter.Apply(recommended.AllRules())
+				results, err = recommended.ApplyRepository(ctx, client, target, rules)
+				if err != nil {
+					return fmt.Errorf("failed to apply fixes for repository '%s/%s': %w", target.Owner, target.Name, err)
+				}
+			} else {
+				filter.Scope = recommended.ScopeOrganization
+				rules := filter.Apply(recommended.AllRules())
+				results, err = recommended.ApplyOrganization(ctx, client, target, rules)
+				if err != nil {
+					return fmt.Errorf("failed to apply fixes for organization '%s': %w", target.Owner, err)
+				}
+			}
+
+			if err := recommended.RenderApplyResults(exporter, results); err != nil {
+				return fmt.Errorf("failed to render results: %w", err)
+			}
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVarP(&owner, "owner", "o", "", "The organization name (applies organization-scoped fixes)")
+	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo' (applies repository-scoped fixes)")
+	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only fix findings at or above this severity")
+	f.StringArrayVar(&ruleIDs, "rule", nil, "Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules")
+	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
+	cmdutil.AddFormatFlags(cmd, &exporter)
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
+	return cmd
+}
