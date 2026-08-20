@@ -1,5 +1,4 @@
 package recommended
-package recommended
 
 import (
 	"fmt"
