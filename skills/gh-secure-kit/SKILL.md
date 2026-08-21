@@ -120,6 +120,9 @@ gh secure-kit                      # Root command
 │   │   ├── list                   # List secret scanning alerts
 │   │   ├── locations              # List locations for a secret scanning alert
 │   │   └── update                 # Update a secret scanning alert
+│   ├── local                      # Offline local secret scanning subcommands
+│   │   ├── check                  # Scan local git content for secrets
+│   │   └── patterns               # List local secret scanning patterns
 │   ├── push-protection            # Secret scanning push protection subcommands
 │   │   ├── disable                # Disable push protection for an org
 │   │   ├── enable                 # Enable push protection for an org
@@ -1819,6 +1822,78 @@ gh secure-kit secret-scanning push-protection update \
   --custom-pattern "my_pattern=disabled" \
   --custom-pattern "other_pattern:2=not_set"
 ```
+
+### Scan local git content for secrets (gh secure-kit secret-scanning local check)
+
+```sh
+gh secure-kit secret-scanning local check [flags]
+```
+
+Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+
+```sh
+# Scan commits reachable from HEAD but not pushed to any remote (default)
+gh secure-kit secret-scanning local check
+
+# Scan a specific directory without using git
+gh secure-kit secret-scanning local check --path ./some-dir --no-git
+
+# Scan an explicit revision range and output JSON
+gh secure-kit secret-scanning local check --rev-range main..HEAD --format json
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local check --owner my-org --pattern-config
+```
+
+### List local secret scanning patterns (gh secure-kit secret-scanning local patterns)
+
+```sh
+gh secure-kit secret-scanning local patterns [flags]
+```
+
+List the built-in and user-defined secret scanning patterns used by `secret-scanning local check`, including whether each is enabled.
+
+```sh
+# List all local secret scanning patterns
+gh secure-kit secret-scanning local patterns
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local patterns --owner my-org --pattern-config
+```
+
+### Local secret scanning configuration file
+
+Both `secret-scanning local check` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory, or specified explicitly with `--config`.
+
+```yaml
+patterns:
+  - id: my_internal_token
+    token_type: my_internal_token
+    display_name: My Internal Token
+    regex: 'mytoken_[0-9a-f]{32}'
+    keywords:
+      - mytoken_
+
+allowlist:
+  regexes:
+    - '^ghp_0{36}$'
+  paths:
+    - internal/localscan/*_test.go
+  commits:
+    - 461e82a58c0cd9484db7014ba8937022563745d9
+  stopwords:
+    - EXAMPLE
+    - dummy
+```
+
+`patterns` entries are merged with the built-in patterns; an entry whose `id` matches a built-in pattern replaces that built-in definition. `id` and `regex` are required, `token_type`, `display_name` and `keywords` are optional. `keywords` acts as a case-insensitive pre-filter: the regex is only evaluated when the content contains at least one keyword.
+
+`allowlist` entries suppress findings, and a finding is suppressed if any single entry matches:
+
+- `regexes`: Go (RE2) regular expressions evaluated against the matched secret text
+- `paths`: glob pattern (`filepath.Match`) or substring match against the file path
+- `commits`: full commit SHA, exact match
+- `stopwords`: literal substrings checked against the whole line containing the match
 
 ### Get secret scanning scan history for a repository (gh secure-kit secret-scanning scan-history)
 

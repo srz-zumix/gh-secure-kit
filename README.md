@@ -1477,6 +1477,119 @@ Get the latest default incremental and backfill secret scanning scan history for
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Scan local git content for secrets
+
+```sh
+gh secure-kit secret-scanning local check [flags]
+```
+
+Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+
+```sh
+# Scan commits reachable from HEAD but not pushed to any remote (default)
+gh secure-kit secret-scanning local check
+
+# Scan a specific directory without using git
+gh secure-kit secret-scanning local check --path ./some-dir --no-git
+
+# Scan an explicit revision range and output JSON
+gh secure-kit secret-scanning local check --rev-range main..HEAD --format json
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local check --owner my-org --pattern-config
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
+| `--no-git` | | `false` | Scan files under `--path` directly, without using git |
+| `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
+| `--path` | | `"."` | The repository or directory path to scan |
+| `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
+| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` |
+| `--rev-range` | | `""` | Scan an explicit revision range, in "A..B" or "B" form |
+| `--show-secret` | | `false` | Show the full matched secret value instead of a redacted form |
+| `--staged` | | `false` | Scan changes currently staged in the index |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--uncommitted` | | `false` | Scan modified and untracked files in the worktree |
+| `--unpushed` | | `true` | Scan commits reachable from HEAD but not pushed to any remote (default) |
+
+### List local secret scanning patterns
+
+```sh
+gh secure-kit secret-scanning local patterns [flags]
+```
+
+List the built-in and user-defined secret scanning patterns used by `secret-scanning local check`, including whether each is enabled.
+
+```sh
+# List all local secret scanning patterns
+gh secure-kit secret-scanning local patterns
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local patterns --owner my-org --pattern-config
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
+| `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
+| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Local secret scanning configuration file
+
+Both `secret-scanning local check` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory, or specified explicitly with `--config`.
+
+```yaml
+patterns:
+  - id: my_internal_token
+    token_type: my_internal_token
+    display_name: My Internal Token
+    regex: 'mytoken_[0-9a-f]{32}'
+    keywords:
+      - mytoken_
+
+allowlist:
+  regexes:
+    - '^ghp_0{36}$'
+  paths:
+    - internal/localscan/*_test.go
+  commits:
+    - 461e82a58c0cd9484db7014ba8937022563745d9
+  stopwords:
+    - EXAMPLE
+    - dummy
+```
+
+**`patterns`** entries are merged with the built-in patterns. An entry whose `id` matches a built-in pattern replaces that built-in definition.
+
+| Key | Required | Description |
+| ------ | ---------- | ------------- |
+| `display_name` | No | Human-readable name shown in the output (defaults to `id`) |
+| `id` | Yes | Unique pattern identifier |
+| `keywords` | No | Literal strings used as a case-insensitive pre-filter; the regex is only evaluated when the content contains at least one of them |
+| `regex` | Yes | Go (RE2) regular expression used for detection |
+| `token_type` | No | Token type reported in the output, and matched against the organization's pattern configuration when `--pattern-config` is used |
+
+**`allowlist`** entries suppress findings. A finding is suppressed if any single entry matches.
+
+| Key | Match target | Description |
+| ------ | -------------- | ------------- |
+| `commits` | Commit SHA | Full SHA, exact match |
+| `paths` | File path | Glob pattern (`filepath.Match`) or substring match |
+| `regexes` | Matched secret | Go (RE2) regular expressions evaluated against the matched text |
+| `stopwords` | Matched line | Literal substrings; the whole line containing the match is checked |
 
 ## Repository Security Feature Toggles
 
