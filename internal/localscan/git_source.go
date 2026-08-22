@@ -1,6 +1,7 @@
 package localscan
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -24,6 +25,9 @@ func NewGitSource(t Target) *GitSource {
 
 // Fragments implements Source.
 func (s *GitSource) Fragments() ([]Fragment, error) {
+	if s.Target.MaxCommits < 0 {
+		return nil, fmt.Errorf("max-commits must be zero or positive, got %d", s.Target.MaxCommits)
+	}
 	repo, err := git.PlainOpenWithOptions(s.Target.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open git repository at %q: %w", s.Target.RepoPath, err)
@@ -98,7 +102,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 		return head.Hash(), exclude, nil
 	}
 
-	fromRev, toRev, err := splitRevRange(revRange)
+	fromRev, toRev, explicit, err := splitRevRange(revRange)
 	if err != nil {
 		return plumbing.ZeroHash, nil, err
 	}
@@ -108,31 +112,50 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 		return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", toRev, err)
 	}
 
-	var exclude map[plumbing.Hash]bool
-	if fromHash, err := repo.ResolveRevision(plumbing.Revision(fromRev)); err == nil {
-		exclude, err = reachableSet(repo, []plumbing.Hash{*fromHash})
-		if err != nil {
-			return plumbing.ZeroHash, nil, err
+	fromHash, err := repo.ResolveRevision(plumbing.Revision(fromRev))
+	if err != nil {
+		// An explicit "A..B" range with an unresolvable start is a user error
+		// and must fail rather than silently scanning all reachable history.
+		if explicit {
+			return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", fromRev, err)
 		}
+		// For a single revision "B", the derived start "B^" only legitimately
+		// fails to resolve when B is a root commit; in that case there is
+		// nothing to exclude. Any other failure is unexpected and surfaced.
+		toCommit, cerr := repo.CommitObject(*toHash)
+		if cerr != nil {
+			return plumbing.ZeroHash, nil, fmt.Errorf("failed to load commit %s: %w", toHash, cerr)
+		}
+		if toCommit.NumParents() != 0 {
+			return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", fromRev, err)
+		}
+		return *toHash, nil, nil
+	}
+
+	exclude, err := reachableSet(repo, []plumbing.Hash{*fromHash})
+	if err != nil {
+		return plumbing.ZeroHash, nil, err
 	}
 	return *toHash, exclude, nil
 }
 
 // splitRevRange splits a "A..B" range into its endpoints. A bare revision
-// "B" is treated as the single-commit range "B^..B".
-func splitRevRange(revRange string) (from, to string, err error) {
+// "B" is treated as the single-commit range "B^..B". The explicit result
+// reports whether the caller supplied an explicit ".." range (versus a bare
+// revision), so a missing start can be rejected only for explicit ranges.
+func splitRevRange(revRange string) (from, to string, explicit bool, err error) {
 	if idx := strings.Index(revRange, ".."); idx >= 0 {
 		from = strings.TrimSuffix(revRange[:idx], ".")
 		to = strings.TrimPrefix(revRange[idx+2:], ".")
 		if from == "" {
-			return "", "", fmt.Errorf("invalid rev-range %q: missing start revision", revRange)
+			return "", "", false, fmt.Errorf("invalid rev-range %q: missing start revision", revRange)
 		}
 		if to == "" {
 			to = "HEAD"
 		}
-		return from, to, nil
+		return from, to, true, nil
 	}
-	return revRange + "^", revRange, nil
+	return revRange + "^", revRange, false, nil
 }
 
 // reachableSet returns the set of commit hashes reachable from tips
@@ -208,24 +231,46 @@ func fragmentsForCommit(c *object.Commit) ([]Fragment, error) {
 		if to == nil {
 			continue // file deleted, nothing added
 		}
-		var added strings.Builder
+		// Track the destination-file line as we walk the hunks so each added
+		// block records the real line where it starts. Equal and Add chunks
+		// advance the destination line; Delete chunks do not.
+		toLine := 1
 		for _, chunk := range fp.Chunks() {
-			if chunk.Type() == diff.Add {
-				added.WriteString(chunk.Content())
+			content := chunk.Content()
+			switch chunk.Type() {
+			case diff.Equal:
+				toLine += countLines(content)
+			case diff.Delete:
+				// Deleted lines exist only in the source; skip them.
+			case diff.Add:
+				if content != "" && !isBinaryString(content) {
+					frags = append(frags, Fragment{
+						Content:   content,
+						FilePath:  to.Path(),
+						CommitSHA: c.Hash.String(),
+						Author:    c.Author.Name,
+						Date:      c.Author.When,
+						BaseLine:  toLine,
+					})
+				}
+				toLine += countLines(content)
 			}
 		}
-		if added.Len() == 0 || isBinaryString(added.String()) {
-			continue
-		}
-		frags = append(frags, Fragment{
-			Content:   added.String(),
-			FilePath:  to.Path(),
-			CommitSHA: c.Hash.String(),
-			Author:    c.Author.Name,
-			Date:      c.Author.When,
-		})
 	}
 	return frags, nil
+}
+
+// countLines returns the number of lines spanned by s, counting a trailing
+// line that is not newline-terminated.
+func countLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
+	}
+	return n
 }
 
 // fragmentsFromTree scans every file in a commit's tree, used for root
@@ -265,17 +310,23 @@ func fragmentsFromTree(c *object.Commit) ([]Fragment, error) {
 // scanStaged compares the index against HEAD's tree and returns the full
 // content of every staged blob that differs.
 func (s *GitSource) scanStaged(repo *git.Repository) ([]Fragment, error) {
+	// headTree is nil when HEAD is unborn (a repository with no commits); in
+	// that case every staged entry is treated as new against an empty tree.
+	var headTree *object.Tree
 	head, err := repo.Head()
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve HEAD: %w", err)
-	}
-	headCommit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load HEAD commit: %w", err)
-	}
-	headTree, err := headCommit.Tree()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load HEAD tree: %w", err)
+		if !errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return nil, fmt.Errorf("failed to resolve HEAD: %w", err)
+		}
+	} else {
+		headCommit, err := repo.CommitObject(head.Hash())
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HEAD commit: %w", err)
+		}
+		headTree, err = headCommit.Tree()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load HEAD tree: %w", err)
+		}
 	}
 
 	idx, err := repo.Storer.Index()
@@ -285,11 +336,16 @@ func (s *GitSource) scanStaged(repo *git.Repository) ([]Fragment, error) {
 
 	var frags []Fragment
 	for _, entry := range idx.Entries {
-		if headEntry, err := headTree.FindEntry(entry.Name); err == nil && headEntry.Hash == entry.Hash {
-			continue // unchanged since HEAD
+		if headTree != nil {
+			if headEntry, err := headTree.FindEntry(entry.Name); err == nil && headEntry.Hash == entry.Hash {
+				continue // unchanged since HEAD
+			}
 		}
 		content, err := readBlob(repo, entry.Hash)
-		if err != nil || isBinaryString(content) {
+		if err != nil {
+			return nil, fmt.Errorf("failed to read staged blob %q: %w", entry.Name, err)
+		}
+		if isBinaryString(content) {
 			continue
 		}
 		frags = append(frags, Fragment{
@@ -319,11 +375,17 @@ func (s *GitSource) scanUncommitted(repo *git.Repository) ([]Fragment, error) {
 		}
 		f, err := wt.Filesystem.Open(file)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("failed to open worktree file %q: %w", file, err)
 		}
 		data, err := io.ReadAll(f)
-		f.Close()
-		if err != nil || isBinaryString(string(data)) {
+		closeErr := f.Close()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read worktree file %q: %w", file, err)
+		}
+		if closeErr != nil {
+			return nil, fmt.Errorf("failed to close worktree file %q: %w", file, closeErr)
+		}
+		if isBinaryString(string(data)) {
 			continue
 		}
 		frags = append(frags, Fragment{
@@ -335,7 +397,7 @@ func (s *GitSource) scanUncommitted(repo *git.Repository) ([]Fragment, error) {
 }
 
 // readBlob returns the full text content of a blob object.
-func readBlob(repo *git.Repository, hash plumbing.Hash) (string, error) {
+func readBlob(repo *git.Repository, hash plumbing.Hash) (content string, err error) {
 	blob, err := repo.BlobObject(hash)
 	if err != nil {
 		return "", err
@@ -344,7 +406,11 @@ func readBlob(repo *git.Repository, hash plumbing.Hash) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer reader.Close()
+	defer func() {
+		if cerr := reader.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}()
 	data, err := io.ReadAll(reader)
 	if err != nil {
 		return "", err

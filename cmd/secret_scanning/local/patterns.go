@@ -51,6 +51,7 @@ func NewPatternsCmd() *cobra.Command {
 	f.BoolVar(&usePatternCfg, "pattern-config", false, "Filter patterns using the organization's secret scanning pattern configuration")
 	f.StringVarP(&owner, "owner", "o", "", "The organization name, used with --pattern-config")
 	f.StringVarP(&repo, "repo", "R", "", "The [HOST/]OWNER/REPO repository, used with --pattern-config")
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
 	return cmd

@@ -21,14 +21,25 @@ func NewScanner(cfg *Config, showSecret bool) (*Scanner, error) {
 
 	if cfg != nil {
 		for _, cp := range cfg.Patterns {
+			if cp.ID == "" {
+				return nil, fmt.Errorf("pattern config entry is missing required field %q", "id")
+			}
+			if cp.Regex == "" {
+				return nil, fmt.Errorf("pattern %q is missing required field %q", cp.ID, "regex")
+			}
 			re, err := regexp.Compile(cp.Regex)
 			if err != nil {
 				return nil, fmt.Errorf("failed to compile pattern %q: %w", cp.ID, err)
 			}
+			// display_name is optional and defaults to the pattern id.
+			displayName := cp.DisplayName
+			if displayName == "" {
+				displayName = cp.ID
+			}
 			p := Pattern{
 				ID:          cp.ID,
 				TokenType:   cp.TokenType,
-				DisplayName: cp.DisplayName,
+				DisplayName: displayName,
 				Regex:       re,
 				Keywords:    cp.Keywords,
 				Source:      "config",
@@ -81,6 +92,13 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 		locs := p.Regex.FindAllStringIndex(frag.Content, -1)
 		for _, loc := range locs {
 			matched := frag.Content[loc[0]:loc[1]]
+			// BaseLine carries the file line of the fragment's first line
+			// (used for commit diff fragments that hold only added hunks);
+			// zero means the fragment content starts at file line 1.
+			base := frag.BaseLine
+			if base <= 0 {
+				base = 1
+			}
 			f := Finding{
 				PatternID:   p.ID,
 				TokenType:   p.TokenType,
@@ -89,7 +107,7 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				Author:      frag.Author,
 				Date:        frag.Date,
 				File:        frag.FilePath,
-				StartLine:   lineNumberAt(frag.Content, loc[0]),
+				StartLine:   base + lineNumberAt(frag.Content, loc[0]) - 1,
 				Match:       matched,
 				Secret:      matched,
 			}
@@ -97,12 +115,31 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				continue
 			}
 			if !s.ShowSecret {
-				f.Secret = redact(matched)
+				// Redact both Match and Secret so JSON output never leaks
+				// the raw value when --show-secret is not set.
+				redacted := redact(matched)
+				f.Match = redacted
+				f.Secret = redacted
 			}
 			findings = append(findings, f)
 		}
 	}
 	return findings
+}
+
+// Scan collects the fragments produced by src and returns every finding
+// detected by the scanner. It keeps command handlers free of scan
+// orchestration logic.
+func Scan(src Source, scanner *Scanner) ([]Finding, error) {
+	fragments, err := src.Fragments()
+	if err != nil {
+		return nil, err
+	}
+	var findings []Finding
+	for _, frag := range fragments {
+		findings = append(findings, scanner.ScanFragment(frag)...)
+	}
+	return findings, nil
 }
 
 func containsAnyKeyword(content string, keywords []string) bool {

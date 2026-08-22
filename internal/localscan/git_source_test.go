@@ -162,3 +162,66 @@ func hasFile(frags []Fragment, path string) bool {
 	}
 	return false
 }
+
+func TestGitSourceCommitReportsCorrectLineNumbers(t *testing.T) {
+	repo, dir := newTestRepo(t)
+
+	// Base file with several lines, all pushed so only the later change is
+	// considered unpushed.
+	base := "line1\nline2\nline3\nline4\nline5\n"
+	commitFile(t, repo, dir, "app.txt", base, "base")
+	if err := repo.Push(&git.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("failed to push: %v", err)
+	}
+
+	// Append a secret on line 6, keeping earlier lines unchanged so the diff
+	// hunk starts partway through the file.
+	secret := "ghp_" + repeatChar("a1B2c3", 6)
+	commitFile(t, repo, dir, "app.txt", base+secret+"\n", "add secret at line 6")
+
+	src := NewGitSource(Target{Mode: TargetUnpushed, RepoPath: dir, MaxCommits: 100})
+	frags, err := src.Fragments()
+	if err != nil {
+		t.Fatalf("Fragments() error = %v", err)
+	}
+
+	scanner, err := NewScanner(nil, true)
+	if err != nil {
+		t.Fatalf("NewScanner() error = %v", err)
+	}
+	var findings []Finding
+	for _, f := range frags {
+		findings = append(findings, scanner.ScanFragment(f)...)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %+v", findings)
+	}
+	if findings[0].StartLine != 6 {
+		t.Errorf("StartLine = %d, want 6 (secret added on line 6)", findings[0].StartLine)
+	}
+}
+
+func TestGitSourceStagedUnbornHead(t *testing.T) {
+	repo, dir := newTestRepo(t)
+
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to open worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("staged content\n"), 0o600); err != nil {
+		t.Fatalf("failed to write staged file: %v", err)
+	}
+	if _, err := wt.Add("staged.txt"); err != nil {
+		t.Fatalf("failed to stage file: %v", err)
+	}
+
+	// No commit exists yet (unborn HEAD); staged scan must still succeed.
+	src := NewGitSource(Target{Mode: TargetStaged, RepoPath: dir})
+	frags, err := src.Fragments()
+	if err != nil {
+		t.Fatalf("Fragments() error = %v", err)
+	}
+	if !hasFile(frags, "staged.txt") {
+		t.Errorf("expected staged.txt in fragments, got %+v", frags)
+	}
+}

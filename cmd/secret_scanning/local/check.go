@@ -90,14 +90,9 @@ Exits with status 1 if any secret is found.`,
 				}
 			}
 
-			fragments, err := source.Fragments()
+			findings, err := localscan.Scan(source, scanner)
 			if err != nil {
 				return fmt.Errorf("failed to collect scan targets: %w", err)
-			}
-
-			var findings []localscan.Finding
-			for _, frag := range fragments {
-				findings = append(findings, scanner.ScanFragment(frag)...)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
@@ -113,7 +108,7 @@ Exits with status 1 if any secret is found.`,
 	}
 
 	f := cmd.Flags()
-	f.BoolVar(&unpushed, "unpushed", false, "Scan commits reachable from HEAD but not pushed to any remote (default)")
+	f.BoolVar(&unpushed, "unpushed", true, "Scan commits reachable from HEAD but not pushed to any remote (default)")
 	f.BoolVar(&staged, "staged", false, "Scan changes currently staged in the index")
 	f.BoolVar(&uncommitted, "uncommitted", false, "Scan modified and untracked files in the worktree")
 	f.StringVar(&revRange, "rev-range", "", `Scan an explicit revision range, in "A..B" or "B" form`)
@@ -127,6 +122,7 @@ Exits with status 1 if any secret is found.`,
 	f.StringVarP(&repo, "repo", "R", "", "The [HOST/]OWNER/REPO repository, used with --pattern-config")
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
 	f.IntVar(&maxCommits, "max-commits", 1000, "Maximum number of commits to scan for --unpushed and --rev-range")
+	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
 	return cmd

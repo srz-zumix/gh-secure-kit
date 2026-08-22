@@ -31,9 +31,14 @@ func (s *DirSource) Fragments() ([]Fragment, error) {
 			}
 			return nil
 		}
+		// Skip symlinks, FIFOs, devices and other non-regular files: they can
+		// block the scan or point outside the requested tree.
+		if !d.Type().IsRegular() {
+			return nil
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return nil // skip unreadable files
+			return fmt.Errorf("failed to read file %q: %w", path, err)
 		}
 		if isBinaryString(string(data)) {
 			return nil
