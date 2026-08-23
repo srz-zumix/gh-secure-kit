@@ -87,7 +87,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 	if revRange == "" {
 		// The scan start is HEAD by default, or an explicit revision (used by
 		// the pre-push hook to scan the exact commits being pushed).
-		start := plumbing.ZeroHash
+		var start plumbing.Hash
 		if s.Target.Rev != "" {
 			h, err := repo.ResolveRevision(plumbing.Revision(s.Target.Rev))
 			if err != nil {
