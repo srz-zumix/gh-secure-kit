@@ -122,12 +122,27 @@ func InstallHook(dir, name string, opts InstallHookOptions) (string, error) {
 		}
 	}
 
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+	// Write to a temporary file and rename it over the destination so we never
+	// follow an existing symlink (which could place hook content outside dir)
+	// and never leave a partially written hook behind.
+	tmp, err := os.CreateTemp(dir, name+".tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary hook file in %q: %w", dir, err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := tmp.WriteString(script); err != nil {
+		_ = tmp.Close()
 		return "", fmt.Errorf("failed to write hook %q: %w", path, err)
 	}
-	// WriteFile does not change the mode of an existing file.
-	if err := os.Chmod(path, 0o755); err != nil {
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("failed to write hook %q: %w", path, err)
+	}
+	if err := os.Chmod(tmpPath, 0o755); err != nil {
 		return "", fmt.Errorf("failed to make hook %q executable: %w", path, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return "", fmt.Errorf("failed to install hook %q: %w", path, err)
 	}
 	return path, nil
 }
@@ -172,27 +187,54 @@ func HookStatuses(dir string, names []string) ([]HookStatus, error) {
 	return statuses, nil
 }
 
-// hookScript renders the shell script installed for the given hook.
-func hookScript(name string) (string, error) {
-	var target string
-	switch name {
-	case "pre-commit":
-		target = "--staged"
-	case "pre-push":
-		target = "--unpushed"
-	default:
-		return "", fmt.Errorf("unsupported hook %q, expected one of %s", name, strings.Join(HookNames, ", "))
-	}
+// hookHeader is the comment block that identifies a generated hook script.
+func hookHeader(name string) string {
 	return fmt.Sprintf(`#!/bin/sh
 # %s
 # Managed by: gh secure-kit secret-scanning local hook install
-# Remove with: gh secure-kit secret-scanning local hook uninstall %s
-exec gh secure-kit secret-scanning local check %s
-`, hookMarker, name, target), nil
+# Remove with: gh secure-kit secret-scanning local hook uninstall %s`, hookMarker, name)
+}
+
+// hookScript renders the shell script installed for the given hook.
+func hookScript(name string) (string, error) {
+	switch name {
+	case "pre-commit":
+		return hookHeader(name) + `
+exec gh secure-kit secret-scanning local check --staged
+`, nil
+	case "pre-push":
+		// Git passes the pushed refs on stdin as
+		// "<local ref> <local sha> <remote ref> <remote sha>" lines, and the
+		// destination remote name as $1. Scan the exact commits being pushed so
+		// a secret on any pushed branch (not just the checked-out HEAD) is
+		// caught. A zero remote sha means a new ref, a zero local sha means a
+		// deletion. For a new ref, exclude only the destination remote so a
+		// commit that lives only on a different remote is still scanned.
+		return hookHeader(name) + `
+zero=0000000000000000000000000000000000000000
+remote_name="$1"
+while read -r local_ref local_sha remote_ref remote_sha; do
+	[ "$local_sha" = "$zero" ] && continue
+	if [ "$remote_sha" = "$zero" ]; then
+		gh secure-kit secret-scanning local check --unpushed --rev "$local_sha" --remote "$remote_name" || exit 1
+	else
+		gh secure-kit secret-scanning local check --rev-range "$remote_sha..$local_sha" || exit 1
+	fi
+done
+exit 0
+`, nil
+	default:
+		return "", fmt.Errorf("unsupported hook %q, expected one of %s", name, strings.Join(HookNames, ", "))
+	}
 }
 
 // hookStateAt classifies the hook file at path.
 func hookStateAt(path string) (HookState, error) {
+	// A symlink is never a hook this tool generated; treat it as unmanaged so
+	// it is not silently overwritten (and is never followed on write).
+	if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		return HookStateUnmanaged, nil
+	}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return HookStateNotInstalled, nil
@@ -200,10 +242,24 @@ func hookStateAt(path string) (HookState, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read hook %q: %w", path, err)
 	}
-	if strings.Contains(string(data), hookMarker) {
+	// Match the marker only as its own comment line so an unrelated hook that
+	// merely mentions the marker text is not mistaken for a generated hook.
+	if hasMarkerLine(string(data)) {
 		return HookStateInstalled, nil
 	}
 	return HookStateUnmanaged, nil
+}
+
+// hasMarkerLine reports whether content contains the generated marker on its
+// own comment line.
+func hasMarkerLine(content string) bool {
+	markerLine := "# " + hookMarker
+	for _, line := range strings.Split(content, "\n") {
+		if strings.TrimRight(line, "\r") == markerLine {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveGitDir returns the git directory for a worktree root, following the
@@ -229,5 +285,19 @@ func resolveGitDir(root string) (string, error) {
 	if !filepath.IsAbs(gitDir) {
 		gitDir = filepath.Join(root, gitDir)
 	}
-	return gitDir, nil
+	// In a linked worktree the pointer targets a per-worktree admin directory
+	// (.git/worktrees/<name>), but git runs hooks from the common git
+	// directory. Resolve commondir so hooks are installed where git looks.
+	commonData, err := os.ReadFile(filepath.Join(gitDir, "commondir"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return gitDir, nil
+		}
+		return "", fmt.Errorf("failed to read commondir pointer in %q: %w", gitDir, err)
+	}
+	commonDir := strings.TrimSpace(string(commonData))
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(gitDir, commonDir)
+	}
+	return filepath.Clean(commonDir), nil
 }

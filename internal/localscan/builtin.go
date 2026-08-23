@@ -11,7 +11,7 @@ const pemKeyBody = `[\s\S]{0,200}?\n[A-Za-z0-9+/=]{40,}`
 // since GitHub does not publish those regular expressions.
 func BuiltinPatterns() []Pattern {
 	return []Pattern{
-		mustPattern("github_personal_access_token", "github_pat", "GitHub Personal Access Token", `ghp_[0-9A-Za-z]{36}`),
+		mustPattern("github_personal_access_token", "github_token", "GitHub Personal Access Token", `ghp_[0-9A-Za-z]{36}`),
 		mustPattern("github_fine_grained_pat", "github_fine_grained_pat", "GitHub Fine-grained Personal Access Token", `github_pat_[0-9A-Za-z_]{22,255}`),
 		mustPattern("github_oauth_token", "github_oauth_token", "GitHub OAuth Access Token", `gho_[0-9A-Za-z]{36}`),
 		mustPattern("github_app_token", "github_app_token", "GitHub App Installation Access Token", `ghs_[0-9A-Za-z]{36}`),

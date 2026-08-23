@@ -1,6 +1,10 @@
 package localscan
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/go-github/v90/github"
+)
 
 func TestBuiltinPatternsMatch(t *testing.T) {
 	tests := []struct {
@@ -54,4 +58,37 @@ func repeatChar(s string, n int) string {
 		out = append(out, s...)
 	}
 	return string(out)
+}
+
+func TestBuiltinClassicPATHonorsGithubTokenOverride(t *testing.T) {
+	// The org pattern configuration keys the classic PAT detector by the
+	// "github_token" token type, so BuiltinPatterns() must use that value for
+	// --pattern-config to be able to disable it.
+	patterns := BuiltinPatterns()
+	var byID = make(map[string]Pattern)
+	for _, p := range patterns {
+		byID[p.ID] = p
+	}
+	p, ok := byID["github_personal_access_token"]
+	if !ok {
+		t.Fatal("github_personal_access_token builtin not found")
+	}
+	if p.TokenType != "github_token" {
+		t.Errorf("TokenType = %q, want %q", p.TokenType, "github_token")
+	}
+
+	configs := &github.SecretScanningPatternConfigs{
+		ProviderPatternOverrides: []*github.SecretScanningPatternOverride{
+			{
+				TokenType:      github.Ptr("github_token"),
+				Setting:        github.Ptr("disabled"),
+				DefaultSetting: github.Ptr("enabled"),
+			},
+		},
+	}
+	for _, rp := range ApplyPatternConfigs(patterns, configs) {
+		if rp.ID == "github_personal_access_token" && rp.Enabled {
+			t.Error("github_token=disabled did not disable the builtin classic PAT detector")
+		}
+	}
 }

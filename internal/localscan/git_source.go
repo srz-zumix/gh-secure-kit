@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/filemode"
 	"github.com/go-git/go-git/v5/plumbing/format/diff"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
@@ -54,10 +55,19 @@ func (s *GitSource) scanCommits(repo *git.Repository, revRange string) ([]Fragme
 	if err != nil {
 		return nil, err
 	}
+	// A zero start hash means there is nothing to scan (e.g. an unborn HEAD).
+	if startHash.IsZero() {
+		return nil, nil
+	}
 
-	commits, err := collectCommits(repo, startHash, excludeSet, s.Target.MaxCommits)
+	commits, truncated, err := collectCommits(repo, startHash, excludeSet, s.Target.MaxCommits)
 	if err != nil {
 		return nil, err
+	}
+	if truncated {
+		// Fail rather than silently scanning an incomplete history: otherwise a
+		// pre-push hook could let a secret in a later commit reach the remote.
+		return nil, fmt.Errorf("scan aborted: more than %d commits to scan; raise --max-commits or set it to 0 to scan without a limit", s.Target.MaxCommits)
 	}
 
 	var frags []Fragment
@@ -75,9 +85,26 @@ func (s *GitSource) scanCommits(repo *git.Repository, revRange string) ([]Fragme
 // commits to exclude from the walk.
 func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (plumbing.Hash, map[plumbing.Hash]bool, error) {
 	if revRange == "" {
-		head, err := repo.Head()
-		if err != nil {
-			return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve HEAD: %w", err)
+		// The scan start is HEAD by default, or an explicit revision (used by
+		// the pre-push hook to scan the exact commits being pushed).
+		start := plumbing.ZeroHash
+		if s.Target.Rev != "" {
+			h, err := repo.ResolveRevision(plumbing.Revision(s.Target.Rev))
+			if err != nil {
+				return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", s.Target.Rev, err)
+			}
+			start = *h
+		} else {
+			head, err := repo.Head()
+			if err != nil {
+				// An unborn HEAD (a repository with no commits yet) has nothing
+				// to scan; report an empty result rather than an error.
+				if errors.Is(err, plumbing.ErrReferenceNotFound) {
+					return plumbing.ZeroHash, nil, nil
+				}
+				return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve HEAD: %w", err)
+			}
+			start = head.Hash()
 		}
 
 		var remoteTips []plumbing.Hash
@@ -85,10 +112,21 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 		if err != nil {
 			return plumbing.ZeroHash, nil, fmt.Errorf("failed to list references: %w", err)
 		}
+		// When a destination remote is given (pre-push hook), exclude only that
+		// remote's tracking branches so a commit present only on a different
+		// remote is still scanned before it reaches this destination.
+		var remotePrefix string
+		if s.Target.Remote != "" {
+			remotePrefix = "refs/remotes/" + s.Target.Remote + "/"
+		}
 		err = refs.ForEach(func(ref *plumbing.Reference) error {
-			if ref.Name().IsRemote() {
-				remoteTips = append(remoteTips, ref.Hash())
+			if !ref.Name().IsRemote() {
+				return nil
 			}
+			if remotePrefix != "" && !strings.HasPrefix(ref.Name().String(), remotePrefix) {
+				return nil
+			}
+			remoteTips = append(remoteTips, ref.Hash())
 			return nil
 		})
 		if err != nil {
@@ -99,7 +137,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 		if err != nil {
 			return plumbing.ZeroHash, nil, err
 		}
-		return head.Hash(), exclude, nil
+		return start, exclude, nil
 	}
 
 	fromRev, toRev, explicit, err := splitRevRange(revRange)
@@ -144,6 +182,9 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 // reports whether the caller supplied an explicit ".." range (versus a bare
 // revision), so a missing start can be rejected only for explicit ranges.
 func splitRevRange(revRange string) (from, to string, explicit bool, err error) {
+	if strings.Contains(revRange, "...") {
+		return "", "", false, fmt.Errorf("invalid rev-range %q: only the \"A..B\" form is supported, not \"A...B\"", revRange)
+	}
 	if idx := strings.Index(revRange, ".."); idx >= 0 {
 		from = strings.TrimSuffix(revRange[:idx], ".")
 		to = strings.TrimPrefix(revRange[idx+2:], ".")
@@ -185,28 +226,30 @@ func reachableSet(repo *git.Repository, tips []plumbing.Hash) (map[plumbing.Hash
 
 // collectCommits walks ancestors of start, stopping at commits present in
 // exclude, up to maxCommits results (0 means unlimited).
-func collectCommits(repo *git.Repository, start plumbing.Hash, exclude map[plumbing.Hash]bool, maxCommits int) ([]*object.Commit, error) {
+func collectCommits(repo *git.Repository, start plumbing.Hash, exclude map[plumbing.Hash]bool, maxCommits int) ([]*object.Commit, bool, error) {
 	var result []*object.Commit
 	visited := make(map[plumbing.Hash]bool)
 	queue := []plumbing.Hash{start}
 	for len(queue) > 0 {
-		if maxCommits > 0 && len(result) >= maxCommits {
-			break
-		}
 		h := queue[0]
 		queue = queue[1:]
 		if visited[h] || exclude[h] {
 			continue
 		}
 		visited[h] = true
+		// Only signal truncation once a genuinely includable commit beyond the
+		// cap is found, so an exactly-at-limit walk is not falsely rejected.
+		if maxCommits > 0 && len(result) >= maxCommits {
+			return result, true, nil
+		}
 		c, err := repo.CommitObject(h)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load commit %s: %w", h, err)
+			return nil, false, fmt.Errorf("failed to load commit %s: %w", h, err)
 		}
 		result = append(result, c)
 		queue = append(queue, c.ParentHashes...)
 	}
-	return result, nil
+	return result, false, nil
 }
 
 // fragmentsForCommit returns the added content of a commit: the full tree
@@ -336,6 +379,11 @@ func (s *GitSource) scanStaged(repo *git.Repository) ([]Fragment, error) {
 
 	var frags []Fragment
 	for _, entry := range idx.Entries {
+		// Submodule entries point to a commit object, and intent-to-add entries
+		// carry a zero hash; neither refers to a readable blob.
+		if entry.Mode == filemode.Submodule || entry.Hash.IsZero() {
+			continue
+		}
 		if headTree != nil {
 			if headEntry, err := headTree.FindEntry(entry.Name); err == nil && headEntry.Hash == entry.Hash {
 				continue // unchanged since HEAD
@@ -371,6 +419,11 @@ func (s *GitSource) scanUncommitted(repo *git.Repository) ([]Fragment, error) {
 	var frags []Fragment
 	for file, st := range status {
 		if st.Worktree != git.Modified && st.Worktree != git.Untracked {
+			continue
+		}
+		// Skip symlinks, FIFOs, devices and other non-regular files: opening a
+		// symlink can read outside the worktree and a FIFO can block the scan.
+		if info, err := wt.Filesystem.Lstat(file); err != nil || !info.Mode().IsRegular() {
 			continue
 		}
 		f, err := wt.Filesystem.Open(file)

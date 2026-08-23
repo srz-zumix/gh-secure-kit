@@ -178,3 +178,108 @@ func TestUninstallHook(t *testing.T) {
 		t.Errorf("expected the unmanaged hook to be removed with --force")
 	}
 }
+
+func TestHookStateUnmanagedForMarkerMention(t *testing.T) {
+	dir := t.TempDir()
+	// An unrelated hook that merely mentions the marker text (not as the
+	// generated header line) must not be treated as managed.
+	path := filepath.Join(dir, "pre-push")
+	body := "#!/bin/sh\necho 'see gh-secure-kit:secret-scanning-local for details'\n"
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	statuses, err := HookStatuses(dir, []string{"pre-push"})
+	if err != nil {
+		t.Fatalf("HookStatuses() error = %v", err)
+	}
+	if statuses[0].State != HookStateUnmanaged {
+		t.Errorf("State = %q, want %q", statuses[0].State, HookStateUnmanaged)
+	}
+}
+
+func TestInstallHookDoesNotFollowSymlink(t *testing.T) {
+	hooksDir := t.TempDir()
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim")
+	if err := os.WriteFile(victim, []byte("original\n"), 0o644); err != nil {
+		t.Fatalf("write victim: %v", err)
+	}
+	// A pre-existing symlink hook pointing outside the hooks dir.
+	link := filepath.Join(hooksDir, "pre-push")
+	if err := os.Symlink(victim, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	// Without --force the symlink is unmanaged and must be preserved.
+	if _, err := InstallHook(hooksDir, "pre-push", InstallHookOptions{}); err == nil {
+		t.Fatal("expected an error installing over an unmanaged symlink")
+	}
+
+	// With --force the install must replace the link, not write through it.
+	if _, err := InstallHook(hooksDir, "pre-push", InstallHookOptions{Force: true}); err != nil {
+		t.Fatalf("InstallHook(force) error = %v", err)
+	}
+	data, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatalf("read victim: %v", err)
+	}
+	if string(data) != "original\n" {
+		t.Errorf("symlink target was overwritten: %q", data)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink != 0 {
+		t.Errorf("expected a regular file at the hook path, got mode %v (err %v)", info.Mode(), err)
+	}
+}
+
+func TestPrePushHookScansPushedRefs(t *testing.T) {
+	script, err := hookScript("pre-push")
+	if err != nil {
+		t.Fatalf("hookScript() error = %v", err)
+	}
+	if !strings.Contains(script, "read -r local_ref local_sha remote_ref remote_sha") {
+		t.Error("pre-push hook does not read pushed refs from stdin")
+	}
+	if !strings.Contains(script, "--rev-range \"$remote_sha..$local_sha\"") {
+		t.Error("pre-push hook does not scan the pushed commit range")
+	}
+	if !strings.Contains(script, "--rev \"$local_sha\"") {
+		t.Error("pre-push hook does not handle new branches")
+	}
+	if !strings.Contains(script, "--remote \"$remote_name\"") {
+		t.Error("pre-push hook does not scope new-branch exclusion to the destination remote")
+	}
+	if !strings.Contains(script, `remote_name="$1"`) {
+		t.Error("pre-push hook does not capture the destination remote name")
+	}
+}
+
+func TestResolveGitDirLinkedWorktreeUsesCommondir(t *testing.T) {
+	base := t.TempDir()
+	commonGitDir := filepath.Join(base, "maindotgit")
+	worktreeAdmin := filepath.Join(commonGitDir, "worktrees", "wt1")
+	if err := os.MkdirAll(worktreeAdmin, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// The per-worktree admin dir points back to the common git dir.
+	if err := os.WriteFile(filepath.Join(worktreeAdmin, "commondir"), []byte("../..\n"), 0o644); err != nil {
+		t.Fatalf("write commondir: %v", err)
+	}
+	// The linked worktree root has a .git file pointing at its admin dir.
+	wtRoot := filepath.Join(base, "wt1")
+	if err := os.MkdirAll(wtRoot, 0o755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wtRoot, ".git"), []byte("gitdir: "+worktreeAdmin+"\n"), 0o644); err != nil {
+		t.Fatalf("write .git: %v", err)
+	}
+
+	got, err := resolveGitDir(wtRoot)
+	if err != nil {
+		t.Fatalf("resolveGitDir() error = %v", err)
+	}
+	want, _ := filepath.EvalSymlinks(commonGitDir)
+	gotResolved, _ := filepath.EvalSymlinks(got)
+	if gotResolved != want {
+		t.Errorf("resolveGitDir() = %q, want common git dir %q", got, commonGitDir)
+	}
+}

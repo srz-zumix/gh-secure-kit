@@ -26,6 +26,17 @@ type Target struct {
 	RepoPath string
 	// RevRange is required for TargetRevRange, in "A..B" or "B" form.
 	RevRange string
+	// Rev, when set for TargetUnpushed, overrides the scan start (HEAD by
+	// default) so the pre-push hook can scan the exact commits being pushed:
+	// commits reachable from Rev but not from the destination's remote-tracking
+	// branches.
+	Rev string
+	// Remote, when set for TargetUnpushed, restricts the excluded commits to
+	// those reachable from that remote's tracking branches only (instead of
+	// every remote). The pre-push hook sets it to the push destination so a
+	// commit that exists only on a different remote is still scanned before it
+	// reaches a new destination.
+	Remote string
 	// MaxCommits caps the number of commits walked for TargetUnpushed and
 	// TargetRevRange. Zero means unlimited.
 	MaxCommits int

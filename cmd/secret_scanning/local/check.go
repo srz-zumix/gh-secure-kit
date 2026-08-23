@@ -28,6 +28,8 @@ func NewCheckCmd() *cobra.Command {
 		staged        bool
 		uncommitted   bool
 		revRange      string
+		rev           string
+		remote        string
 		noGit         bool
 		path          string
 		configFile    string
@@ -54,10 +56,31 @@ Exits with status 1 if any secret is found.`,
 				mode = localscan.TargetStaged
 			case uncommitted:
 				mode = localscan.TargetUncommitted
-			case revRange != "":
+			case cmd.Flags().Changed("rev-range"):
+				if revRange == "" {
+					return fmt.Errorf("--rev-range requires a value in \"A..B\" or \"B\" form")
+				}
 				mode = localscan.TargetRevRange
 			case noGit:
 				mode = localscan.TargetNoGit
+			case cmd.Flags().Changed("unpushed") && !unpushed:
+				return fmt.Errorf("no scan target selected: --unpushed=false requires one of --staged, --uncommitted, --rev-range or --no-git")
+			}
+
+			// --rev and --remote only refine the unpushed target.
+			if mode != localscan.TargetUnpushed {
+				if cmd.Flags().Changed("rev") {
+					return fmt.Errorf("--rev only applies to the --unpushed target")
+				}
+				if cmd.Flags().Changed("remote") {
+					return fmt.Errorf("--remote only applies to the --unpushed target")
+				}
+			}
+			if cmd.Flags().Changed("rev") && rev == "" {
+				return fmt.Errorf("--rev requires a revision")
+			}
+			if cmd.Flags().Changed("remote") && remote == "" {
+				return fmt.Errorf("--remote requires a remote name")
 			}
 
 			absPath, err := filepath.Abs(path)
@@ -69,6 +92,8 @@ Exits with status 1 if any secret is found.`,
 				Mode:       mode,
 				RepoPath:   absPath,
 				RevRange:   revRange,
+				Rev:        rev,
+				Remote:     remote,
 				MaxCommits: maxCommits,
 			}
 
@@ -112,6 +137,8 @@ Exits with status 1 if any secret is found.`,
 	f.BoolVar(&staged, "staged", false, "Scan changes currently staged in the index")
 	f.BoolVar(&uncommitted, "uncommitted", false, "Scan modified and untracked files in the worktree")
 	f.StringVar(&revRange, "rev-range", "", `Scan an explicit revision range, in "A..B" or "B" form`)
+	f.StringVar(&rev, "rev", "", "With --unpushed, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook")
+	f.StringVar(&remote, "remote", "", "With --unpushed, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook")
 	f.BoolVar(&noGit, "no-git", false, "Scan files under --path directly, without using git")
 	cmd.MarkFlagsMutuallyExclusive("unpushed", "staged", "uncommitted", "rev-range", "no-git")
 
