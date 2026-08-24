@@ -1477,6 +1477,195 @@ Get the latest default incremental and backfill secret scanning scan history for
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Scan local git content for secrets
+
+```sh
+gh secure-kit secret-scanning local check [flags]
+```
+
+Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+
+```sh
+# Scan commits reachable from HEAD but not pushed to any remote (default)
+gh secure-kit secret-scanning local check
+
+# Scan a specific directory without using git
+gh secure-kit secret-scanning local check --path ./some-dir --no-git
+
+# Scan an explicit revision range and output JSON
+gh secure-kit secret-scanning local check --rev-range main..HEAD --format json
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local check --owner my-org --pattern-config
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
+| `--no-git` | | `false` | Scan files under `--path` directly, without using git |
+| `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
+| `--path` | | `"."` | The repository or directory path to scan |
+| `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
+| `--remote` | | `""` | With `--unpushed`, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook |
+| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` |
+| `--rev` | | `""` | With `--unpushed`, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook |
+| `--rev-range` | | `""` | Scan an explicit revision range, in "A..B" or "B" form |
+| `--show-secret` | | `false` | Show the full matched secret value instead of a redacted form |
+| `--staged` | | `false` | Scan changes currently staged in the index |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--uncommitted` | | `false` | Scan modified and untracked files in the worktree |
+| `--unpushed` | | `true` | Scan commits reachable from HEAD but not pushed to any remote (default) |
+
+### List local secret scanning patterns
+
+```sh
+gh secure-kit secret-scanning local patterns [flags]
+```
+
+List the built-in and user-defined secret scanning patterns used by `secret-scanning local check`, including whether each is enabled.
+
+```sh
+# List all local secret scanning patterns
+gh secure-kit secret-scanning local patterns
+
+# Filter patterns using the organization's secret scanning pattern configuration
+gh secure-kit secret-scanning local patterns --owner my-org --pattern-config
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
+| `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
+| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Install git hooks that run local secret scanning
+
+```sh
+gh secure-kit secret-scanning local hook install [pre-commit|pre-push]... [flags]
+```
+
+Install git hooks that run `secret-scanning local check` before a commit or a push. Only the pre-push hook is installed when no hook name is given, which is enough to stop a secret from reaching the remote. The pre-commit hook scans staged changes and the pre-push hook scans the exact commits being pushed (read from the refs git supplies on stdin, so pushes of a branch other than the checked-out one are also covered), aborting the operation when a secret is found. For a new branch the hook excludes commits already on the destination remote using its local remote-tracking refs, so keep them current with `git fetch`; pushing to a remote that has never been fetched (or by URL) falls back to scanning the branch's full history, which may require raising `--max-commits`. An existing hook that was not generated by this tool is kept unless `--force` or `--backup` is given. The `core.hooksPath` configuration is honored when resolving the hooks directory.
+
+```sh
+# Install the pre-push hook
+gh secure-kit secret-scanning local hook install
+
+# Install both the pre-commit and pre-push hooks
+gh secure-kit secret-scanning local hook install pre-commit pre-push
+
+# Move an existing hook aside before installing
+gh secure-kit secret-scanning local hook install --backup
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--backup` | | `false` | Move an existing hook aside to `<hook>.gh-secure-kit.bak` before installing |
+| `--force` | | `false` | Overwrite an existing hook that is not managed by gh-secure-kit |
+| `--path` | | `"."` | The repository path to install the hooks into |
+
+### Show the local secret scanning git hook status
+
+```sh
+gh secure-kit secret-scanning local hook status [flags]
+```
+
+Show whether each supported git hook is installed. A hook is reported as `installed` when it was generated by this tool, `unmanaged` when a different hook script is present, and `not_installed` when no hook file exists.
+
+```sh
+gh secure-kit secret-scanning local hook status
+
+# Output as JSON
+gh secure-kit secret-scanning local hook status --format json
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--path` | | `"."` | The repository path to inspect |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Remove git hooks that run local secret scanning
+
+```sh
+gh secure-kit secret-scanning local hook uninstall [pre-commit|pre-push]... [flags]
+```
+
+Remove the git hooks installed by `secret-scanning local hook install`. Every supported hook is removed when no hook name is given. A hook that was not generated by this tool is kept unless `--force` is given.
+
+```sh
+# Remove both the pre-commit and pre-push hooks
+gh secure-kit secret-scanning local hook uninstall
+
+# Remove only the pre-commit hook
+gh secure-kit secret-scanning local hook uninstall pre-commit
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--force` | | `false` | Remove an existing hook even when it is not managed by gh-secure-kit |
+| `--path` | | `"."` | The repository path to remove the hooks from |
+
+### Local secret scanning configuration file
+
+Both `secret-scanning local check` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory, or specified explicitly with `--config`.
+
+```yaml
+patterns:
+  - id: my_internal_token
+    token_type: my_internal_token
+    display_name: My Internal Token
+    regex: 'mytoken_[0-9a-f]{32}'
+    keywords:
+      - mytoken_
+
+allowlist:
+  regexes:
+    - '^ghp_0{36}$'
+  paths:
+    - internal/localscan/*_test.go
+  commits:
+    - 461e82a58c0cd9484db7014ba8937022563745d9
+  stopwords:
+    - EXAMPLE
+    - dummy
+```
+
+**`patterns`** entries are merged with the built-in patterns. An entry whose `id` matches a built-in pattern replaces that built-in definition.
+
+| Key | Required | Description |
+| ------ | ---------- | ------------- |
+| `display_name` | No | Human-readable name shown in the output (defaults to `id`) |
+| `id` | Yes | Unique pattern identifier |
+| `keywords` | No | Literal strings used as a case-insensitive pre-filter; the regex is only evaluated when the content contains at least one of them |
+| `regex` | Yes | Go (RE2) regular expression used for detection |
+| `token_type` | No | Token type reported in the output, and matched against the organization's pattern configuration when `--pattern-config` is used |
+
+**`allowlist`** entries suppress findings. A finding is suppressed if any single entry matches.
+
+| Key | Match target | Description |
+| ------ | -------------- | ------------- |
+| `commits` | Commit SHA | Full SHA, exact match |
+| `paths` | File path | Glob pattern (`filepath.Match`) or substring match |
+| `regexes` | Matched secret | Go (RE2) regular expressions evaluated against the matched text |
+| `stopwords` | Matched line | Literal substrings; the whole line containing the match is checked |
 
 ## Repository Security Feature Toggles
 
