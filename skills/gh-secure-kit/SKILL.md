@@ -1833,7 +1833,7 @@ gh secure-kit secret-scanning push-protection update \
 gh secure-kit secret-scanning local check [flags]
 ```
 
-Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. With `--rev-range`, commits that are missing from the local repository are read through the GitHub API instead, so a shallow CI checkout can scan a range without cloning the whole history; pass `--no-api` to disable it. The repository is taken from `--repo`/`--owner`, or inferred from the current directory's git remotes. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
 
 ```sh
 # Scan commits reachable from HEAD but not pushed to any remote (default)
@@ -1845,9 +1845,23 @@ gh secure-kit secret-scanning local check --path ./some-dir --no-git
 # Scan an explicit revision range and output JSON
 gh secure-kit secret-scanning local check --rev-range main..HEAD --format json
 
+# Scan a range whose commits are not in the local checkout, reading them through the API
+gh secure-kit secret-scanning local check --repo my-org/my-repo --rev-range "$BASE_SHA..$HEAD_SHA"
+
 # Filter patterns using the organization's secret scanning pattern configuration
 gh secure-kit secret-scanning local check --owner my-org --pattern-config
 ```
+
+Because missing commits are read through the API, a GitHub Actions workflow does not need `fetch-depth: 0`:
+
+```yaml
+- uses: actions/checkout@v5
+- run: gh secure-kit secret-scanning local check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+  env:
+    GH_TOKEN: ${{ github.token }}
+```
+
+The API cannot return a complete diff for every commit, so the scan fails instead of reporting a partial result when the comparison exceeds 250 commits, a commit changes 3000 or more files, or a file's diff is too large to be returned. Use a full local checkout for those ranges.
 
 ### List local secret scanning patterns (gh secure-kit secret-scanning local patterns)
 

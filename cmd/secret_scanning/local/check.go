@@ -30,6 +30,7 @@ func NewCheckCmd() *cobra.Command {
 		revRange      string
 		rev           string
 		remote        string
+		noAPI         bool
 		noGit         bool
 		path          string
 		configFile    string
@@ -46,6 +47,7 @@ func NewCheckCmd() *cobra.Command {
 		Short: "Scan local git content for secrets",
 		Long: `Scan local git content for secrets using built-in and user-defined patterns.
 Exactly one target must be selected: --unpushed (default), --staged, --uncommitted, --rev-range, or --no-git.
+With --rev-range, commits that are missing from the local repository are read through the GitHub API instead, so a shallow CI checkout can scan a range without cloning the whole history; pass --no-api to disable it.
 This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns.
 Exits with status 1 if any secret is found.`,
 		Args: cobra.NoArgs,
@@ -98,9 +100,15 @@ Exits with status 1 if any secret is found.`,
 			}
 
 			var source localscan.Source
-			if mode == localscan.TargetNoGit {
+			switch {
+			case mode == localscan.TargetNoGit:
 				source = localscan.NewDirSource(target)
-			} else {
+			case mode == localscan.TargetRevRange && !noAPI:
+				source = localscan.NewFallbackSource(
+					localscan.NewGitSource(target),
+					localscan.NewAPISource(cmd.Context(), target, owner, repo),
+				)
+			default:
 				source = localscan.NewGitSource(target)
 			}
 
@@ -109,7 +117,9 @@ Exits with status 1 if any secret is found.`,
 				return err
 			}
 
-			if usePatternCfg || owner != "" || repo != "" {
+			// --owner and --repo also select the repository read through the
+			// API, so the pattern configuration needs its own opt-in.
+			if usePatternCfg {
 				if err := applyPatternConfig(cmd, scanner, owner, repo); err != nil {
 					return err
 				}
@@ -139,14 +149,15 @@ Exits with status 1 if any secret is found.`,
 	f.StringVar(&revRange, "rev-range", "", `Scan an explicit revision range, in "A..B" or "B" form`)
 	f.StringVar(&rev, "rev", "", "With --unpushed, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook")
 	f.StringVar(&remote, "remote", "", "With --unpushed, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook")
+	f.BoolVar(&noAPI, "no-api", false, "Do not read commits that are missing from the local repository through the GitHub API")
 	f.BoolVar(&noGit, "no-git", false, "Scan files under --path directly, without using git")
 	cmd.MarkFlagsMutuallyExclusive("unpushed", "staged", "uncommitted", "rev-range", "no-git")
 
 	f.StringVar(&path, "path", ".", "The repository or directory path to scan")
 	f.StringVar(&configFile, "config", "", "Path to a local secret scanning config file (default: auto-discover .gh-secure-kit-secret-scanning.yml)")
 	f.BoolVar(&usePatternCfg, "pattern-config", false, "Filter patterns using the organization's secret scanning pattern configuration")
-	f.StringVarP(&owner, "owner", "o", "", "The organization name, used with --pattern-config")
-	f.StringVarP(&repo, "repo", "R", "", "The [HOST/]OWNER/REPO repository, used with --pattern-config")
+	f.StringVarP(&owner, "owner", "o", "", "The organization name, used with --pattern-config and to read commits through the GitHub API")
+	f.StringVarP(&repo, "repo", "R", "", "The [HOST/]OWNER/REPO repository, used with --pattern-config and to read commits through the GitHub API")
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
 	f.IntVar(&maxCommits, "max-commits", 1000, "Maximum number of commits to scan for --unpushed and --rev-range")
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")

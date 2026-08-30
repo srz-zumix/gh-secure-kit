@@ -13,6 +13,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
+// ErrLocalContentMissing reports that the local repository cannot answer the
+// request, either because there is no repository or because it does not
+// contain the requested revision. Callers use it to fall back to another
+// source.
+var ErrLocalContentMissing = errors.New("the requested content is missing from the local repository")
+
 // GitSource produces fragments from a local git repository according to the
 // selected Target mode.
 type GitSource struct {
@@ -31,6 +37,9 @@ func (s *GitSource) Fragments() ([]Fragment, error) {
 	}
 	repo, err := git.PlainOpenWithOptions(s.Target.RepoPath, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
+		if errors.Is(err, git.ErrRepositoryNotExists) {
+			return nil, fmt.Errorf("%w: no git repository at %q", ErrLocalContentMissing, s.Target.RepoPath)
+		}
 		return nil, fmt.Errorf("failed to open git repository at %q: %w", s.Target.RepoPath, err)
 	}
 
@@ -147,7 +156,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 
 	toHash, err := repo.ResolveRevision(plumbing.Revision(toRev))
 	if err != nil {
-		return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", toRev, err)
+		return plumbing.ZeroHash, nil, fmt.Errorf("%w: failed to resolve revision %q: %v", ErrLocalContentMissing, toRev, err)
 	}
 
 	fromHash, err := repo.ResolveRevision(plumbing.Revision(fromRev))
@@ -155,7 +164,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 		// An explicit "A..B" range with an unresolvable start is a user error
 		// and must fail rather than silently scanning all reachable history.
 		if explicit {
-			return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", fromRev, err)
+			return plumbing.ZeroHash, nil, fmt.Errorf("%w: failed to resolve revision %q: %v", ErrLocalContentMissing, fromRev, err)
 		}
 		// For a single revision "B", the derived start "B^" only legitimately
 		// fails to resolve when B is a root commit; in that case there is
@@ -165,7 +174,7 @@ func (s *GitSource) resolveCommitRange(repo *git.Repository, revRange string) (p
 			return plumbing.ZeroHash, nil, fmt.Errorf("failed to load commit %s: %w", toHash, cerr)
 		}
 		if toCommit.NumParents() != 0 {
-			return plumbing.ZeroHash, nil, fmt.Errorf("failed to resolve revision %q: %w", fromRev, err)
+			return plumbing.ZeroHash, nil, fmt.Errorf("%w: failed to resolve revision %q: %v", ErrLocalContentMissing, fromRev, err)
 		}
 		return *toHash, nil, nil
 	}
@@ -244,6 +253,11 @@ func collectCommits(repo *git.Repository, start plumbing.Hash, exclude map[plumb
 		}
 		c, err := repo.CommitObject(h)
 		if err != nil {
+			if errors.Is(err, plumbing.ErrObjectNotFound) {
+				// A shallow checkout stops here, so the walk would silently miss
+				// everything below the boundary.
+				return nil, false, fmt.Errorf("%w: commit %s is not available", ErrLocalContentMissing, h)
+			}
 			return nil, false, fmt.Errorf("failed to load commit %s: %w", h, err)
 		}
 		result = append(result, c)
