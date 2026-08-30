@@ -18,6 +18,7 @@ func NewApplyCmd() *cobra.Command {
 	var severity string
 	var ruleIDs []string
 	var ignoreIDs []string
+	var dryRun bool
 	var exporter cmdutil.Exporter
 
 	cmd := &cobra.Command{
@@ -29,10 +30,11 @@ failing rule that supports automated remediation.
 Use --repo to fix a single repository. Use --owner to fix an organization.
 --repo and --owner are mutually exclusive.
 Rules without an automated fix are reported but left untouched; run
-'recommended check' to see the full list of findings.`,
+'recommended check' to see the full list of findings.
+Use --dryrun to report which fixes would be applied without changing anything.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if guardrails.IsReadonly() {
+			if !dryRun && guardrails.IsReadonly() {
 				return fmt.Errorf("cannot apply fixes: running in read-only mode (--read-only)")
 			}
 
@@ -58,14 +60,14 @@ Rules without an automated fix are reported but left untouched; run
 			if target.Name != "" {
 				filter.Scope = recommended.ScopeRepository
 				rules := filter.Apply(recommended.AllRules())
-				results, err = recommended.ApplyRepository(ctx, client, target, rules)
+				results, err = recommended.ApplyRepository(ctx, client, target, rules, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
 				filter.Scope = recommended.ScopeOrganization
 				rules := filter.Apply(recommended.AllRules())
-				results, err = recommended.ApplyOrganization(ctx, client, target, rules)
+				results, err = recommended.ApplyOrganization(ctx, client, target, rules, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for organization '%s': %w", target.Owner, err)
 				}
@@ -83,6 +85,7 @@ Rules without an automated fix are reported but left untouched; run
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only fix findings at or above this severity")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
+	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report which fixes would be applied without changing anything")
 	cmdutil.AddFormatFlags(cmd, &exporter)
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd

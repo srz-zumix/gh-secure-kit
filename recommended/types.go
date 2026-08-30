@@ -65,6 +65,13 @@ const (
 	StatusSkip Status = "skip"
 )
 
+// Statuses lists the valid values for the `--status` flag.
+var Statuses = []string{
+	string(StatusPass),
+	string(StatusFail),
+	string(StatusSkip),
+}
+
 // RepositoryCheckFunc evaluates a rule against repository facts.
 type RepositoryCheckFunc func(f *RepositoryFacts) Outcome
 

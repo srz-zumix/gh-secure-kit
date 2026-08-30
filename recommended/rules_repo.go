@@ -55,11 +55,12 @@ func registerRepositorySecurityRules() {
 			return Fail("no SECURITY.md found")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
-			_, err := gh.CreateRepositoryFile(ctx, g, repo, "SECURITY.md", &gh.RepositoryContentFileOptions{
-				Message: "docs: add SECURITY.md",
-				Content: []byte(defaultSecurityMD),
-			})
-			return err
+			return applyFileViaPullRequest(ctx, g, repo, f,
+				"gh-secure-kit/add-security-md", "SECURITY.md",
+				"docs: add SECURITY.md",
+				"docs: add SECURITY.md",
+				"Adds a starter SECURITY.md so researchers know how to report vulnerabilities. Recommended by `gh secure-kit recommended` (GSK103).",
+				[]byte(defaultSecurityMD))
 		},
 	})
 
@@ -162,11 +163,12 @@ func registerRepositoryAccessRules() {
 			return Fail("no CODEOWNERS found")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
-			_, err := gh.CreateRepositoryFile(ctx, g, repo, ".github/CODEOWNERS", &gh.RepositoryContentFileOptions{
-				Message: "docs: add CODEOWNERS",
-				Content: []byte(defaultCodeowners),
-			})
-			return err
+			return applyFileViaPullRequest(ctx, g, repo, f,
+				"gh-secure-kit/add-codeowners", ".github/CODEOWNERS",
+				"docs: add CODEOWNERS",
+				"docs: add CODEOWNERS",
+				"Adds a starter CODEOWNERS file. Recommended by `gh secure-kit recommended` (GSK104).",
+				[]byte(codeownersFor(f.Repo.GetOwner().GetLogin())))
 		},
 	})
 
@@ -308,7 +310,11 @@ vulnerability reporting feature (Security tab -> Report a vulnerability),
 or contact the maintainers directly. Do not open a public issue.
 `
 
-const defaultCodeowners = `# See https://docs.github.com/articles/about-codeowners for syntax.
+// codeownersFor returns a starter CODEOWNERS file assigning the repository
+// owner (user or organization login) as the default owner of all files.
+func codeownersFor(owner string) string {
+	return fmt.Sprintf(`# See https://docs.github.com/articles/about-codeowners for syntax.
 # Each line is a file pattern followed by one or more owners.
-*       @OWNER
-`
+*       @%s
+`, owner)
+}

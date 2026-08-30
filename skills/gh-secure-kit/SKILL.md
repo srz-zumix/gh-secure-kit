@@ -2195,6 +2195,9 @@ gh secure-kit recommended check --fixable-only --exit-code
 # Check only specific rules, ignoring others
 gh secure-kit recommended check --rule GSK101 --rule GSK102
 gh secure-kit recommended check --ignore GSK105
+
+# Only show failing findings
+gh secure-kit recommended check --status fail
 ```
 
 **Flags:**
@@ -2210,6 +2213,7 @@ gh secure-kit recommended check --ignore GSK105
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (checks repository-scoped rules) |
 | `--rule` | | | Only evaluate the given rule ID (can be specified multiple times); default: all rules |
 | `--severity` | | `""` | Only show findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--status` | | `""` | Only show findings with this status {pass\|fail\|skip} |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### Apply fixes for failing recommendations (gh secure-kit recommended apply)
@@ -2219,7 +2223,7 @@ gh secure-kit recommended apply --repo <owner/repo> [flags]
 gh secure-kit recommended apply --owner <org> [flags]
 ```
 
-Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Rules without an automated fix are reported but left untouched. Refuses to run when `--read-only` is set.
+Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Rules without an automated fix are reported but left untouched. Use `--dryrun` to report which fixes would be applied without changing anything. Refuses to run when `--read-only` is set, unless `--dryrun` is also given.
 
 ```sh
 # Apply all fixable recommendations to the current repository
@@ -2233,12 +2237,16 @@ gh secure-kit recommended apply --owner octo-org
 
 # Apply the fix for a single rule only
 gh secure-kit recommended apply --rule GSK503
+
+# Show what would be applied, without changing anything
+gh secure-kit recommended apply --dryrun
 ```
 
 **Flags:**
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
+| `--dryrun` | `-n` | `false` | Report which fixes would be applied without changing anything |
 | `--format` | | | Output format: {json} |
 | `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |

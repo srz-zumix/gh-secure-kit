@@ -128,6 +128,7 @@ func RenderRules(exporter cmdutil.Exporter, rules []Rule) error {
 type applyResultJSON struct {
 	resultJSON
 	Applied bool   `json:"applied"`
+	DryRun  bool   `json:"dry_run"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -138,7 +139,7 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult) error 
 	if r.HasExporter() {
 		data := make([]applyResultJSON, 0, len(results))
 		for _, res := range results {
-			entry := applyResultJSON{resultJSON: newResultJSON(res.Result), Applied: res.Applied}
+			entry := applyResultJSON{resultJSON: newResultJSON(res.Result), Applied: res.Applied, DryRun: res.DryRun}
 			if res.Error != nil {
 				entry.Error = res.Error.Error()
 			}
@@ -157,6 +158,8 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult) error 
 		if res.Status == StatusFail && res.Rule.Fixable {
 			if res.Error != nil {
 				applied = "error: " + res.Error.Error()
+			} else if res.Applied && res.DryRun {
+				applied = "would apply"
 			} else if res.Applied {
 				applied = "true"
 			} else {

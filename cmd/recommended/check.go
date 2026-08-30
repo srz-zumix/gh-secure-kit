@@ -16,6 +16,7 @@ func NewCheckCmd() *cobra.Command {
 	var owner string
 	var repo string
 	var severity string
+	var status string
 	var ruleIDs []string
 	var ignoreIDs []string
 	var fixableOnly bool
@@ -68,6 +69,16 @@ Use --owner to check an organization against organization-scoped rules.
 				}
 			}
 
+			if status != "" {
+				filtered := make([]recommended.Result, 0, len(results))
+				for _, res := range results {
+					if string(res.Status) == status {
+						filtered = append(filtered, res)
+					}
+				}
+				results = filtered
+			}
+
 			if err := recommended.RenderResults(exporter, results); err != nil {
 				return fmt.Errorf("failed to render results: %w", err)
 			}
@@ -86,6 +97,7 @@ Use --owner to check an organization against organization-scoped rules.
 	f.StringVarP(&owner, "owner", "o", "", "The organization name (checks organization-scoped rules)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo' (checks repository-scoped rules)")
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only show findings at or above this severity")
+	cmdutil.StringEnumFlag(cmd, &status, "status", "", "", recommended.Statuses, "Only show findings with this status")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only evaluate the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
 	f.BoolVar(&fixableOnly, "fixable-only", false, "Only show rules that can be fixed with 'recommended apply'")
