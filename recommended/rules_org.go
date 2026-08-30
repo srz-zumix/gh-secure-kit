@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
-	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 )
 
@@ -35,7 +34,7 @@ func registerOrganizationRules() {
 			return Fail("web-based commit signoff is not required")
 		},
 		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
-			_, err := gh.EditOrg(ctx, g, repo, &github.Organization{WebCommitSignoffRequired: github.Ptr(true)})
+			_, err := gh.SetOrgWebCommitSignoffRequired(ctx, g, repo, true)
 			return err
 		},
 	})
@@ -66,7 +65,7 @@ func registerOrganizationRules() {
 			return Pass("members are not allowed to create public repositories")
 		},
 		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
-			_, err := gh.EditOrg(ctx, g, repo, &github.Organization{MembersCanCreatePublicRepos: github.Ptr(false)})
+			_, err := gh.SetOrgMembersCanCreatePublicRepos(ctx, g, repo, false)
 			return err
 		},
 	})
@@ -89,15 +88,13 @@ func registerOrganizationRules() {
 			if f.ActionsPermissions == nil {
 				return Skip("could not retrieve Actions permissions for the organization")
 			}
-			if f.ActionsPermissions.GetAllowedActions() == "all" {
+			if f.ActionsPermissions.GetAllowedActions() == gh.OrgAllowedActionsAll {
 				return Fail("all GitHub Actions, including third-party actions, are allowed to run")
 			}
 			return Pass(fmt.Sprintf("allowed actions are restricted (%q)", f.ActionsPermissions.GetAllowedActions()))
 		},
 		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
-			_, err := gh.UpdateOrgActionsPermissions(ctx, g, repo, github.ActionsPermissions{
-				AllowedActions: github.Ptr("selected"),
-			})
+			_, err := gh.SetOrgAllowedActions(ctx, g, repo, gh.OrgAllowedActionsSelected)
 			return err
 		},
 	})

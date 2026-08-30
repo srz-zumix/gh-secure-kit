@@ -13,7 +13,7 @@ catalog with severity, scope, and fixability.
 
 | Rule | Severity | Fixable | Title |
 |---|---|---|---|
-| [GSK101](GSK101.md) | Critical/High | Yes | Dependabot alerts not enabled |
+| [GSK101](GSK101.md) | High | Yes | Dependabot alerts not enabled |
 | [GSK102](GSK102.md) | Medium | No | Dependabot enabled but no dependabot.yml found |
 | [GSK103](GSK103.md) | Low | Yes | No SECURITY.md file found |
 | [GSK104](GSK104.md) | Medium | Yes | No CODEOWNERS file found |

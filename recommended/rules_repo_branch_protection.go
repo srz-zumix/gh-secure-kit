@@ -1,19 +1,100 @@
 package recommended
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+	"strings"
+
+	"github.com/google/go-github/v90/github"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+)
 
 func init() {
 	registerBranchProtectionRules()
 }
 
-// hasActiveRuleset reports whether any active ruleset targets the given branch.
-func hasActiveRuleset(f *RepositoryFacts) bool {
+// activeRulesetProtectsDefaultBranch reports whether an active branch ruleset
+// actually targets (and imposes at least one rule on) the repository's default
+// branch. A ruleset that only targets other branches, or that carries no rules,
+// does not count as default-branch protection.
+func activeRulesetProtectsDefaultBranch(f *RepositoryFacts) bool {
+	branch := f.Repo.GetDefaultBranch()
 	for _, rs := range f.Rulesets {
-		if rs.GetEnforcement() == "active" {
+		if rs.GetEnforcement() != "active" {
+			continue
+		}
+		if t := rs.Target; t != nil && *t != github.RulesetTargetBranch {
+			continue
+		}
+		if !gh.HasAnyRulesetRule(rs.Rules) {
+			continue
+		}
+		if rulesetTargetsBranch(rs.Conditions, branch) {
 			return true
 		}
 	}
 	return false
+}
+
+// rulesetTargetsBranch reports whether a ruleset's ref-name conditions include
+// the given branch and do not exclude it.
+func rulesetTargetsBranch(conditions *github.RepositoryRulesetConditions, branch string) bool {
+	if conditions == nil || conditions.RefName == nil {
+		return false
+	}
+	ref := conditions.RefName
+	for _, pattern := range ref.Exclude {
+		if matchRefPattern(pattern, branch) {
+			return false
+		}
+	}
+	for _, pattern := range ref.Include {
+		if matchRefPattern(pattern, branch) {
+			return true
+		}
+	}
+	return false
+}
+
+// matchRefPattern reports whether a ruleset ref-name pattern matches the given
+// branch. It understands the "~ALL" and "~DEFAULT_BRANCH" tokens (the branch is
+// always the default branch here) and matches fnmatch-style patterns against the
+// full "refs/heads/<branch>" ref.
+func matchRefPattern(pattern, branch string) bool {
+	switch pattern {
+	case "~ALL", "~DEFAULT_BRANCH":
+		return true
+	}
+	re, err := fnmatchToRegexp(pattern)
+	if err != nil {
+		return false
+	}
+	return re.MatchString("refs/heads/" + branch)
+}
+
+// fnmatchToRegexp converts a GitHub ruleset fnmatch pattern into a regexp. "**"
+// matches across path separators, "*" matches within a segment, and "?" matches
+// a single non-separator character; every other character is matched literally.
+func fnmatchToRegexp(pattern string) (*regexp.Regexp, error) {
+	var b strings.Builder
+	b.WriteString("^")
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '*':
+			if i+1 < len(pattern) && pattern[i+1] == '*' {
+				b.WriteString(".*")
+				i++
+			} else {
+				b.WriteString("[^/]*")
+			}
+		case '?':
+			b.WriteString("[^/]")
+		default:
+			b.WriteString(regexp.QuoteMeta(pattern[i : i+1]))
+		}
+	}
+	b.WriteString("$")
+	return regexp.Compile(b.String())
 }
 
 func registerBranchProtectionRules() {
@@ -21,8 +102,13 @@ func registerBranchProtectionRules() {
 		ID: "GSK110", GHQRID: "repo-bp-001", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection != nil || hasActiveRuleset(f) {
+			if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
 				return Pass("default branch is protected by a branch protection rule or ruleset")
+			}
+			// Only fail when both protection sources were determined; otherwise
+			// the branch may be protected in a way that could not be read.
+			if !f.ProtectionKnown || !f.RulesetsKnown {
+				return Skip("could not determine branch protection or ruleset status for the default branch")
 			}
 			return Fail("default branch has no branch protection rule or ruleset")
 		},

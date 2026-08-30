@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
-	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 )
 
@@ -38,10 +37,16 @@ func registerRepositorySecurityRules() {
 		ID: "GSK102", GHQRID: "repo-sec-006", Scope: ScopeRepository,
 		Category: "security", Severity: SeverityMedium, Title: "Dependabot enabled but no dependabot.yml found",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.VulnerabilityAlerts != nil && f.VulnerabilityAlerts.Enabled && !f.HasDependabotYML {
+			if f.VulnerabilityAlerts == nil || !f.VulnerabilityAlerts.Enabled {
+				return Pass(".github/dependabot.yml found, or Dependabot alerts are disabled")
+			}
+			if f.HasDependabotYML == nil {
+				return Skip("could not determine whether a dependabot.yml file exists")
+			}
+			if !*f.HasDependabotYML {
 				return Fail("no .github/dependabot.yml found; automated version update PRs are not configured")
 			}
-			return Pass(".github/dependabot.yml found, or Dependabot alerts are disabled")
+			return Pass(".github/dependabot.yml found")
 		},
 	})
 
@@ -49,7 +54,10 @@ func registerRepositorySecurityRules() {
 		ID: "GSK103", GHQRID: "repo-sec-004", Scope: ScopeRepository,
 		Category: "security", Severity: SeverityLow, Title: "No SECURITY.md file found", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.HasSecurityMD {
+			if f.HasSecurityMD == nil {
+				return Skip("could not determine whether a SECURITY.md file exists")
+			}
+			if *f.HasSecurityMD {
 				return Pass("SECURITY.md found")
 			}
 			return Fail("no SECURITY.md found")
@@ -157,7 +165,10 @@ func registerRepositoryAccessRules() {
 		ID: "GSK104", GHQRID: "repo-sec-005", Scope: ScopeRepository,
 		Category: "access_control", Severity: SeverityMedium, Title: "No CODEOWNERS file found", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.HasCodeowners {
+			if f.HasCodeowners == nil {
+				return Skip("could not determine whether a CODEOWNERS file exists")
+			}
+			if *f.HasCodeowners {
 				return Pass("CODEOWNERS found")
 			}
 			return Fail("no CODEOWNERS found")
@@ -261,7 +272,7 @@ func registerRepositoryMetadataRules() {
 			return Fail("auto-delete branches on merge is disabled")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
-			_, err := gh.EditRepository(ctx, g, repo, &github.Repository{DeleteBranchOnMerge: github.Ptr(true)})
+			_, err := gh.SetDeleteBranchOnMerge(ctx, g, repo, true)
 			return err
 		},
 	})
@@ -276,7 +287,7 @@ func registerRepositoryMetadataRules() {
 			return Fail("both Issues and Discussions are disabled")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
-			_, err := gh.EditRepository(ctx, g, repo, &github.Repository{HasIssues: github.Ptr(true)})
+			_, err := gh.EnableIssues(ctx, g, repo)
 			return err
 		},
 	})
