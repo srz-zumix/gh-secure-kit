@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 // Scanner detects secrets within fragments using a set of patterns and an
@@ -135,10 +137,22 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug("scanning fragments", "fragments", len(fragments), "patterns", len(scanner.Patterns))
 	var findings []Finding
+	commits := make(map[string]struct{})
+	files := make(map[string]struct{})
 	for _, frag := range fragments {
-		findings = append(findings, scanner.ScanFragment(frag)...)
+		fragFindings := scanner.ScanFragment(frag)
+		logger.Debug("scanned fragment", "commit", frag.CommitSHA, "file", frag.FilePath, "base_line", frag.BaseLine, "findings", len(fragFindings))
+		if frag.CommitSHA != "" {
+			commits[frag.CommitSHA] = struct{}{}
+		}
+		if frag.FilePath != "" {
+			files[frag.FilePath] = struct{}{}
+		}
+		findings = append(findings, fragFindings...)
 	}
+	logger.Debug("scan completed", "commits", len(commits), "files", len(files), "findings", len(findings))
 	return findings, nil
 }
 

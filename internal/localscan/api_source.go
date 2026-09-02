@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/go-git/go-git/v5"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -29,15 +31,14 @@ var hunkHeaderRe = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
 type APISource struct {
 	ctx    context.Context
 	target Target
-	owner  string
 	repo   string
 }
 
-// NewAPISource creates an APISource for the given target. owner and repo may
-// be empty, in which case the repository is resolved from the current
-// directory's git remotes.
-func NewAPISource(ctx context.Context, t Target, owner, repo string) *APISource {
-	return &APISource{ctx: ctx, target: t, owner: owner, repo: repo}
+// NewAPISource creates an APISource for the given target. repo may be empty,
+// in which case the repository is resolved from the git remotes of the target
+// path (--path).
+func NewAPISource(ctx context.Context, t Target, repo string) *APISource {
+	return &APISource{ctx: ctx, target: t, repo: repo}
 }
 
 // Fragments implements Source.
@@ -49,7 +50,7 @@ func (s *APISource) Fragments() ([]Fragment, error) {
 		return nil, fmt.Errorf("max-commits must be zero or positive, got %d", s.target.MaxCommits)
 	}
 
-	repo, err := parser.Repository(parser.RepositoryInput(s.repo), parser.RepositoryOwner(s.owner))
+	repo, err := s.resolveRepository()
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine the repository to read through the GitHub API: %w", err)
 	}
@@ -62,6 +63,7 @@ func (s *APISource) Fragments() ([]Fragment, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug("scanning commits through the GitHub API", "repository", repo.Owner+"/"+repo.Name, "rev-range", s.target.RevRange, "commits", len(shas))
 
 	var frags []Fragment
 	for _, sha := range shas {
@@ -78,6 +80,34 @@ func (s *APISource) Fragments() ([]Fragment, error) {
 	return frags, nil
 }
 
+// resolveRepository determines the GitHub repository whose commits the API
+// should read. An explicit --repo wins; otherwise the repository is taken from
+// the git remotes of the scanned path (--path), not the current working
+// directory. When --path points inside a repository, its work-tree root is
+// used so remote resolution still succeeds.
+func (s *APISource) resolveRepository() (repository.Repository, error) {
+	opts := []parser.RepositoryOption{parser.RepositoryInput(s.repo)}
+	if root, err := gitWorktreeRoot(s.target.RepoPath); err == nil {
+		opts = append(opts, parser.RepositoryInputOptional(root))
+	}
+	return parser.Repository(opts...)
+}
+
+// gitWorktreeRoot returns the work-tree root of the git repository that
+// contains path, so remote resolution targets the scanned repository even when
+// path is a subdirectory.
+func gitWorktreeRoot(path string) (string, error) {
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return "", err
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return "", err
+	}
+	return wt.Filesystem.Root(), nil
+}
+
 // commitSHAs lists the commits the range covers, oldest first.
 func (s *APISource) commitSHAs(client *gh.GitHubClient, repo repository.Repository) ([]string, error) {
 	from, to, explicit, err := splitRevRange(s.target.RevRange)
@@ -92,7 +122,7 @@ func (s *APISource) commitSHAs(client *gh.GitHubClient, repo repository.Reposito
 
 	comparison, err := gh.CompareCommits(s.ctx, client, repo, from, to)
 	if err != nil {
-		return nil, fmt.Errorf("failed to compare %s...%s through the GitHub API: %w", from, to, err)
+		return nil, fmt.Errorf("failed to compare %s..%s through the GitHub API: %w", from, to, err)
 	}
 	commits := comparison.Commits
 	if total := comparison.GetTotalCommits(); total > len(commits) {

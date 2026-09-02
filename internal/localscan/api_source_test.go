@@ -65,7 +65,7 @@ func TestFragmentsForAPICommitSkipsBinaryFile(t *testing.T) {
 }
 
 func TestAPISourceRejectsUnsupportedTarget(t *testing.T) {
-	source := NewAPISource(t.Context(), Target{Mode: TargetUncommitted}, "", "")
+	source := NewAPISource(t.Context(), Target{Mode: TargetUncommitted}, "")
 
 	if _, err := source.Fragments(); err == nil {
 		t.Fatal("expected an error for a target the GitHub API cannot scan")

@@ -1,6 +1,7 @@
 package localscan
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -337,5 +338,76 @@ func TestGitSourceRemoteScopesExclusionToDestination(t *testing.T) {
 	}
 	if hasFile(frags, "base.txt") {
 		t.Errorf("origin content should be excluded, got %+v", frags)
+	}
+}
+
+// TestGitSourceReportsLocalContentMissing verifies that GitSource wraps
+// ErrLocalContentMissing whenever the local repository cannot answer the
+// request, so FallbackSource can switch to the GitHub API.
+func TestGitSourceReportsLocalContentMissing(t *testing.T) {
+	t.Run("no repository", func(t *testing.T) {
+		dir := t.TempDir()
+		src := NewGitSource(Target{Mode: TargetUnpushed, RepoPath: dir, MaxCommits: 100})
+		_, err := src.Fragments()
+		if !errors.Is(err, ErrLocalContentMissing) {
+			t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+		}
+	})
+
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "README.md", "hello\n", "initial commit")
+
+	revRangeCases := []struct {
+		name     string
+		revRange string
+	}{
+		{name: "missing range end", revRange: "HEAD..does-not-exist"},
+		{name: "missing explicit range start", revRange: "does-not-exist..HEAD"},
+	}
+	for _, tc := range revRangeCases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: dir, RevRange: tc.revRange, MaxCommits: 100})
+			_, err := src.Fragments()
+			if !errors.Is(err, ErrLocalContentMissing) {
+				t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+			}
+		})
+	}
+}
+
+// TestGitSourceShallowCheckoutReportsLocalContentMissing verifies that a
+// commit whose parent is absent in a shallow checkout is reported as missing
+// local content rather than surfacing as an unrelated error.
+func TestGitSourceShallowCheckoutReportsLocalContentMissing(t *testing.T) {
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "base.txt", "base\n", "base commit")
+	commitFile(t, repo, dir, "top.txt", "top\n", "top commit")
+	if err := repo.Push(&git.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("failed to push commits: %v", err)
+	}
+
+	remoteURL := ""
+	remotes, err := repo.Remotes()
+	if err != nil {
+		t.Fatalf("failed to list remotes: %v", err)
+	}
+	for _, r := range remotes {
+		if r.Config().Name == "origin" {
+			remoteURL = r.Config().URLs[0]
+		}
+	}
+
+	shallowDir := t.TempDir()
+	if _, err := git.PlainClone(shallowDir, false, &git.CloneOptions{
+		URL:   remoteURL,
+		Depth: 1,
+	}); err != nil {
+		t.Fatalf("failed to shallow clone: %v", err)
+	}
+
+	// Scanning "HEAD" needs "HEAD^", which is beyond the shallow boundary.
+	src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: shallowDir, RevRange: "HEAD", MaxCommits: 100})
+	if _, err := src.Fragments(); !errors.Is(err, ErrLocalContentMissing) {
+		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
 	}
 }

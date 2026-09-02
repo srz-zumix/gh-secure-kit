@@ -1,6 +1,10 @@
 package localscan
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
+)
 
 // FallbackSource scans with Primary, switching to Fallback when the local
 // repository does not hold the requested content, for example in a shallow CI
@@ -21,5 +25,6 @@ func (s *FallbackSource) Fragments() ([]Fragment, error) {
 	if err == nil || !errors.Is(err, ErrLocalContentMissing) {
 		return frags, err
 	}
+	logger.Debug("content missing from the local repository, falling back to the remote source", "error", err)
 	return s.Fallback.Fragments()
 }
