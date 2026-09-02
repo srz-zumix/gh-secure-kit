@@ -38,7 +38,7 @@ func registerRepositorySecurityRules() {
 		Category: "security", Severity: SeverityMedium, Title: "Dependabot enabled but no dependabot.yml found",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.VulnerabilityAlerts == nil || !f.VulnerabilityAlerts.Enabled {
-				return Pass(".github/dependabot.yml found, or Dependabot alerts are disabled")
+				return Pass("Dependabot alerts are disabled; skipping dependabot.yml check")
 			}
 			if f.HasDependabotYML == nil {
 				return Skip("could not determine whether a dependabot.yml file exists")
