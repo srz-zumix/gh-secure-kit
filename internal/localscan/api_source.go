@@ -10,6 +10,7 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
@@ -81,31 +82,84 @@ func (s *APISource) Fragments() ([]Fragment, error) {
 }
 
 // resolveRepository determines the GitHub repository whose commits the API
-// should read. An explicit --repo wins; otherwise the repository is taken from
-// the git remotes of the scanned path (--path), not the current working
-// directory. When --path points inside a repository, its work-tree root is
-// used so remote resolution still succeeds.
+// should read. An explicit --repo wins; otherwise the repository is resolved
+// from the git remotes of the scanned path (--path). It never falls back to
+// the current working directory or environment, so it cannot silently scan an
+// unrelated repository; if the path has no usable remote, it returns an error
+// asking for --repo.
 func (s *APISource) resolveRepository() (repository.Repository, error) {
-	opts := []parser.RepositoryOption{parser.RepositoryInput(s.repo)}
-	if root, err := gitWorktreeRoot(s.target.RepoPath); err == nil {
-		opts = append(opts, parser.RepositoryInputOptional(root))
+	if s.repo != "" {
+		return parser.Repository(parser.RepositoryInput(s.repo))
 	}
-	return parser.Repository(opts...)
+	return repositoryFromPath(s.target.RepoPath)
 }
 
-// gitWorktreeRoot returns the work-tree root of the git repository that
-// contains path, so remote resolution targets the scanned repository even when
-// path is a subdirectory.
-func gitWorktreeRoot(path string) (string, error) {
+// repositoryFromPath resolves the GitHub repository from the remotes of the
+// git repository that contains path. "origin" is preferred, otherwise the
+// first configured remote is used. It reads the config directly, so it works
+// for bare repositories and linked worktrees and does not depend on the
+// current working directory.
+func repositoryFromPath(path string) (repository.Repository, error) {
 	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
 	if err != nil {
-		return "", err
+		return repository.Repository{}, fmt.Errorf("failed to open the git repository at %q: %w", path, err)
 	}
-	wt, err := repo.Worktree()
+	remotes, err := repo.Remotes()
 	if err != nil {
-		return "", err
+		return repository.Repository{}, fmt.Errorf("failed to read the remotes of the git repository at %q: %w", path, err)
 	}
-	return wt.Filesystem.Root(), nil
+	remoteURL := selectRemoteURL(remotes)
+	if remoteURL == "" {
+		return repository.Repository{}, fmt.Errorf("the git repository at %q has no remote to resolve the GitHub repository from; pass --repo", path)
+	}
+	ep, err := transport.NewEndpoint(remoteURL)
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to parse the remote URL %q: %w", remoteURL, err)
+	}
+	if ep.Host == "" {
+		return repository.Repository{}, fmt.Errorf("the remote URL %q does not point at a GitHub host; pass --repo", remoteURL)
+	}
+	owner, name, err := ownerRepoFromRemotePath(ep.Path)
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to determine owner/repo from the remote URL %q: %w", remoteURL, err)
+	}
+	return repository.Repository{Host: ep.Host, Owner: owner, Name: name}, nil
+}
+
+// selectRemoteURL returns the URL of the "origin" remote, or the first
+// configured remote when there is no "origin".
+func selectRemoteURL(remotes []*git.Remote) string {
+	first := ""
+	for _, r := range remotes {
+		cfg := r.Config()
+		if len(cfg.URLs) == 0 {
+			continue
+		}
+		if cfg.Name == "origin" {
+			return cfg.URLs[0]
+		}
+		if first == "" {
+			first = cfg.URLs[0]
+		}
+	}
+	return first
+}
+
+// ownerRepoFromRemotePath extracts the owner and repository name from the path
+// component of a remote URL, tolerating a leading slash and a ".git" suffix.
+func ownerRepoFromRemotePath(p string) (owner, name string, err error) {
+	p = strings.TrimPrefix(p, "/")
+	p = strings.TrimSuffix(p, ".git")
+	parts := strings.Split(p, "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("unexpected remote path %q", p)
+	}
+	owner = parts[len(parts)-2]
+	name = parts[len(parts)-1]
+	if owner == "" || name == "" {
+		return "", "", fmt.Errorf("unexpected remote path %q", p)
+	}
+	return owner, name, nil
 }
 
 // commitSHAs lists the commits the range covers, oldest first.

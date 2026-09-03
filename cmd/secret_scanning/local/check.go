@@ -118,9 +118,9 @@ Exits with status 1 if any secret is found.`,
 				return err
 			}
 
-			// --owner and --repo are also used for the API repository and the
-			// pattern configuration, so the pattern configuration needs its
-			// own opt-in.
+			// --repo is also used to select the repository read through the
+			// API, and --owner/--repo for the pattern configuration, so the
+			// pattern configuration needs its own opt-in.
 			if usePatternCfg {
 				if err := applyPatternConfig(cmd, scanner, owner, repo); err != nil {
 					return err

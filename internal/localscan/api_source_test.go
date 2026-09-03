@@ -2,9 +2,13 @@ package localscan
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/google/go-github/v90/github"
 )
 
@@ -70,6 +74,93 @@ func TestAPISourceRejectsUnsupportedTarget(t *testing.T) {
 	if _, err := source.Fragments(); err == nil {
 		t.Fatal("expected an error for a target the GitHub API cannot scan")
 	}
+}
+
+// repoWithRemote creates a git repository at a temp dir with a single "origin"
+// remote pointing at remoteURL, and returns the repository path.
+func repoWithRemote(t *testing.T, remoteURL string) string {
+	t.Helper()
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatalf("failed to init repo: %v", err)
+	}
+	if remoteURL != "" {
+		if _, err := repo.CreateRemote(&config.RemoteConfig{Name: "origin", URLs: []string{remoteURL}}); err != nil {
+			t.Fatalf("failed to create remote: %v", err)
+		}
+	}
+	return dir
+}
+
+func TestAPISourceResolveRepository(t *testing.T) {
+	t.Run("repo flag wins over path remote", func(t *testing.T) {
+		dir := repoWithRemote(t, "https://github.com/octocat/Hello-World.git")
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "me/mine")
+		repo, err := s.resolveRepository()
+		if err != nil {
+			t.Fatalf("resolveRepository() error = %v", err)
+		}
+		if repo.Owner != "me" || repo.Name != "mine" {
+			t.Fatalf("got %s/%s, want me/mine", repo.Owner, repo.Name)
+		}
+	})
+
+	t.Run("inferred from https path remote", func(t *testing.T) {
+		dir := repoWithRemote(t, "https://github.com/octocat/Hello-World.git")
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "")
+		repo, err := s.resolveRepository()
+		if err != nil {
+			t.Fatalf("resolveRepository() error = %v", err)
+		}
+		if repo.Host != "github.com" || repo.Owner != "octocat" || repo.Name != "Hello-World" {
+			t.Fatalf("got %s/%s/%s, want github.com/octocat/Hello-World", repo.Host, repo.Owner, repo.Name)
+		}
+	})
+
+	t.Run("inferred from ssh path remote", func(t *testing.T) {
+		dir := repoWithRemote(t, "git@github.com:octocat/Hello-World.git")
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "")
+		repo, err := s.resolveRepository()
+		if err != nil {
+			t.Fatalf("resolveRepository() error = %v", err)
+		}
+		if repo.Host != "github.com" || repo.Owner != "octocat" || repo.Name != "Hello-World" {
+			t.Fatalf("got %s/%s/%s, want github.com/octocat/Hello-World", repo.Host, repo.Owner, repo.Name)
+		}
+	})
+
+	t.Run("inferred from a subdirectory of the repository", func(t *testing.T) {
+		dir := repoWithRemote(t, "https://github.com/octocat/Hello-World.git")
+		sub := filepath.Join(dir, "nested", "deeper")
+		if err := os.MkdirAll(sub, 0o755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: sub}, "")
+		repo, err := s.resolveRepository()
+		if err != nil {
+			t.Fatalf("resolveRepository() error = %v", err)
+		}
+		if repo.Owner != "octocat" || repo.Name != "Hello-World" {
+			t.Fatalf("got %s/%s, want octocat/Hello-World", repo.Owner, repo.Name)
+		}
+	})
+
+	t.Run("no remote fails instead of guessing", func(t *testing.T) {
+		dir := repoWithRemote(t, "")
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "")
+		if _, err := s.resolveRepository(); err == nil {
+			t.Fatal("expected an error when the path has no remote")
+		}
+	})
+
+	t.Run("non-git path fails instead of using CWD", func(t *testing.T) {
+		dir := t.TempDir()
+		s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "")
+		if _, err := s.resolveRepository(); err == nil {
+			t.Fatal("expected an error when the path is not a git repository")
+		}
+	})
 }
 
 type stubSource struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -375,10 +376,40 @@ func TestGitSourceReportsLocalContentMissing(t *testing.T) {
 	}
 }
 
-// TestGitSourceShallowCheckoutReportsLocalContentMissing verifies that a
-// commit whose parent is absent in a shallow checkout is reported as missing
-// local content rather than surfacing as an unrelated error.
+// TestGitSourceShallowCheckoutReportsLocalContentMissing verifies that when a
+// revision cannot be resolved because its commit lies beyond the shallow
+// boundary, GitSource reports missing local content rather than an unrelated
+// error. Scanning "HEAD" needs "HEAD^", which is absent in a depth-1 clone.
 func TestGitSourceShallowCheckoutReportsLocalContentMissing(t *testing.T) {
+	_, shallowDir := newShallowClone(t)
+
+	src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: shallowDir, RevRange: "HEAD", MaxCommits: 100})
+	if _, err := src.Fragments(); !errors.Is(err, ErrLocalContentMissing) {
+		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+	}
+}
+
+// TestCollectCommitsReportsLocalContentMissing covers the commit-walk branch:
+// a commit whose ancestor object is absent (a shallow checkout) is reported as
+// missing local content instead of surfacing the raw object-not-found error.
+func TestCollectCommitsReportsLocalContentMissing(t *testing.T) {
+	repo, _ := newShallowClone(t)
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("failed to resolve HEAD: %v", err)
+	}
+	// Walk from HEAD with an empty exclusion set, so the walk crosses the
+	// shallow boundary into the missing parent object.
+	_, _, err = collectCommits(repo, head.Hash(), map[plumbing.Hash]bool{}, 100)
+	if !errors.Is(err, ErrLocalContentMissing) {
+		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+	}
+}
+
+// newShallowClone pushes two commits to a bare remote and returns a depth-1
+// clone of it, so the HEAD commit is present but its parent is not.
+func newShallowClone(t *testing.T) (*git.Repository, string) {
+	t.Helper()
 	repo, dir := newTestRepo(t)
 	commitFile(t, repo, dir, "base.txt", "base\n", "base commit")
 	commitFile(t, repo, dir, "top.txt", "top\n", "top commit")
@@ -398,16 +429,12 @@ func TestGitSourceShallowCheckoutReportsLocalContentMissing(t *testing.T) {
 	}
 
 	shallowDir := t.TempDir()
-	if _, err := git.PlainClone(shallowDir, false, &git.CloneOptions{
+	shallow, err := git.PlainClone(shallowDir, false, &git.CloneOptions{
 		URL:   remoteURL,
 		Depth: 1,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("failed to shallow clone: %v", err)
 	}
-
-	// Scanning "HEAD" needs "HEAD^", which is beyond the shallow boundary.
-	src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: shallowDir, RevRange: "HEAD", MaxCommits: 100})
-	if _, err := src.Fragments(); !errors.Is(err, ErrLocalContentMissing) {
-		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
-	}
+	return shallow, shallowDir
 }
