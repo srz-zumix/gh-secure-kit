@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/google/go-github/v90/github"
@@ -161,6 +162,79 @@ func TestAPISourceResolveRepository(t *testing.T) {
 			t.Fatal("expected an error when the path is not a git repository")
 		}
 	})
+}
+
+func TestAPISourceAPIRef(t *testing.T) {
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "a.txt", "a\n", "first")
+	commitFile(t, repo, dir, "b.txt", "b\n", "second")
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("failed to resolve HEAD: %v", err)
+	}
+	headSHA := head.Hash().String()
+
+	s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir}, "")
+
+	t.Run("resolves HEAD to the local checkout SHA", func(t *testing.T) {
+		got, err := s.apiRef("HEAD")
+		if err != nil {
+			t.Fatalf("apiRef(HEAD) error = %v", err)
+		}
+		if got != headSHA {
+			t.Fatalf("apiRef(HEAD) = %q, want %q", got, headSHA)
+		}
+	})
+
+	t.Run("resolves HEAD^ to a local SHA", func(t *testing.T) {
+		got, err := s.apiRef("HEAD^")
+		if err != nil {
+			t.Fatalf("apiRef(HEAD^) error = %v", err)
+		}
+		if got == headSHA || len(got) != 40 {
+			t.Fatalf("apiRef(HEAD^) = %q, want the parent SHA", got)
+		}
+	})
+
+	t.Run("rejects an unresolvable git-only revspec", func(t *testing.T) {
+		// A repository with no such ref cannot resolve "HEAD~5" locally, and
+		// the API cannot address it either.
+		if _, err := s.apiRef("HEAD~5"); err == nil {
+			t.Fatal("expected an error for an unresolvable git-only revspec")
+		}
+	})
+
+	t.Run("passes through an API-addressable ref", func(t *testing.T) {
+		// A full SHA that is not present locally is left for the API to resolve.
+		const remoteSHA = "0123456789abcdef0123456789abcdef01234567"
+		got, err := s.apiRef(remoteSHA)
+		if err != nil {
+			t.Fatalf("apiRef(remoteSHA) error = %v", err)
+		}
+		if got != remoteSHA {
+			t.Fatalf("apiRef(remoteSHA) = %q, want %q", got, remoteSHA)
+		}
+	})
+}
+
+func TestAPISourceCommitSHAsBareRevisionResolvesLocally(t *testing.T) {
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "a.txt", "a\n", "first")
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("failed to resolve HEAD: %v", err)
+	}
+
+	// A bare revision returns a single ref without any network call, so a nil
+	// client is fine here.
+	s := NewAPISource(t.Context(), Target{Mode: TargetRevRange, RepoPath: dir, RevRange: "HEAD"}, "")
+	shas, err := s.commitSHAs(nil, repository.Repository{})
+	if err != nil {
+		t.Fatalf("commitSHAs() error = %v", err)
+	}
+	if len(shas) != 1 || shas[0] != head.Hash().String() {
+		t.Fatalf("commitSHAs() = %v, want [%s]", shas, head.Hash().String())
+	}
 }
 
 type stubSource struct {

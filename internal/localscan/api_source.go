@@ -10,6 +10,7 @@ import (
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -45,7 +46,7 @@ func NewAPISource(ctx context.Context, t Target, repo string) *APISource {
 // Fragments implements Source.
 func (s *APISource) Fragments() ([]Fragment, error) {
 	if s.target.Mode != TargetRevRange {
-		return nil, fmt.Errorf("the GitHub API can only scan an explicit revision range, not the %q target", s.target.Mode)
+		return nil, fmt.Errorf("the GitHub API fallback is only supported with --rev-range, not the %q target", s.target.Mode)
 	}
 	if s.target.MaxCommits < 0 {
 		return nil, fmt.Errorf("max-commits must be zero or positive, got %d", s.target.MaxCommits)
@@ -169,12 +170,24 @@ func (s *APISource) commitSHAs(client *gh.GitHubClient, repo repository.Reposito
 		return nil, err
 	}
 	if !explicit {
+		toRef, err := s.apiRef(to)
+		if err != nil {
+			return nil, err
+		}
 		// A bare revision is a single commit, and the API already diffs it
 		// against its first parent.
-		return []string{to}, nil
+		return []string{toRef}, nil
 	}
 
-	comparison, err := gh.CompareCommits(s.ctx, client, repo, from, to)
+	fromRef, err := s.apiRef(from)
+	if err != nil {
+		return nil, err
+	}
+	toRef, err := s.apiRef(to)
+	if err != nil {
+		return nil, err
+	}
+	comparison, err := gh.CompareCommits(s.ctx, client, repo, fromRef, toRef)
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare %s..%s through the GitHub API: %w", from, to, err)
 	}
@@ -191,6 +204,32 @@ func (s *APISource) commitSHAs(client *gh.GitHubClient, repo repository.Reposito
 		shas = append(shas, c.GetSHA())
 	}
 	return shas, nil
+}
+
+// apiRef resolves ref to a commit the GitHub API can address. Git-only
+// revspecs (HEAD, HEAD^, HEAD~2, ...) and the local checkout's HEAD are first
+// resolved against the local repository at --path, so the API receives a
+// concrete SHA anchored to the checkout rather than, say, the default branch's
+// HEAD. A ref that cannot be resolved locally is passed through when the API
+// can address it directly (a SHA, branch, or tag), or rejected when it needs
+// local git interpretation.
+func (s *APISource) apiRef(ref string) (string, error) {
+	if repo, err := git.PlainOpenWithOptions(s.target.RepoPath, &git.PlainOpenOptions{DetectDotGit: true}); err == nil {
+		if h, err := repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
+			return h.String(), nil
+		}
+	}
+	if isLocalOnlyRevspec(ref) {
+		return "", fmt.Errorf("cannot resolve %q locally to read it through the GitHub API; pass an explicit commit SHA, branch, or tag", ref)
+	}
+	return ref, nil
+}
+
+// isLocalOnlyRevspec reports whether ref uses git revision syntax that only a
+// local repository can interpret, so it is not a ref the GitHub API can
+// address on its own.
+func isLocalOnlyRevspec(ref string) bool {
+	return ref == "HEAD" || strings.ContainsAny(ref, "^~") || strings.Contains(ref, "@{")
 }
 
 // fragmentsForAPICommit turns the added lines of a commit's diff into

@@ -153,7 +153,7 @@ Exits with status 1 if any secret is found.`,
 	f.StringVar(&revRange, "rev-range", "", `Scan an explicit revision range, in "A..B" or "B" form`)
 	f.StringVar(&rev, "rev", "", "With --unpushed, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook")
 	f.StringVar(&remote, "remote", "", "With --unpushed, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook")
-	f.BoolVar(&noAPI, "no-api", false, "Do not read commits that are missing from the local repository through the GitHub API")
+	f.BoolVar(&noAPI, "no-api", false, "Do not read commits that are missing from the local repository through the GitHub API (the fallback makes about one API request per commit, so large ranges can be slow or hit rate limits)")
 	f.BoolVar(&noGit, "no-git", false, "Scan files under --path directly, without using git")
 	cmd.MarkFlagsMutuallyExclusive("unpushed", "staged", "uncommitted", "rev-range", "no-git")
 

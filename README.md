@@ -1521,7 +1521,7 @@ The API cannot return a complete diff for every commit, so the scan fails instea
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
-| `--no-api` | | `false` | Do not read commits that are missing from the local repository through the GitHub API |
+| `--no-api` | | `false` | Do not read commits that are missing from the local repository through the GitHub API (the fallback makes about one API request per commit, so large ranges can be slow or hit rate limits) |
 | `--no-git` | | `false` | Scan files under `--path` directly, without using git |
 | `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
 | `--path` | `-C` | `"."` | The repository or directory path to scan |
