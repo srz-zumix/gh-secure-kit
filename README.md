@@ -1524,7 +1524,7 @@ The API cannot return a complete diff for every commit, so the scan fails instea
 | `--no-api` | | `false` | Do not read commits that are missing from the local repository through the GitHub API |
 | `--no-git` | | `false` | Scan files under `--path` directly, without using git |
 | `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
-| `--path` | | `"."` | The repository or directory path to scan |
+| `--path` | `-C` | `"."` | The repository or directory path to scan |
 | `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
 | `--remote` | | `""` | With `--unpushed`, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook |
 | `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` and to read commits through the GitHub API |
