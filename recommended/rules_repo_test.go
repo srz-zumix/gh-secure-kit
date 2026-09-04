@@ -106,3 +106,39 @@ func ruleIDs(rules []Rule) []string {
 	}
 	return ids
 }
+
+func TestFilterOnlyFixableControlsNonFixableInclusion(t *testing.T) {
+	rules := AllRules()
+
+	// Find a non-fixable rule to assert on.
+	var nonFixableID string
+	for _, r := range rules {
+		if !r.Fixable {
+			nonFixableID = r.ID
+			break
+		}
+	}
+	if nonFixableID == "" {
+		t.Skip("no non-fixable rule in the catalog")
+	}
+
+	// Default filter (as `recommended apply` now uses) must include
+	// non-fixable rules so they are evaluated and reported.
+	if !containsID(Filter{}.Apply(rules), nonFixableID) {
+		t.Fatalf("default filter dropped non-fixable rule %s", nonFixableID)
+	}
+
+	// OnlyFixable must still exclude them (used by `check --fixable-only`).
+	if containsID(Filter{OnlyFixable: true}.Apply(rules), nonFixableID) {
+		t.Fatalf("OnlyFixable filter kept non-fixable rule %s", nonFixableID)
+	}
+}
+
+func containsID(rules []Rule, id string) bool {
+	for _, r := range rules {
+		if r.ID == id {
+			return true
+		}
+	}
+	return false
+}

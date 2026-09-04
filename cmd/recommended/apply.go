@@ -52,7 +52,6 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 				MinSeverity: recommended.Severity(severity),
 				IDs:         ruleIDs,
 				IgnoreIDs:   ignoreIDs,
-				OnlyFixable: true,
 			}
 
 			ctx := cmd.Context()
@@ -82,8 +81,8 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 	f := cmd.Flags()
 	f.StringVarP(&owner, "owner", "o", "", "The organization name (applies organization-scoped fixes)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo' (applies repository-scoped fixes)")
-	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only fix findings at or above this severity")
-	f.StringArrayVar(&ruleIDs, "rule", nil, "Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules")
+	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only include findings at or above this severity")
+	f.StringArrayVar(&ruleIDs, "rule", nil, "Only include the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
 	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report which fixes would be applied without changing anything")
 	cmdutil.AddFormatFlags(cmd, &exporter)

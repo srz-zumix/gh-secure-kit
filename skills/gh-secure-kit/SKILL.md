@@ -2252,8 +2252,8 @@ gh secure-kit recommended apply --dryrun
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--owner` | `-o` | `""` | The organization name (applies organization-scoped fixes) |
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' (applies repository-scoped fixes) |
-| `--rule` | | | Only apply the fix for the given rule ID (can be specified multiple times); default: all fixable rules |
-| `--severity` | | `""` | Only fix findings at or above this severity {critical\|high\|medium\|low\|info} |
+| `--rule` | | | Only include the given rule ID (can be specified multiple times); default: all rules |
+| `--severity` | | `""` | Only include findings at or above this severity {critical\|high\|medium\|low\|info} |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
 ### List the catalog of recommended rules (gh secure-kit recommended list)

@@ -1,7 +1,8 @@
 # Recommended Rules
 
-This directory documents every rule evaluated by `gh secure-kit recommended
-check` / `recommended apply`, similar in spirit to [ShellCheck's wiki
+This directory documents every rule evaluated by
+`gh secure-kit recommended check` / `gh secure-kit recommended apply`,
+similar in spirit to [ShellCheck's wiki
 pages](https://www.shellcheck.net/wiki/). Each rule's ID also links to the
 equivalent [microsoft/ghqr](https://github.com/microsoft/ghqr) rule, if any.
 

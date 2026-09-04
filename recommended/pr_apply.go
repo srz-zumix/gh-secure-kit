@@ -39,7 +39,7 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
 		}
 		if _, getErr := gh.GetRepositoryFileContent(ctx, g, repo, path, &branch); getErr != nil {
-			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
+			return fmt.Errorf("creating %s on branch %q returned %v; verifying whether the file already exists failed: %w", path, branchName, err, getErr)
 		}
 	}
 

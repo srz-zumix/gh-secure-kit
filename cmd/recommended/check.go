@@ -69,6 +69,7 @@ Use --owner to check an organization against organization-scoped rules.
 				}
 			}
 
+			displayed := results
 			if status != "" {
 				filtered := make([]recommended.Result, 0, len(results))
 				for _, res := range results {
@@ -76,13 +77,15 @@ Use --owner to check an organization against organization-scoped rules.
 						filtered = append(filtered, res)
 					}
 				}
-				results = filtered
+				displayed = filtered
 			}
 
-			if err := recommended.RenderResults(exporter, results); err != nil {
+			if err := recommended.RenderResults(exporter, displayed); err != nil {
 				return fmt.Errorf("failed to render results: %w", err)
 			}
 
+			// --exit-code reflects every evaluated rule, so the cosmetic --status
+			// display filter must not hide failures from the exit status.
 			if exitCode {
 				for _, res := range results {
 					if res.Status == recommended.StatusFail {

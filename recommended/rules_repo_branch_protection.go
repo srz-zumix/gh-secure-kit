@@ -117,13 +117,13 @@ func registerBranchProtectionRules() {
 	register(Rule{
 		ID: "GSK111", GHQRID: "repo-bp-002", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge",
-		CheckRepo: checkRequiredReviews(0, SeverityCritical, "no approving reviews are required before merge"),
+		CheckRepo: checkRequiredReviews(0, "no approving reviews are required before merge"),
 	})
 
 	register(Rule{
 		ID: "GSK112", GHQRID: "repo-bp-003", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required",
-		CheckRepo: checkRequiredReviews(1, SeverityMedium, "only 1 approving review is required"),
+		CheckRepo: checkRequiredReviews(1, "only 1 approving review is required"),
 	})
 
 	register(Rule{
@@ -222,7 +222,7 @@ func registerBranchProtectionRules() {
 
 // checkRequiredReviews returns a CheckRepo function that fails when the
 // required approving review count is at or below threshold.
-func checkRequiredReviews(threshold int, severity Severity, failDetail string) RepositoryCheckFunc {
+func checkRequiredReviews(threshold int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
 		if f.Protection == nil {
 			return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
