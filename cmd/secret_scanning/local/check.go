@@ -93,7 +93,7 @@ Exits with status 1 if any secret is found.`,
 			if cmd.Flags().Changed("owner") && !usePatternCfg {
 				return fmt.Errorf("--owner has no effect without --pattern-config")
 			}
-			if cmd.Flags().Changed("repo") && !usePatternCfg && !(mode == localscan.TargetRevRange && !noAPI) {
+			if cmd.Flags().Changed("repo") && !usePatternCfg && (mode != localscan.TargetRevRange || noAPI) {
 				return fmt.Errorf("--repo has no effect without --pattern-config outside a --rev-range API scan")
 			}
 
