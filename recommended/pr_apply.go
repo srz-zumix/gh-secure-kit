@@ -31,7 +31,16 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 		Content: content,
 		Branch:  &branch,
 	}); err != nil {
-		return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
+		// The create-file endpoint returns 422 when the file already exists on
+		// the branch (it needs the current blob SHA to update). Treat that as a
+		// successful reuse only if the file is really present on the branch;
+		// otherwise the 422 signals a genuine failure and must be surfaced.
+		if !gh.IsHTTPUnprocessableEntity(err) {
+			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
+		}
+		if _, getErr := gh.GetRepositoryFileContent(ctx, g, repo, path, &branch); getErr != nil {
+			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
+		}
 	}
 
 	if _, err := gh.CreatePullRequest(ctx, g, repo, gh.NewPullRequest{

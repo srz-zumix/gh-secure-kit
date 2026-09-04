@@ -37,8 +37,11 @@ func registerRepositorySecurityRules() {
 		ID: "GSK102", GHQRID: "repo-sec-006", Scope: ScopeRepository,
 		Category: "security", Severity: SeverityMedium, Title: "Dependabot enabled but no dependabot.yml found",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.VulnerabilityAlerts == nil || !f.VulnerabilityAlerts.Enabled {
-				return Pass("Dependabot alerts are disabled; skipping dependabot.yml check")
+			if f.VulnerabilityAlerts == nil {
+				return Skip("could not read Dependabot alerts status")
+			}
+			if !f.VulnerabilityAlerts.Enabled {
+				return Skip("Dependabot alerts are disabled; dependabot.yml check not applicable")
 			}
 			if f.HasDependabotYML == nil {
 				return Skip("could not determine whether a dependabot.yml file exists")
@@ -187,6 +190,9 @@ func registerRepositoryAccessRules() {
 		ID: "GSK119", GHQRID: "repo-acc-001", Scope: ScopeRepository,
 		Category: "access_control", Severity: SeverityHigh, Title: "Excessive admin collaborators",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.CollaboratorsKnown {
+				return Skip("could not read direct collaborators")
+			}
 			admins := 0
 			for _, c := range f.Collaborators {
 				if c.GetPermissions().GetAdmin() {
@@ -205,6 +211,9 @@ func registerRepositoryAccessRules() {
 		ID: "GSK120", GHQRID: "repo-acc-002", Scope: ScopeRepository,
 		Category: "access_control", Severity: SeverityMedium, Title: "Direct collaborators instead of teams",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.CollaboratorsKnown {
+				return Skip("could not read direct collaborators")
+			}
 			if len(f.Collaborators) > 0 {
 				return Fail(fmt.Sprintf("%d direct collaborators found; prefer granting access via teams", len(f.Collaborators)))
 			}
@@ -216,6 +225,9 @@ func registerRepositoryAccessRules() {
 		ID: "GSK121", GHQRID: "repo-acc-003", Scope: ScopeRepository,
 		Category: "security", Severity: SeverityHigh, Title: "Deploy keys with write access",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.DeployKeysKnown {
+				return Skip("could not read deploy keys")
+			}
 			for _, k := range f.DeployKeys {
 				if !k.GetReadOnly() {
 					return Fail("one or more deploy keys have write access")
@@ -229,6 +241,9 @@ func registerRepositoryAccessRules() {
 		ID: "GSK122", GHQRID: "repo-acc-004", Scope: ScopeRepository,
 		Category: "security", Severity: SeverityMedium, Title: "Unverified deploy keys",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.DeployKeysKnown {
+				return Skip("could not read deploy keys")
+			}
 			for _, k := range f.DeployKeys {
 				if !k.GetVerified() {
 					return Fail("one or more deploy keys are unverified")

@@ -28,7 +28,14 @@ type RepositoryFacts struct {
 
 	// Collaborators are direct (non-team, non-outside) collaborators.
 	Collaborators []*github.User
-	DeployKeys    []*github.Key
+	// CollaboratorsKnown is false when the direct-collaborator list could not be
+	// fetched, so access-control rules skip instead of treating the repository as
+	// having no collaborators (a false negative).
+	CollaboratorsKnown bool
+	DeployKeys         []*github.Key
+	// DeployKeysKnown is false when the deploy-key list could not be fetched, so
+	// deploy-key rules skip instead of treating the repository as having no keys.
+	DeployKeysKnown bool
 
 	// File-existence facts are tri-state: nil means the existence could not be
 	// determined (a non-404 error), so rules skip instead of reporting a file as
@@ -135,10 +142,12 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 
 	if collaborators, err := gh.ListRepositoryCollaborators(ctx, g, repo, []string{"direct"}, nil); err == nil {
 		f.Collaborators = collaborators
+		f.CollaboratorsKnown = true
 	}
 
 	if keys, err := gh.ListDeployKeys(ctx, g, repo); err == nil {
 		f.DeployKeys = keys
+		f.DeployKeysKnown = true
 	}
 
 	f.HasSecurityMD = anyFileExists(ctx, g, repo, "SECURITY.md")

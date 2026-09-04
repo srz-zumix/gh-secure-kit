@@ -1,6 +1,9 @@
 package recommended
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // registry holds every rule known to gh-secure-kit, keyed by ID.
 var registry = map[string]*Rule{}
@@ -61,10 +64,10 @@ func (fl Filter) Apply(rules []Rule) []Rule {
 		if fl.MinSeverity != "" && r.Severity.Rank() < fl.MinSeverity.Rank() {
 			continue
 		}
-		if len(include) > 0 && !include[r.ID] {
+		if len(include) > 0 && !include[strings.ToUpper(r.ID)] {
 			continue
 		}
-		if ignore[r.ID] {
+		if ignore[strings.ToUpper(r.ID)] {
 			continue
 		}
 		if fl.OnlyFixable && !r.Fixable {
@@ -75,10 +78,12 @@ func (fl Filter) Apply(rules []Rule) []Rule {
 	return out
 }
 
+// toSet builds a lookup set of the given values, upper-casing each so that
+// rule-ID matching is case-insensitive (canonical rule IDs are upper-case).
 func toSet(values []string) map[string]bool {
 	set := make(map[string]bool, len(values))
 	for _, v := range values {
-		set[v] = true
+		set[strings.ToUpper(v)] = true
 	}
 	return set
 }
