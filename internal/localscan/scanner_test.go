@@ -88,6 +88,9 @@ func TestScanReturnsFindingsRegardlessOfDebugLevel(t *testing.T) {
 		{CommitSHA: "abc", FilePath: "a.txt", Content: "secret_0123456789\n"},
 		{CommitSHA: "abc", FilePath: "b.txt", Content: "nothing here\n"},
 	}}
+	// Restore the default level even if an assertion below aborts the test,
+	// so a leaked debug level cannot contaminate later tests.
+	t.Cleanup(func() { logger.SetLogLevel("info") })
 	for _, level := range []string{"info", "debug"} {
 		logger.SetLogLevel(level)
 		findings, err := Scan(src, s)
@@ -98,5 +101,4 @@ func TestScanReturnsFindingsRegardlessOfDebugLevel(t *testing.T) {
 			t.Fatalf("Scan(%s) findings = %d, want 1", level, len(findings))
 		}
 	}
-	logger.SetLogLevel("info")
 }
