@@ -162,12 +162,12 @@ Exits with status 1 if any secret is found.`,
 	f.BoolVar(&staged, "staged", false, "Scan changes currently staged in the index")
 	f.BoolVar(&uncommitted, "uncommitted", false, "Scan modified and untracked files in the worktree")
 	f.StringVar(&revRange, "rev-range", "", `Scan an explicit revision range, in "A..B" or "B" form`)
+	f.BoolVar(&noGit, "no-git", false, "Scan files under --path directly, without using git")
 	cmd.MarkFlagsMutuallyExclusive("unpushed", "staged", "uncommitted", "rev-range", "no-git")
 
 	f.StringVar(&rev, "rev", "", "With --unpushed, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook")
 	f.StringVar(&remote, "remote", "", "With --unpushed, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook")
 	f.BoolVar(&noAPI, "no-api", false, "Do not read commits that are missing from the local repository through the GitHub API (the fallback makes about one API request per commit, so large ranges can be slow or hit rate limits)")
-	f.BoolVar(&noGit, "no-git", false, "Scan files under --path directly, without using git")
 
 	f.StringVarP(&path, "path", "C", ".", "The repository or directory path to scan")
 	f.StringVar(&configFile, "config", "", "Path to a local secret scanning config file (default: auto-discover .gh-secure-kit-secret-scanning.yml)")
