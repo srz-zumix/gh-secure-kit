@@ -1,0 +1,322 @@
+package localscan
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/google/go-github/v90/github"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
+	"github.com/srz-zumix/go-gh-extension/pkg/parser"
+)
+
+// apiMaxCommitsPerCompare and apiMaxFilesPerCommit are the hard caps the
+// GitHub API applies to a comparison and to a commit's file list. Hitting one
+// of them means the response is incomplete.
+const (
+	apiMaxCommitsPerCompare = 250
+	apiMaxFilesPerCommit    = 3000
+)
+
+var hunkHeaderRe = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+
+// APISource produces fragments from commit diffs read through the GitHub API,
+// so a revision range can be scanned without the commits existing locally.
+type APISource struct {
+	ctx    context.Context
+	target Target
+	repo   string
+}
+
+// NewAPISource creates an APISource for the given target. repo may be empty,
+// in which case the repository is resolved from the git remotes of the target
+// path (--path).
+func NewAPISource(ctx context.Context, t Target, repo string) *APISource {
+	return &APISource{ctx: ctx, target: t, repo: repo}
+}
+
+// Fragments implements Source.
+func (s *APISource) Fragments() ([]Fragment, error) {
+	if s.target.Mode != TargetRevRange {
+		return nil, fmt.Errorf("the GitHub API fallback is only supported with --rev-range, not the %q target", s.target.Mode)
+	}
+	if s.target.MaxCommits < 0 {
+		return nil, fmt.Errorf("max-commits must be zero or positive, got %d", s.target.MaxCommits)
+	}
+
+	repo, err := s.resolveRepository()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine the repository to read through the GitHub API: %w", err)
+	}
+	client, err := gh.NewGitHubClientWithRepo(repo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GitHub client: %w", err)
+	}
+
+	shas, err := s.commitSHAs(client, repo)
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug("scanning commits through the GitHub API", "repository", repo.Owner+"/"+repo.Name, "rev-range", s.target.RevRange, "commits", len(shas))
+
+	var frags []Fragment
+	for _, sha := range shas {
+		commit, err := gh.GetCommit(s.ctx, client, repo, sha)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get commit %s through the GitHub API: %w", sha, err)
+		}
+		f, err := fragmentsForAPICommit(commit)
+		if err != nil {
+			return nil, err
+		}
+		frags = append(frags, f...)
+	}
+	return frags, nil
+}
+
+// resolveRepository determines the GitHub repository whose commits the API
+// should read. An explicit --repo wins; otherwise the repository is resolved
+// from the git remotes of the scanned path (--path). It never falls back to
+// the current working directory or environment, so it cannot silently scan an
+// unrelated repository; if the path has no usable remote, it returns an error
+// asking for --repo.
+func (s *APISource) resolveRepository() (repository.Repository, error) {
+	if s.repo != "" {
+		return parser.Repository(parser.RepositoryInput(s.repo))
+	}
+	return repositoryFromPath(s.target.RepoPath)
+}
+
+// repositoryFromPath resolves the GitHub repository from the remotes of the
+// git repository that contains path. "origin" is preferred, otherwise the
+// first configured remote is used. It reads the config directly, so it works
+// for bare repositories and linked worktrees and does not depend on the
+// current working directory.
+func repositoryFromPath(path string) (repository.Repository, error) {
+	repo, err := git.PlainOpenWithOptions(path, &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to open the git repository at %q: %w", path, err)
+	}
+	remotes, err := repo.Remotes()
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to read the remotes of the git repository at %q: %w", path, err)
+	}
+	remoteURL := selectRemoteURL(remotes)
+	if remoteURL == "" {
+		return repository.Repository{}, fmt.Errorf("the git repository at %q has no remote to resolve the GitHub repository from; pass --repo", path)
+	}
+	ep, err := transport.NewEndpoint(remoteURL)
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to parse the remote URL %q: %w", remoteURL, err)
+	}
+	if ep.Host == "" {
+		return repository.Repository{}, fmt.Errorf("the remote URL %q does not point at a GitHub host; pass --repo", remoteURL)
+	}
+	owner, name, err := ownerRepoFromRemotePath(ep.Path)
+	if err != nil {
+		return repository.Repository{}, fmt.Errorf("failed to determine owner/repo from the remote URL %q: %w", remoteURL, err)
+	}
+	return repository.Repository{Host: ep.Host, Owner: owner, Name: name}, nil
+}
+
+// selectRemoteURL returns the URL of the "origin" remote, or the first
+// configured remote when there is no "origin".
+func selectRemoteURL(remotes []*git.Remote) string {
+	first := ""
+	for _, r := range remotes {
+		cfg := r.Config()
+		if len(cfg.URLs) == 0 {
+			continue
+		}
+		if cfg.Name == "origin" {
+			return cfg.URLs[0]
+		}
+		if first == "" {
+			first = cfg.URLs[0]
+		}
+	}
+	return first
+}
+
+// ownerRepoFromRemotePath extracts the owner and repository name from the path
+// component of a remote URL, tolerating a leading slash and a ".git" suffix.
+func ownerRepoFromRemotePath(p string) (owner, name string, err error) {
+	p = strings.TrimPrefix(p, "/")
+	p = strings.TrimSuffix(p, ".git")
+	parts := strings.Split(p, "/")
+	if len(parts) < 2 {
+		return "", "", fmt.Errorf("unexpected remote path %q", p)
+	}
+	owner = parts[len(parts)-2]
+	name = parts[len(parts)-1]
+	if owner == "" || name == "" {
+		return "", "", fmt.Errorf("unexpected remote path %q", p)
+	}
+	return owner, name, nil
+}
+
+// commitSHAs lists the commits the range covers, oldest first.
+func (s *APISource) commitSHAs(client *gh.GitHubClient, repo repository.Repository) ([]string, error) {
+	from, to, explicit, err := splitRevRange(s.target.RevRange)
+	if err != nil {
+		return nil, err
+	}
+	if !explicit {
+		toRef, err := s.apiRef(to)
+		if err != nil {
+			return nil, err
+		}
+		// A bare revision is a single commit, and the API already diffs it
+		// against its first parent.
+		return []string{toRef}, nil
+	}
+
+	fromRef, err := s.apiRef(from)
+	if err != nil {
+		return nil, err
+	}
+	toRef, err := s.apiRef(to)
+	if err != nil {
+		return nil, err
+	}
+	comparison, err := gh.CompareCommits(s.ctx, client, repo, fromRef, toRef)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compare %s..%s through the GitHub API: %w", from, to, err)
+	}
+	commits := comparison.Commits
+	if total := comparison.GetTotalCommits(); total > len(commits) {
+		return nil, fmt.Errorf("the GitHub API returned only %d of the %d commits in %s..%s (the comparison is capped at %d commits); scan a smaller range or use a local checkout", len(commits), total, from, to, apiMaxCommitsPerCompare)
+	}
+	if s.target.MaxCommits > 0 && len(commits) > s.target.MaxCommits {
+		return nil, fmt.Errorf("scan aborted: more than %d commits to scan; raise --max-commits or set it to 0 to scan without a limit", s.target.MaxCommits)
+	}
+
+	shas := make([]string, 0, len(commits))
+	for _, c := range commits {
+		shas = append(shas, c.GetSHA())
+	}
+	return shas, nil
+}
+
+// apiRef resolves ref to a commit the GitHub API can address. Git-only
+// revspecs (HEAD, HEAD^, HEAD~2, ...) and the local checkout's HEAD are first
+// resolved against the local repository at --path, so the API receives a
+// concrete SHA anchored to the checkout rather than, say, the default branch's
+// HEAD. A ref that cannot be resolved locally is passed through when the API
+// can address it directly (a SHA, branch, or tag), or rejected when it needs
+// local git interpretation.
+func (s *APISource) apiRef(ref string) (string, error) {
+	if repo, err := git.PlainOpenWithOptions(s.target.RepoPath, &git.PlainOpenOptions{DetectDotGit: true}); err == nil {
+		if h, err := repo.ResolveRevision(plumbing.Revision(ref)); err == nil {
+			return h.String(), nil
+		}
+	}
+	if isLocalOnlyRevspec(ref) {
+		return "", fmt.Errorf("cannot resolve %q locally to read it through the GitHub API; pass an explicit commit SHA, branch, or tag", ref)
+	}
+	return ref, nil
+}
+
+// isLocalOnlyRevspec reports whether ref uses git revision syntax that only a
+// local repository can interpret, so it is not a ref the GitHub API can
+// address on its own.
+func isLocalOnlyRevspec(ref string) bool {
+	return ref == "HEAD" || strings.ContainsAny(ref, "^~") || strings.Contains(ref, "@{")
+}
+
+// fragmentsForAPICommit turns the added lines of a commit's diff into
+// fragments. It fails instead of scanning a partial diff, so a secret is never
+// missed because the API left content out.
+func fragmentsForAPICommit(commit *github.RepositoryCommit) ([]Fragment, error) {
+	sha := commit.GetSHA()
+	if len(commit.Files) >= apiMaxFilesPerCommit {
+		return nil, fmt.Errorf("commit %s changes at least %d files, which is the maximum the GitHub API reports; scan it with a local checkout instead", sha, apiMaxFilesPerCommit)
+	}
+
+	author := commit.GetCommit().GetAuthor().GetName()
+	date := commit.GetCommit().GetAuthor().GetDate().Time
+
+	var frags []Fragment
+	for _, f := range commit.Files {
+		if f.GetPatch() != "" {
+			frags = append(frags, fragmentsFromPatch(f.GetPatch(), f.GetFilename(), sha, author, date)...)
+			continue
+		}
+		// A binary file reports no additions, so an omitted patch with added
+		// lines means the API truncated the diff.
+		if f.GetAdditions() > 0 {
+			return nil, fmt.Errorf("the GitHub API did not return the diff of %q in commit %s, most likely because it is too large; scan it with a local checkout instead", f.GetFilename(), sha)
+		}
+	}
+	return frags, nil
+}
+
+// fragmentsFromPatch splits a unified diff into one fragment per contiguous
+// block of added lines, keeping the line numbers of the new file.
+func fragmentsFromPatch(patch, filePath, sha, author string, date time.Time) []Fragment {
+	var frags []Fragment
+	var block []string
+	inHunk := false
+	newLine := 0
+	blockStart := 0
+
+	flush := func() {
+		if len(block) == 0 {
+			return
+		}
+		content := strings.Join(block, "\n") + "\n"
+		block = nil
+		if isBinaryString(content) {
+			return
+		}
+		frags = append(frags, Fragment{
+			Content:   content,
+			FilePath:  filePath,
+			CommitSHA: sha,
+			Author:    author,
+			Date:      date,
+			BaseLine:  blockStart,
+		})
+	}
+
+	for _, line := range strings.Split(patch, "\n") {
+		if strings.HasPrefix(line, "@@") {
+			flush()
+			if m := hunkHeaderRe.FindStringSubmatch(line); m != nil {
+				newLine, _ = strconv.Atoi(m[1])
+				inHunk = true
+			} else {
+				inHunk = false
+			}
+			continue
+		}
+		if !inHunk {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "+"):
+			if len(block) == 0 {
+				blockStart = newLine
+			}
+			block = append(block, strings.TrimPrefix(line, "+"))
+			newLine++
+		case strings.HasPrefix(line, "-"), strings.HasPrefix(line, "\\"):
+			// Removed lines and the "no newline" marker are absent from the
+			// new file, so they do not advance its line number.
+			flush()
+		default:
+			flush()
+			newLine++
+		}
+	}
+	flush()
+	return frags
+}

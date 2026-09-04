@@ -232,7 +232,7 @@ func TestInstallHookDoesNotFollowSymlink(t *testing.T) {
 }
 
 func TestPrePushHookScansPushedRefs(t *testing.T) {
-	script, err := hookScript("pre-push")
+	script, err := hookScript("pre-push", "")
 	if err != nil {
 		t.Fatalf("hookScript() error = %v", err)
 	}
@@ -250,6 +250,30 @@ func TestPrePushHookScansPushedRefs(t *testing.T) {
 	}
 	if !strings.Contains(script, `remote_name="$1"`) {
 		t.Error("pre-push hook does not capture the destination remote name")
+	}
+}
+
+func TestHookScriptLogLevel(t *testing.T) {
+	for _, name := range HookNames {
+		script, err := hookScript(name, "debug")
+		if err != nil {
+			t.Fatalf("hookScript(%q) error = %v", name, err)
+		}
+		if !strings.Contains(script, "check --log-level debug") {
+			t.Errorf("%s hook does not pass the requested log level: %s", name, script)
+		}
+
+		script, err = hookScript(name, "")
+		if err != nil {
+			t.Fatalf("hookScript(%q) error = %v", name, err)
+		}
+		if strings.Contains(script, "--log-level") {
+			t.Errorf("%s hook embeds a log level without being asked to: %s", name, script)
+		}
+
+		if _, err := hookScript(name, "verbose"); err == nil {
+			t.Errorf("hookScript(%q) accepted an unsupported log level", name)
+		}
 	}
 }
 

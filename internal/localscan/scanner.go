@@ -1,9 +1,13 @@
 package localscan
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 // Scanner detects secrets within fragments using a set of patterns and an
@@ -135,9 +139,31 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 	if err != nil {
 		return nil, err
 	}
+	logger.Debug("scanning fragments", "fragments", len(fragments), "patterns", len(scanner.Patterns))
+	// Gate the per-fragment bookkeeping used only for the debug summary so it
+	// allocates nothing and does no extra work when debug logging is disabled.
+	debugEnabled := slog.Default().Enabled(context.Background(), slog.LevelDebug)
 	var findings []Finding
+	var commits, files map[string]struct{}
+	if debugEnabled {
+		commits = make(map[string]struct{})
+		files = make(map[string]struct{})
+	}
 	for _, frag := range fragments {
-		findings = append(findings, scanner.ScanFragment(frag)...)
+		fragFindings := scanner.ScanFragment(frag)
+		if debugEnabled {
+			logger.Debug("scanned fragment", "commit", frag.CommitSHA, "file", frag.FilePath, "base_line", frag.BaseLine, "findings", len(fragFindings))
+			if frag.CommitSHA != "" {
+				commits[frag.CommitSHA] = struct{}{}
+			}
+			if frag.FilePath != "" {
+				files[frag.FilePath] = struct{}{}
+			}
+		}
+		findings = append(findings, fragFindings...)
+	}
+	if debugEnabled {
+		logger.Debug("scan completed", "commits", len(commits), "files", len(files), "findings", len(findings))
 	}
 	return findings, nil
 }

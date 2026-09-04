@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 // HookNames lists the git hooks that can be managed by this tool.
@@ -49,6 +50,9 @@ type HookStatus struct {
 type InstallHookOptions struct {
 	Force  bool
 	Backup bool
+	// LogLevel, when set, is passed as --log-level to the check command the
+	// generated hook runs.
+	LogLevel string
 }
 
 // ResolveHookNames validates the requested hook names, returning all
@@ -98,7 +102,7 @@ func HooksDir(repoPath string) (string, error) {
 
 // InstallHook writes the hook script for name into dir and returns its path.
 func InstallHook(dir, name string, opts InstallHookOptions) (string, error) {
-	script, err := hookScript(name)
+	script, err := hookScript(name, opts.LogLevel)
 	if err != nil {
 		return "", err
 	}
@@ -195,12 +199,17 @@ func hookHeader(name string) string {
 # Remove with: gh secure-kit secret-scanning local hook uninstall %s`, hookMarker, name)
 }
 
-// hookScript renders the shell script installed for the given hook.
-func hookScript(name string) (string, error) {
+// hookScript renders the shell script installed for the given hook. logLevel,
+// when not empty, is passed as --log-level to the check command.
+func hookScript(name, logLevel string) (string, error) {
+	logFlag, err := hookLogLevelFlag(logLevel)
+	if err != nil {
+		return "", err
+	}
 	switch name {
 	case "pre-commit":
 		return hookHeader(name) + `
-exec gh secure-kit secret-scanning local check --staged
+exec gh secure-kit secret-scanning local check` + logFlag + ` --staged
 `, nil
 	case "pre-push":
 		// Git passes the pushed refs on stdin as
@@ -216,9 +225,9 @@ remote_name="$1"
 while read -r local_ref local_sha remote_ref remote_sha; do
 	[ "$local_sha" = "$zero" ] && continue
 	if [ "$remote_sha" = "$zero" ]; then
-		gh secure-kit secret-scanning local check --unpushed --rev "$local_sha" --remote "$remote_name" || exit 1
+		gh secure-kit secret-scanning local check` + logFlag + ` --unpushed --rev "$local_sha" --remote "$remote_name" || exit 1
 	else
-		gh secure-kit secret-scanning local check --rev-range "$remote_sha..$local_sha" || exit 1
+		gh secure-kit secret-scanning local check` + logFlag + ` --rev-range "$remote_sha..$local_sha" || exit 1
 	fi
 done
 exit 0
@@ -226,6 +235,19 @@ exit 0
 	default:
 		return "", fmt.Errorf("unsupported hook %q, expected one of %s", name, strings.Join(HookNames, ", "))
 	}
+}
+
+// hookLogLevelFlag renders the --log-level flag embedded in a generated hook,
+// rejecting any value that is not a known log level so nothing arbitrary is
+// written into the script.
+func hookLogLevelFlag(logLevel string) (string, error) {
+	if logLevel == "" {
+		return "", nil
+	}
+	if _, err := logger.GetLogLevel(logLevel); err != nil {
+		return "", fmt.Errorf("unsupported log level %q, expected one of %s", logLevel, strings.Join(logger.LogLevel, ", "))
+	}
+	return " --log-level " + strings.ToLower(logLevel), nil
 }
 
 // hookStateAt classifies the hook file at path.

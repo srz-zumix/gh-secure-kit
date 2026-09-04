@@ -1,12 +1,14 @@
 package localscan
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
@@ -338,4 +340,101 @@ func TestGitSourceRemoteScopesExclusionToDestination(t *testing.T) {
 	if hasFile(frags, "base.txt") {
 		t.Errorf("origin content should be excluded, got %+v", frags)
 	}
+}
+
+// TestGitSourceReportsLocalContentMissing verifies that GitSource wraps
+// ErrLocalContentMissing whenever the local repository cannot answer the
+// request, so FallbackSource can switch to the GitHub API.
+func TestGitSourceReportsLocalContentMissing(t *testing.T) {
+	t.Run("no repository", func(t *testing.T) {
+		dir := t.TempDir()
+		src := NewGitSource(Target{Mode: TargetUnpushed, RepoPath: dir, MaxCommits: 100})
+		_, err := src.Fragments()
+		if !errors.Is(err, ErrLocalContentMissing) {
+			t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+		}
+	})
+
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "README.md", "hello\n", "initial commit")
+
+	revRangeCases := []struct {
+		name     string
+		revRange string
+	}{
+		{name: "missing range end", revRange: "HEAD..does-not-exist"},
+		{name: "missing explicit range start", revRange: "does-not-exist..HEAD"},
+	}
+	for _, tc := range revRangeCases {
+		t.Run(tc.name, func(t *testing.T) {
+			src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: dir, RevRange: tc.revRange, MaxCommits: 100})
+			_, err := src.Fragments()
+			if !errors.Is(err, ErrLocalContentMissing) {
+				t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+			}
+		})
+	}
+}
+
+// TestGitSourceShallowCheckoutReportsLocalContentMissing verifies that when a
+// revision cannot be resolved because its commit lies beyond the shallow
+// boundary, GitSource reports missing local content rather than an unrelated
+// error. Scanning "HEAD" needs "HEAD^", which is absent in a depth-1 clone.
+func TestGitSourceShallowCheckoutReportsLocalContentMissing(t *testing.T) {
+	_, shallowDir := newShallowClone(t)
+
+	src := NewGitSource(Target{Mode: TargetRevRange, RepoPath: shallowDir, RevRange: "HEAD", MaxCommits: 100})
+	if _, err := src.Fragments(); !errors.Is(err, ErrLocalContentMissing) {
+		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+	}
+}
+
+// TestCollectCommitsReportsLocalContentMissing covers the commit-walk branch:
+// a commit whose ancestor object is absent (a shallow checkout) is reported as
+// missing local content instead of surfacing the raw object-not-found error.
+func TestCollectCommitsReportsLocalContentMissing(t *testing.T) {
+	repo, _ := newShallowClone(t)
+	head, err := repo.Head()
+	if err != nil {
+		t.Fatalf("failed to resolve HEAD: %v", err)
+	}
+	// Walk from HEAD with an empty exclusion set, so the walk crosses the
+	// shallow boundary into the missing parent object.
+	_, _, err = collectCommits(repo, head.Hash(), map[plumbing.Hash]bool{}, 100)
+	if !errors.Is(err, ErrLocalContentMissing) {
+		t.Fatalf("expected ErrLocalContentMissing, got %v", err)
+	}
+}
+
+// newShallowClone pushes two commits to a bare remote and returns a depth-1
+// clone of it, so the HEAD commit is present but its parent is not.
+func newShallowClone(t *testing.T) (*git.Repository, string) {
+	t.Helper()
+	repo, dir := newTestRepo(t)
+	commitFile(t, repo, dir, "base.txt", "base\n", "base commit")
+	commitFile(t, repo, dir, "top.txt", "top\n", "top commit")
+	if err := repo.Push(&git.PushOptions{RemoteName: "origin"}); err != nil {
+		t.Fatalf("failed to push commits: %v", err)
+	}
+
+	remoteURL := ""
+	remotes, err := repo.Remotes()
+	if err != nil {
+		t.Fatalf("failed to list remotes: %v", err)
+	}
+	for _, r := range remotes {
+		if r.Config().Name == "origin" {
+			remoteURL = r.Config().URLs[0]
+		}
+	}
+
+	shallowDir := t.TempDir()
+	shallow, err := git.PlainClone(shallowDir, false, &git.CloneOptions{
+		URL:   remoteURL,
+		Depth: 1,
+	})
+	if err != nil {
+		t.Fatalf("failed to shallow clone: %v", err)
+	}
+	return shallow, shallowDir
 }

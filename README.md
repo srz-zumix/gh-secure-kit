@@ -1483,7 +1483,7 @@ Get the latest default incremental and backfill secret scanning scan history for
 gh secure-kit secret-scanning local check [flags]
 ```
 
-Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. This is an independent, offline reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. With `--rev-range`, commits that are missing from the local repository are read through the GitHub API instead, so a shallow CI checkout can scan a range without cloning the whole history; pass `--no-api` to disable it. The repository is taken from `--repo`, or inferred from the git remotes of `--path`. This is an independent reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
 
 ```sh
 # Scan commits reachable from HEAD but not pushed to any remote (default)
@@ -1495,9 +1495,23 @@ gh secure-kit secret-scanning local check --path ./some-dir --no-git
 # Scan an explicit revision range and output JSON
 gh secure-kit secret-scanning local check --rev-range main..HEAD --format json
 
+# Scan a range whose commits are not in the local checkout, reading them through the API
+gh secure-kit secret-scanning local check --repo my-org/my-repo --rev-range "$BASE_SHA..$HEAD_SHA"
+
 # Filter patterns using the organization's secret scanning pattern configuration
 gh secure-kit secret-scanning local check --owner my-org --pattern-config
 ```
+
+Because missing commits are read through the API, a GitHub Actions workflow does not need `fetch-depth: 0`:
+
+```yaml
+- uses: actions/checkout@v5
+- run: gh secure-kit secret-scanning local check --rev-range ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+  env:
+    GH_TOKEN: ${{ github.token }}
+```
+
+The API cannot return a complete diff for every commit, so the scan fails instead of reporting a partial result when the comparison exceeds 250 commits, a commit changes 3000 or more files, or a file's diff is too large to be returned. Use a full local checkout for those ranges.
 
 **Flags:**
 
@@ -1507,12 +1521,13 @@ gh secure-kit secret-scanning local check --owner my-org --pattern-config
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
+| `--no-api` | | `false` | Do not read commits that are missing from the local repository through the GitHub API (the fallback makes about one API request per commit, so large ranges can be slow or hit rate limits) |
 | `--no-git` | | `false` | Scan files under `--path` directly, without using git |
 | `--owner` | `-o` | `""` | The organization name, used with `--pattern-config` |
-| `--path` | | `"."` | The repository or directory path to scan |
+| `--path` | `-C` | `"."` | The repository or directory path to scan |
 | `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
 | `--remote` | | `""` | With `--unpushed`, exclude only this remote's tracking branches (instead of every remote); used by the pre-push hook |
-| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` |
+| `--repo` | `-R` | `""` | The `[HOST/]OWNER/REPO` repository, used with `--pattern-config` and to read commits through the GitHub API |
 | `--rev` | | `""` | With `--unpushed`, scan commits reachable from this revision (instead of HEAD) but not from the destination remote; used by the pre-push hook |
 | `--rev-range` | | `""` | Scan an explicit revision range, in "A..B" or "B" form |
 | `--show-secret` | | `false` | Show the full matched secret value instead of a redacted form |
@@ -1555,7 +1570,7 @@ gh secure-kit secret-scanning local patterns --owner my-org --pattern-config
 gh secure-kit secret-scanning local hook install [pre-commit|pre-push]... [flags]
 ```
 
-Install git hooks that run `secret-scanning local check` before a commit or a push. Only the pre-push hook is installed when no hook name is given, which is enough to stop a secret from reaching the remote. The pre-commit hook scans staged changes and the pre-push hook scans the exact commits being pushed (read from the refs git supplies on stdin, so pushes of a branch other than the checked-out one are also covered), aborting the operation when a secret is found. For a new branch the hook excludes commits already on the destination remote using its local remote-tracking refs, so keep them current with `git fetch`; pushing to a remote that has never been fetched (or by URL) falls back to scanning the branch's full history, which may require raising `--max-commits`. An existing hook that was not generated by this tool is kept unless `--force` or `--backup` is given. The `core.hooksPath` configuration is honored when resolving the hooks directory.
+Install git hooks that run `secret-scanning local check` before a commit or a push. Only the pre-push hook is installed when no hook name is given, which is enough to stop a secret from reaching the remote. The pre-commit hook scans staged changes and the pre-push hook scans the exact commits being pushed (read from the refs git supplies on stdin, so pushes of a branch other than the checked-out one are also covered), aborting the operation when a secret is found. For a new branch the hook excludes commits already on the destination remote using its local remote-tracking refs, so keep them current with `git fetch`; pushing to a remote that has never been fetched (or by URL) falls back to scanning the branch's full history, which may require raising `--max-commits`. An existing hook that was not generated by this tool is kept unless `--force` or `--backup` is given. Use `--hook-log-level` to set the log level the installed hook runs the scan with; without it no `--log-level` flag is written into the hook. The `core.hooksPath` configuration is honored when resolving the hooks directory.
 
 ```sh
 # Install the pre-push hook
@@ -1566,6 +1581,9 @@ gh secure-kit secret-scanning local hook install pre-commit pre-push
 
 # Move an existing hook aside before installing
 gh secure-kit secret-scanning local hook install --backup
+
+# Install a pre-push hook that scans with debug logging
+gh secure-kit secret-scanning local hook install --hook-log-level debug
 ```
 
 **Flags:**
@@ -1574,6 +1592,7 @@ gh secure-kit secret-scanning local hook install --backup
 | ------ | ------- | --------- | ------------- |
 | `--backup` | | `false` | Move an existing hook aside to `<hook>.gh-secure-kit.bak` before installing |
 | `--force` | | `false` | Overwrite an existing hook that is not managed by gh-secure-kit |
+| `--hook-log-level` | | | Set log level: {debug\|info\|warn\|error} of the scan run by the installed hook (omitted from the hook when not given) |
 | `--path` | | `"."` | The repository path to install the hooks into |
 
 ### Show the local secret scanning git hook status
