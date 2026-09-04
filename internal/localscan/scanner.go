@@ -1,7 +1,9 @@
 package localscan
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 
@@ -138,21 +140,31 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 		return nil, err
 	}
 	logger.Debug("scanning fragments", "fragments", len(fragments), "patterns", len(scanner.Patterns))
+	// Gate the per-fragment bookkeeping used only for the debug summary so it
+	// allocates nothing and does no extra work when debug logging is disabled.
+	debugEnabled := slog.Default().Enabled(context.Background(), slog.LevelDebug)
 	var findings []Finding
-	commits := make(map[string]struct{})
-	files := make(map[string]struct{})
+	var commits, files map[string]struct{}
+	if debugEnabled {
+		commits = make(map[string]struct{})
+		files = make(map[string]struct{})
+	}
 	for _, frag := range fragments {
 		fragFindings := scanner.ScanFragment(frag)
-		logger.Debug("scanned fragment", "commit", frag.CommitSHA, "file", frag.FilePath, "base_line", frag.BaseLine, "findings", len(fragFindings))
-		if frag.CommitSHA != "" {
-			commits[frag.CommitSHA] = struct{}{}
-		}
-		if frag.FilePath != "" {
-			files[frag.FilePath] = struct{}{}
+		if debugEnabled {
+			logger.Debug("scanned fragment", "commit", frag.CommitSHA, "file", frag.FilePath, "base_line", frag.BaseLine, "findings", len(fragFindings))
+			if frag.CommitSHA != "" {
+				commits[frag.CommitSHA] = struct{}{}
+			}
+			if frag.FilePath != "" {
+				files[frag.FilePath] = struct{}{}
+			}
 		}
 		findings = append(findings, fragFindings...)
 	}
-	logger.Debug("scan completed", "commits", len(commits), "files", len(files), "findings", len(findings))
+	if debugEnabled {
+		logger.Debug("scan completed", "commits", len(commits), "files", len(files), "findings", len(findings))
+	}
 	return findings, nil
 }
 

@@ -1,6 +1,10 @@
 package localscan
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
+)
 
 func TestNewScannerRejectsMissingRequiredFields(t *testing.T) {
 	tests := []struct {
@@ -70,4 +74,29 @@ func TestScanFragmentUsesBaseLineOffset(t *testing.T) {
 	if findings[0].StartLine != 42 {
 		t.Errorf("StartLine = %d, want 42", findings[0].StartLine)
 	}
+}
+
+func TestScanReturnsFindingsRegardlessOfDebugLevel(t *testing.T) {
+	// Scan gates its debug-only bookkeeping behind the log level; verify the
+	// findings it returns are identical whether or not debug is enabled.
+	cfg := &Config{Patterns: []ConfigPattern{{ID: "tok", Regex: `secret_[0-9a-f]{10}`}}}
+	s, err := NewScanner(cfg, false)
+	if err != nil {
+		t.Fatalf("NewScanner() error = %v", err)
+	}
+	src := stubSource{frags: []Fragment{
+		{CommitSHA: "abc", FilePath: "a.txt", Content: "secret_0123456789\n"},
+		{CommitSHA: "abc", FilePath: "b.txt", Content: "nothing here\n"},
+	}}
+	for _, level := range []string{"info", "debug"} {
+		logger.SetLogLevel(level)
+		findings, err := Scan(src, s)
+		if err != nil {
+			t.Fatalf("Scan(%s) error = %v", level, err)
+		}
+		if len(findings) != 1 {
+			t.Fatalf("Scan(%s) findings = %d, want 1", level, len(findings))
+		}
+	}
+	logger.SetLogLevel("info")
 }
