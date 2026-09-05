@@ -221,19 +221,26 @@ func registerBranchProtectionRules() {
 }
 
 // checkRequiredReviews returns a CheckRepo function that fails when the
-// required approving review count is at or below threshold.
-func checkRequiredReviews(threshold int, failDetail string) RepositoryCheckFunc {
+// required approving review count equals expected. Using equality (rather than
+// a threshold) keeps each rule aligned with its title and avoids GSK111/GSK112
+// overlapping at a count of 0. An absent required-reviews block is treated as a
+// count of 0 so only the zero-review rule (GSK111) reports it.
+func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
 		if f.Protection == nil {
 			return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
 		}
 		reviews := f.Protection.GetRequiredPullRequestReviews()
+		count := 0
+		if reviews != nil {
+			count = reviews.GetRequiredApprovingReviewCount()
+		}
+		if count != expected {
+			return Pass(fmt.Sprintf("%d approving reviews are required", count))
+		}
 		if reviews == nil {
-			return Fail("pull request reviews are not configured")
+			return Fail(fmt.Sprintf("%s (pull request reviews are not configured)", failDetail))
 		}
-		if reviews.GetRequiredApprovingReviewCount() <= threshold {
-			return Fail(fmt.Sprintf("%s (required: %d)", failDetail, reviews.GetRequiredApprovingReviewCount()))
-		}
-		return Pass(fmt.Sprintf("%d approving reviews are required", reviews.GetRequiredApprovingReviewCount()))
+		return Fail(fmt.Sprintf("%s (required: %d)", failDetail, count))
 	}
 }

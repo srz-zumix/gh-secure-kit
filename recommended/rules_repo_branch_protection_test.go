@@ -178,3 +178,95 @@ func TestGSK117AllowForcePushesNilSafe(t *testing.T) {
 		t.Errorf("force pushes disabled: got %v, want pass", got)
 	}
 }
+
+func TestRequiredReviewsEquality(t *testing.T) {
+	gsk111, ok := RuleByID("GSK111")
+	if !ok {
+		t.Fatal("GSK111 not registered")
+	}
+	gsk112, ok := RuleByID("GSK112")
+	if !ok {
+		t.Fatal("GSK112 not registered")
+	}
+
+	factsWithCount := func(n int) *RepositoryFacts {
+		return &RepositoryFacts{Protection: &github.Protection{
+			RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{
+				RequiredApprovingReviewCount: n,
+			},
+		}}
+	}
+
+	// count 0: only GSK111 (Critical) fails; GSK112 passes (no overlap).
+	f := factsWithCount(0)
+	if got := gsk111.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("count0 GSK111: got %v, want fail", got)
+	}
+	if got := gsk112.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("count0 GSK112: got %v, want pass", got)
+	}
+
+	// count 1: only GSK112 fails; GSK111 passes.
+	f = factsWithCount(1)
+	if got := gsk111.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("count1 GSK111: got %v, want pass", got)
+	}
+	out := gsk112.CheckRepo(f)
+	if out.Status != StatusFail {
+		t.Errorf("count1 GSK112: got %v, want fail", out.Status)
+	}
+	if want := "only 1 approving review is required (required: 1)"; out.Detail != want {
+		t.Errorf("count1 GSK112 detail: got %q, want %q", out.Detail, want)
+	}
+
+	// count 2: both pass.
+	f = factsWithCount(2)
+	if got := gsk111.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("count2 GSK111: got %v, want pass", got)
+	}
+	if got := gsk112.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("count2 GSK112: got %v, want pass", got)
+	}
+
+	// Reviews block absent (nil): treated as count 0 -> only GSK111 fails
+	// with a "not configured" detail; GSK112 passes.
+	f = &RepositoryFacts{Protection: &github.Protection{}}
+	out = gsk111.CheckRepo(f)
+	if out.Status != StatusFail {
+		t.Errorf("nil reviews GSK111: got %v, want fail", out.Status)
+	}
+	if want := "no approving reviews are required before merge (pull request reviews are not configured)"; out.Detail != want {
+		t.Errorf("nil reviews GSK111 detail: got %q, want %q", out.Detail, want)
+	}
+	if got := gsk112.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("nil reviews GSK112: got %v, want pass", got)
+	}
+
+	// No legacy protection -> skip.
+	f = &RepositoryFacts{}
+	if got := gsk111.CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("no protection GSK111: got %v, want skip", got)
+	}
+	if got := gsk112.CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("no protection GSK112: got %v, want skip", got)
+	}
+}
+
+func TestFilterApplySortsByID(t *testing.T) {
+	unsorted := []Rule{
+		{ID: "GSK120", Scope: ScopeRepository},
+		{ID: "GSK101", Scope: ScopeRepository},
+		{ID: "GSK110", Scope: ScopeRepository},
+	}
+	out := Filter{}.Apply(unsorted)
+	got := make([]string, len(out))
+	for i, r := range out {
+		got[i] = r.ID
+	}
+	want := []string{"GSK101", "GSK110", "GSK120"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("Apply order: got %v, want %v", got, want)
+		}
+	}
+}

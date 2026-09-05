@@ -90,6 +90,7 @@ func (fl Filter) Apply(rules []Rule) []Rule {
 		}
 		out = append(out, r)
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
 }
 
