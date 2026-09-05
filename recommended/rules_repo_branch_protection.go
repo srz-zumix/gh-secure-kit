@@ -198,7 +198,7 @@ func registerBranchProtectionRules() {
 			if f.Protection == nil {
 				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
 			}
-			if f.Protection.GetAllowForcePushes().Enabled {
+			if f.Protection.GetAllowForcePushes().GetEnabled() {
 				return Fail("force pushes are allowed on the protected branch")
 			}
 			return Pass("force pushes are disabled on the protected branch")

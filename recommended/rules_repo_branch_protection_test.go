@@ -143,3 +143,38 @@ func TestGSK110TriState(t *testing.T) {
 		t.Errorf("legacy protection: got %v, want pass", got)
 	}
 }
+
+func TestGSK117AllowForcePushesNilSafe(t *testing.T) {
+	rule, ok := RuleByID("GSK117")
+	if !ok {
+		t.Fatal("GSK117 not registered")
+	}
+
+	// No legacy protection -> skip.
+	if got := rule.CheckRepo(&RepositoryFacts{}).Status; got != StatusSkip {
+		t.Errorf("no protection: got %v, want skip", got)
+	}
+
+	// Protection present but AllowForcePushes omitted (nil) must not panic
+	// and is treated as disabled -> pass.
+	f := &RepositoryFacts{Protection: &github.Protection{}}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("nil AllowForcePushes: got %v, want pass", got)
+	}
+
+	// Explicitly enabled -> fail.
+	f = &RepositoryFacts{Protection: &github.Protection{
+		AllowForcePushes: &github.AllowForcePushes{Enabled: true},
+	}}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("force pushes enabled: got %v, want fail", got)
+	}
+
+	// Explicitly disabled -> pass.
+	f = &RepositoryFacts{Protection: &github.Protection{
+		AllowForcePushes: &github.AllowForcePushes{Enabled: false},
+	}}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("force pushes disabled: got %v, want pass", got)
+	}
+}

@@ -149,7 +149,7 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		f.DeployKeysKnown = true
 	}
 
-	f.HasSecurityMD = anyFileExists(ctx, g, repo, "SECURITY.md")
+	f.HasSecurityMD = anyFileExists(ctx, g, repo, "SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md")
 	f.HasCodeowners = anyFileExists(ctx, g, repo, "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS")
 	f.HasDependabotYML = anyFileExists(ctx, g, repo, ".github/dependabot.yml", ".github/dependabot.yaml")
 
