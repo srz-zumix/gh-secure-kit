@@ -2,6 +2,7 @@ package recommended
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
@@ -36,6 +37,10 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !dryRun && guardrails.IsReadonly() {
 				return fmt.Errorf("cannot apply fixes: running in read-only mode (--read-only)")
+			}
+
+			if unknown := recommended.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
+				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
 			}
 
 			target, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))

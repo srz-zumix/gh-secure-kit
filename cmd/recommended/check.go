@@ -3,6 +3,7 @@ package recommended
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
@@ -34,6 +35,10 @@ Use --owner to check an organization against organization-scoped rules.
 --repo and --owner are mutually exclusive.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if unknown := recommended.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
+				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
+			}
+
 			target, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
 			if err != nil {
 				return fmt.Errorf("failed to parse repository: %w", err)

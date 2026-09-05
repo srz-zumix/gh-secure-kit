@@ -48,8 +48,21 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 		Head:  branchName,
 		Base:  defaultBranch,
 		Body:  &prBody,
-	}); err != nil && !gh.IsHTTPUnprocessableEntity(err) {
-		return fmt.Errorf("failed to open pull request from %q: %w", branchName, err)
+	}); err != nil {
+		// The create-PR endpoint returns 422 both when an open PR from this
+		// branch already exists (the idempotent reuse case) and for genuine
+		// validation errors (e.g. no commits between base and head). Only treat
+		// it as success when an open PR from the branch really exists.
+		if !gh.IsHTTPUnprocessableEntity(err) {
+			return fmt.Errorf("failed to open pull request from %q: %w", branchName, err)
+		}
+		if _, findErr := gh.FindPullRequest(ctx, g, repo,
+			&gh.ListPullRequestsOptionHead{Head: repo.Owner + ":" + branchName},
+			&gh.ListPullRequestsOptionBase{Base: defaultBranch},
+			gh.ListPullRequestsOptionStateOpen(),
+		); findErr != nil {
+			return fmt.Errorf("opening a pull request from %q returned %v; verifying whether an open pull request already exists failed: %w", branchName, err, findErr)
+		}
 	}
 	return nil
 }

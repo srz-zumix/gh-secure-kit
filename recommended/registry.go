@@ -8,7 +8,8 @@ import (
 // registry holds every rule known to gh-secure-kit, keyed by ID.
 var registry = map[string]*Rule{}
 
-// order preserves rule registration order for stable, deterministic listings.
+// order records rule IDs in registration order; AllRules returns them sorted
+// by ID for deterministic listings (registration order itself is not exposed).
 var order []string
 
 // register adds a rule to the catalog. It panics on duplicate IDs since that
@@ -39,6 +40,20 @@ func RuleByID(id string) (Rule, bool) {
 		return Rule{}, false
 	}
 	return *r, true
+}
+
+// UnknownRuleIDs returns the subset of the given IDs that do not match any
+// registered rule. Matching is case-insensitive (canonical rule IDs are
+// upper-case), and each returned ID preserves the caller's original spelling so
+// error messages echo exactly what the user typed.
+func UnknownRuleIDs(ids []string) []string {
+	var unknown []string
+	for _, id := range ids {
+		if _, ok := registry[strings.ToUpper(id)]; !ok {
+			unknown = append(unknown, id)
+		}
+	}
+	return unknown
 }
 
 // Filter narrows down the rule catalog by scope, minimum severity, explicit

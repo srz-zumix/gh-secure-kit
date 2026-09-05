@@ -1,6 +1,7 @@
 package recommended
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-github/v90/github"
@@ -141,4 +142,34 @@ func containsID(rules []Rule, id string) bool {
 		}
 	}
 	return false
+}
+
+func TestUnknownRuleIDs(t *testing.T) {
+	// Pick a real rule ID from the catalog to exercise the known cases.
+	known := AllRules()[0].ID
+
+	tests := []struct {
+		name string
+		ids  []string
+		want []string
+	}{
+		{"empty", nil, nil},
+		{"canonical known", []string{known}, nil},
+		{"lowercase known", []string{strings.ToLower(known)}, nil},
+		{"unknown", []string{"GSK000"}, []string{"GSK000"}},
+		{"mixed", []string{known, "nope1", "nope2"}, []string{"nope1", "nope2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := UnknownRuleIDs(tt.ids)
+			if len(got) != len(tt.want) {
+				t.Fatalf("UnknownRuleIDs(%v) = %v, want %v", tt.ids, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("UnknownRuleIDs(%v) = %v, want %v", tt.ids, got, tt.want)
+				}
+			}
+		})
+	}
 }
