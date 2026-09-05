@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-secure-kit/docs/rules"
-	"github.com/srz-zumix/gh-secure-kit/recommended"
+	catalog "github.com/srz-zumix/gh-secure-kit/recommended"
 )
 
 // NewExplainCmd returns the recommended explain command
@@ -19,7 +19,7 @@ func NewExplainCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := strings.ToUpper(args[0])
-			if _, ok := recommended.RuleByID(id); !ok {
+			if _, ok := catalog.RuleByID(id); !ok {
 				return fmt.Errorf("unknown rule ID %q; run 'gh secure-kit recommended list' to see all rules", id)
 			}
 			content, err := rules.RulesFS.ReadFile(id + ".md")

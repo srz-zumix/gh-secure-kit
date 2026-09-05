@@ -7,7 +7,7 @@ import (
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	"github.com/srz-zumix/gh-secure-kit/recommended"
+	catalog "github.com/srz-zumix/gh-secure-kit/recommended"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
@@ -35,7 +35,7 @@ Use --owner to check an organization against organization-scoped rules.
 --repo and --owner are mutually exclusive.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if unknown := recommended.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
+			if unknown := catalog.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
 			}
 
@@ -49,26 +49,26 @@ Use --owner to check an organization against organization-scoped rules.
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			filter := recommended.Filter{
-				MinSeverity: recommended.Severity(severity),
+			filter := catalog.Filter{
+				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
 				IgnoreIDs:   ignoreIDs,
 				OnlyFixable: fixableOnly,
 			}
 
 			ctx := cmd.Context()
-			var results []recommended.Result
+			var results []catalog.Result
 			if target.Name != "" {
-				filter.Scope = recommended.ScopeRepository
-				rules := filter.Apply(recommended.AllRules())
-				results, _, err = recommended.EvaluateRepository(ctx, client, target, rules)
+				filter.Scope = catalog.ScopeRepository
+				rules := filter.Apply(catalog.AllRules())
+				results, _, err = catalog.EvaluateRepository(ctx, client, target, rules)
 				if err != nil {
 					return fmt.Errorf("failed to check repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
-				filter.Scope = recommended.ScopeOrganization
-				rules := filter.Apply(recommended.AllRules())
-				results, _, err = recommended.EvaluateOrganization(ctx, client, target, rules)
+				filter.Scope = catalog.ScopeOrganization
+				rules := filter.Apply(catalog.AllRules())
+				results, _, err = catalog.EvaluateOrganization(ctx, client, target, rules)
 				if err != nil {
 					return fmt.Errorf("failed to check organization '%s': %w", target.Owner, err)
 				}
@@ -76,7 +76,7 @@ Use --owner to check an organization against organization-scoped rules.
 
 			displayed := results
 			if status != "" {
-				filtered := make([]recommended.Result, 0, len(results))
+				filtered := make([]catalog.Result, 0, len(results))
 				for _, res := range results {
 					if string(res.Status) == status {
 						filtered = append(filtered, res)
@@ -85,7 +85,7 @@ Use --owner to check an organization against organization-scoped rules.
 				displayed = filtered
 			}
 
-			if err := recommended.RenderResults(exporter, displayed); err != nil {
+			if err := catalog.RenderResults(exporter, displayed); err != nil {
 				return fmt.Errorf("failed to render results: %w", err)
 			}
 
@@ -93,7 +93,7 @@ Use --owner to check an organization against organization-scoped rules.
 			// display filter must not hide failures from the exit status.
 			if exitCode {
 				for _, res := range results {
-					if res.Status == recommended.StatusFail {
+					if res.Status == catalog.StatusFail {
 						os.Exit(1)
 					}
 				}
@@ -104,8 +104,8 @@ Use --owner to check an organization against organization-scoped rules.
 	f := cmd.Flags()
 	f.StringVarP(&owner, "owner", "o", "", "The organization name (checks organization-scoped rules)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo' (checks repository-scoped rules)")
-	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only show findings at or above this severity")
-	cmdutil.StringEnumFlag(cmd, &status, "status", "", "", recommended.Statuses, "Only show findings with this status")
+	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", catalog.Severities, "Only show findings at or above this severity")
+	cmdutil.StringEnumFlag(cmd, &status, "status", "", "", catalog.Statuses, "Only show findings with this status")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only evaluate the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
 	f.BoolVar(&fixableOnly, "fixable-only", false, "Only show rules that can be fixed with 'recommended apply'")

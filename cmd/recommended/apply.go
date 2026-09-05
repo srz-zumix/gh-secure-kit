@@ -6,7 +6,7 @@ import (
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
-	"github.com/srz-zumix/gh-secure-kit/recommended"
+	catalog "github.com/srz-zumix/gh-secure-kit/recommended"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh/guardrails"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
@@ -39,7 +39,7 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 				return fmt.Errorf("cannot apply fixes: running in read-only mode (--read-only)")
 			}
 
-			if unknown := recommended.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
+			if unknown := catalog.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
 			}
 
@@ -53,31 +53,31 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
 
-			filter := recommended.Filter{
-				MinSeverity: recommended.Severity(severity),
+			filter := catalog.Filter{
+				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
 				IgnoreIDs:   ignoreIDs,
 			}
 
 			ctx := cmd.Context()
-			var results []recommended.ApplyResult
+			var results []catalog.ApplyResult
 			if target.Name != "" {
-				filter.Scope = recommended.ScopeRepository
-				rules := filter.Apply(recommended.AllRules())
-				results, err = recommended.ApplyRepository(ctx, client, target, rules, dryRun)
+				filter.Scope = catalog.ScopeRepository
+				rules := filter.Apply(catalog.AllRules())
+				results, err = catalog.ApplyRepository(ctx, client, target, rules, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
-				filter.Scope = recommended.ScopeOrganization
-				rules := filter.Apply(recommended.AllRules())
-				results, err = recommended.ApplyOrganization(ctx, client, target, rules, dryRun)
+				filter.Scope = catalog.ScopeOrganization
+				rules := filter.Apply(catalog.AllRules())
+				results, err = catalog.ApplyOrganization(ctx, client, target, rules, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for organization '%s': %w", target.Owner, err)
 				}
 			}
 
-			if err := recommended.RenderApplyResults(exporter, results); err != nil {
+			if err := catalog.RenderApplyResults(exporter, results); err != nil {
 				return fmt.Errorf("failed to render results: %w", err)
 			}
 			return nil
@@ -86,7 +86,7 @@ Use --dryrun to report which fixes would be applied without changing anything.`,
 	f := cmd.Flags()
 	f.StringVarP(&owner, "owner", "o", "", "The organization name (applies organization-scoped fixes)")
 	f.StringVarP(&repo, "repo", "R", "", "The repository in the format 'owner/repo' (applies repository-scoped fixes)")
-	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", recommended.Severities, "Only include findings at or above this severity")
+	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", catalog.Severities, "Only include findings at or above this severity")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only include the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
 	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report which fixes would be applied without changing anything")
