@@ -43,7 +43,6 @@ type RepositoryFacts struct {
 	HasSecurityMD    *bool
 	HasCodeowners    *bool
 	HasDependabotYML *bool
-	HasCodeQLConfig  *bool
 
 	CodeScanningSetup             *github.DefaultSetupConfiguration
 	VulnerabilityAlerts           *gh.RepositorySecurityFeatureStatus
@@ -153,7 +152,6 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	f.HasSecurityMD = anyFileExists(ctx, g, repo, "SECURITY.md")
 	f.HasCodeowners = anyFileExists(ctx, g, repo, "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS")
 	f.HasDependabotYML = anyFileExists(ctx, g, repo, ".github/dependabot.yml", ".github/dependabot.yaml")
-	f.HasCodeQLConfig = anyFileExists(ctx, g, repo, ".github/codeql/codeql-config.yml", ".github/codeql/codeql-config.yaml")
 
 	if setup, err := gh.GetCodeScanningDefaultSetupConfiguration(ctx, g, repo); err == nil {
 		f.CodeScanningSetup = setup

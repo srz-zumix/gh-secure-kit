@@ -77,7 +77,7 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK105", GHQRID: "repo-sec-008", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Code scanning (CodeQL) not configured", Fixable: true,
+		Category: "security", Severity: SeverityHigh, Title: "Code scanning default setup not configured", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.CodeScanningSetup == nil {
 				return Skip("could not read code scanning default setup status")

@@ -18,7 +18,7 @@ catalog with severity, scope, and fixability.
 | [GSK102](GSK102.md) | Medium | No | Dependabot enabled but no dependabot.yml found |
 | [GSK103](GSK103.md) | Low | Yes | No SECURITY.md file found |
 | [GSK104](GSK104.md) | Medium | Yes | No CODEOWNERS file found |
-| [GSK105](GSK105.md) | High | Yes | Code scanning (CodeQL) not configured |
+| [GSK105](GSK105.md) | High | Yes | Code scanning default setup not configured |
 | [GSK106](GSK106.md) | High | Yes | Secret scanning not enabled |
 | [GSK107](GSK107.md) | High | Yes | Secret scanning push protection not enabled |
 | [GSK108](GSK108.md) | Medium | Yes | Private vulnerability reporting not enabled |
