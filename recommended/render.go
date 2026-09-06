@@ -133,19 +133,17 @@ type applyResultJSON struct {
 }
 
 // RenderApplyResults renders the results of applying fixes as a table, or as
-// structured data when an exporter is configured. A dry run reports only the
-// fixes it would apply.
+// structured data when an exporter is configured. Only the rules a fix was (or
+// would be) applied to are reported, along with any fix that failed.
 func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult, dryRun bool) error {
 	r := render.NewRenderer(exporter)
-	if dryRun {
-		filtered := make([]ApplyResult, 0, len(results))
-		for _, res := range results {
-			if res.Applied {
-				filtered = append(filtered, res)
-			}
+	filtered := make([]ApplyResult, 0, len(results))
+	for _, res := range results {
+		if res.Applied || res.Error != nil {
+			filtered = append(filtered, res)
 		}
-		results = filtered
 	}
+	results = filtered
 	if r.HasExporter() {
 		data := make([]applyResultJSON, 0, len(results))
 		for _, res := range results {
@@ -162,7 +160,7 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult, dryRun
 			r.WriteLine("No fixes would be applied.")
 			return nil
 		}
-		r.WriteLine("No rules evaluated.")
+		r.WriteLine("No fixes applied.")
 		return nil
 	}
 	headers := []string{"Rule", "Severity", "Target", "Status", "Applied", "Title", "Detail"}

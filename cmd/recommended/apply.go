@@ -30,9 +30,9 @@ failing rule that supports automated remediation.
 
 Use --repo to fix a single repository. Use --owner to fix an organization.
 --repo and --owner are mutually exclusive.
-Rules without an automated fix are reported but left untouched; run
-'recommended check' to see the full list of findings.
-Use --dryrun to report only the fixes that would be applied, without changing anything.`,
+Only the rules a fix was applied to are reported; run 'recommended check' to
+see the full list of findings.
+Use --dryrun to report the fixes that would be applied, without changing anything.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !dryRun && guardrails.IsReadonly() {
@@ -89,7 +89,7 @@ Use --dryrun to report only the fixes that would be applied, without changing an
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", catalog.Severities, "Only include findings at or above this severity")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only include the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
-	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report only the fixes that would be applied, without changing anything")
+	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report the fixes that would be applied, without changing anything")
 	cmdutil.AddFormatFlags(cmd, &exporter)
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd
