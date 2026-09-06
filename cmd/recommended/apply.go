@@ -30,8 +30,9 @@ failing rule that supports automated remediation.
 
 Use --repo to fix a single repository. Use --owner to fix an organization.
 --repo and --owner are mutually exclusive.
-Only the rules a fix was applied to are reported; run 'recommended check' to
-see the full list of findings.
+Output includes only fixes that were applied, fixes that would be applied
+with --dryrun, and failed fix attempts. Run 'recommended check' to see the
+full list of findings.
 Use --dryrun to report the fixes that would be applied, without changing anything.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

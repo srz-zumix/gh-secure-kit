@@ -2240,7 +2240,7 @@ gh secure-kit recommended apply --repo <owner/repo> [flags]
 gh secure-kit recommended apply --owner <org> [flags]
 ```
 
-Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Only the rules a fix was applied to are reported; run `recommended check` to see the full list of findings. Use `--dryrun` to report the fixes that would be applied, without changing anything. Refuses to run when `--read-only` is set, unless `--dryrun` is also given.
+Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Output includes only fixes that were applied, fixes that would be applied with `--dryrun`, and failed fix attempts; run `recommended check` to see the full list of findings. Use `--dryrun` to report the fixes that would be applied, without changing anything. Refuses to run when `--read-only` is set, unless `--dryrun` is also given.
 
 ```sh
 # Apply all fixable recommendations to the current repository
