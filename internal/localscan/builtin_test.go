@@ -38,6 +38,35 @@ func TestBuiltinPatternsMatch(t *testing.T) {
 	}
 }
 
+func TestBuiltinPatternsNoMatch(t *testing.T) {
+	tests := []struct {
+		id      string
+		content string
+	}{
+		// A key ID prefix that is part of a longer alphanumeric run, as found
+		// in the base64 encoded test data of golang/go.
+		{"aws_access_key_id", "DAwMAAwMTM3MzcAIDAAAAAAAAAAAAAAAAAAAAAA"},
+		{"aws_access_key_id", "AKIA" + repeatChar("A", 20)},
+	}
+
+	byID := make(map[string]Pattern)
+	for _, p := range BuiltinPatterns() {
+		byID[p.ID] = p
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			p, ok := byID[tt.id]
+			if !ok {
+				t.Fatalf("pattern %q not found", tt.id)
+			}
+			if m := p.Regex.FindString(tt.content); m != "" {
+				t.Errorf("pattern %q matched %q in %q", tt.id, m, tt.content)
+			}
+		})
+	}
+}
+
 func TestBuiltinPatternsNoFalsePositive(t *testing.T) {
 	scanner, err := NewScanner(nil, true)
 	if err != nil {

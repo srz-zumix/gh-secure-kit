@@ -9,7 +9,8 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-github/v90 v90.0.0
 	github.com/spf13/cobra v1.10.2
-	github.com/srz-zumix/go-gh-extension v0.6.7
+	github.com/srz-zumix/gh-diet-kit v0.4.0
+	github.com/srz-zumix/go-gh-extension v0.6.12
 )
 
 require (

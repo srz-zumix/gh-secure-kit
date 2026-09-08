@@ -2,6 +2,7 @@ package localscan
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -27,6 +28,10 @@ const (
 )
 
 var hunkHeaderRe = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
+
+// ErrAPIDiffIncomplete reports that the GitHub API left part of a commit diff
+// out of its response, so the commit can only be scanned from git objects.
+var ErrAPIDiffIncomplete = errors.New("the GitHub API returned an incomplete commit diff")
 
 // APISource produces fragments from commit diffs read through the GitHub API,
 // so a revision range can be scanned without the commits existing locally.
@@ -238,7 +243,7 @@ func isLocalOnlyRevspec(ref string) bool {
 func fragmentsForAPICommit(commit *github.RepositoryCommit) ([]Fragment, error) {
 	sha := commit.GetSHA()
 	if len(commit.Files) >= apiMaxFilesPerCommit {
-		return nil, fmt.Errorf("commit %s changes at least %d files, which is the maximum the GitHub API reports; scan it with a local checkout instead", sha, apiMaxFilesPerCommit)
+		return nil, fmt.Errorf("%w: commit %s changes at least %d files, which is the maximum the GitHub API reports; scan it with a local checkout instead", ErrAPIDiffIncomplete, sha, apiMaxFilesPerCommit)
 	}
 
 	author := commit.GetCommit().GetAuthor().GetName()
@@ -253,7 +258,7 @@ func fragmentsForAPICommit(commit *github.RepositoryCommit) ([]Fragment, error) 
 		// A binary file reports no additions, so an omitted patch with added
 		// lines means the API truncated the diff.
 		if f.GetAdditions() > 0 {
-			return nil, fmt.Errorf("the GitHub API did not return the diff of %q in commit %s, most likely because it is too large; scan it with a local checkout instead", f.GetFilename(), sha)
+			return nil, fmt.Errorf("%w: the diff of %q in commit %s is missing, most likely because it is too large; scan it with a local checkout instead", ErrAPIDiffIncomplete, f.GetFilename(), sha)
 		}
 	}
 	return frags, nil
