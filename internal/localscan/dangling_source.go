@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 
 	cligit "github.com/cli/cli/v2/git"
 	"github.com/cli/go-gh/v2/pkg/repository"
@@ -244,14 +246,20 @@ func (s *DanglingSource) openLocalRepo() (*git.Repository, error) {
 }
 
 // localRepoDir returns the git repository to fetch commits into: the current
-// checkout when there is one, otherwise a temporary repository.
+// checkout when it is a clone of the scanned repository, otherwise a temporary
+// repository.
 func (s *DanglingSource) localRepoDir() (string, error) {
 	if s.fetchDir != "" {
 		return s.fetchDir, nil
 	}
 	if dir, err := gitutil.NewClient().ToplevelDir(s.ctx); err == nil {
-		s.fetchDir = dir
-		return dir, nil
+		if s.checkoutMatchesRepo() {
+			s.fetchDir = dir
+			return dir, nil
+		}
+		// Fetching into an unrelated checkout would grow it by the whole
+		// history of the scanned repository.
+		logger.Debug("the current checkout is not a clone of the scanned repository, using a temporary one", "dir", dir, "repository", s.repo.Owner+"/"+s.repo.Name)
 	}
 
 	dir, err := os.MkdirTemp("", "gh-secure-kit-dangling-")
@@ -270,6 +278,33 @@ func (s *DanglingSource) localRepoDir() (string, error) {
 	s.fetchDir = dir
 	logger.Debug("fetching dangling commits into a temporary repository", "dir", dir)
 	return dir, nil
+}
+
+// checkoutMatchesRepo reports whether a remote of the current checkout points
+// at the scanned repository.
+func (s *DanglingSource) checkoutMatchesRepo() bool {
+	remotes, err := gitutil.NewClient().Remotes(s.ctx)
+	if err != nil {
+		return false
+	}
+	for _, remote := range remotes {
+		for _, u := range []*url.URL{remote.FetchURL, remote.PushURL} {
+			if u == nil {
+				continue
+			}
+			parsed, err := repository.Parse(u.String())
+			if err != nil {
+				continue
+			}
+			if !strings.EqualFold(parsed.Owner, s.repo.Owner) || !strings.EqualFold(parsed.Name, s.repo.Name) {
+				continue
+			}
+			if s.repo.Host == "" || strings.EqualFold(parsed.Host, s.repo.Host) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // cloneURL is the git URL commits are fetched from.

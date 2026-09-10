@@ -54,7 +54,7 @@ func NewDanglingCommitsCmd() *cobra.Command {
 Such commits are left behind by squash or rebase merges, by force-pushes on a pull request head branch, and by closed unmerged pull requests, so a secret removed by rewriting history can still be read from them.
 By default every closed pull request is inspected, up to --limit; pass --pr to inspect specific pull requests instead.
 With --local, the commits that no local ref reaches but that still exist on the remote are scanned instead, which requires running inside a clone of the repository.
-The detected commits are fetched into the current clone, or into a temporary repository when there is none, and scanned from the fetched git objects; pass --no-fetch to read their contents through the GitHub API instead, which is slower and consumes API rate limit.
+The detected commits are fetched into the current clone when it is a clone of the scanned repository, otherwise into a temporary repository, and scanned from the fetched git objects; pass --no-fetch to read their contents through the GitHub API instead, which is slower and consumes API rate limit.
 Files that contain a detected secret are written under --download-dir when it is set.
 This is an independent reimplementation and does not use GitHub's official secret scanning patterns.
 Exits with status 1 if any secret is found.`,
