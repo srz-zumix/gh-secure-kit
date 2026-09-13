@@ -43,18 +43,22 @@ func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
 	al := &Allowlist{}
 
 	tests := []struct {
-		name  string
-		match string
-		want  bool
+		name      string
+		patternID string
+		match     string
+		want      bool
 	}{
-		{"aws access key id example", "AKIAIOSFODNN7EXAMPLE", true},
-		{"aws secret access key example", `aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`, true},
-		{"real-looking access key id", "AKIAIVRN52PLDBP55LBQ", false},
+		{"aws access key id example", "aws_access_key_id", "AKIAIOSFODNN7EXAMPLE", true},
+		{"aws secret access key example", "aws_secret_access_key", `aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`, true},
+		{"real-looking access key id", "aws_access_key_id", "AKIAIVRN52PLDBP55LBQ", false},
+		{"custom pattern ending in EXAMPLE is not suppressed", "custom_token", "SECRET_EXAMPLE", false},
+		{"other provider ending in EXAMPLE is not suppressed", "github_personal_access_token", "ghp_EXAMPLE", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := al.Allowed(Finding{}, tt.match, tt.match); got != tt.want {
+			f := Finding{PatternID: tt.patternID}
+			if got := al.Allowed(f, tt.match, tt.match); got != tt.want {
 				t.Errorf("Allowed() = %v, want %v", got, tt.want)
 			}
 		})

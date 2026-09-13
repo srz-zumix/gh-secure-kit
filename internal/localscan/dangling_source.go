@@ -265,8 +265,10 @@ func (s *DanglingSource) openLocalRepo() (*git.Repository, error) {
 		return nil, err
 	}
 	// The directory is either a checkout toplevel or a bare repository this
-	// source created, so parent directories must not be searched.
-	repo, err := git.PlainOpen(dir)
+	// source created, so parent directories must not be searched. Linked
+	// worktrees keep their objects in the shared common dir, so follow the
+	// worktree's commondir metadata to read fetched commits.
+	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{EnableDotGitCommonDir: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the git repository at %q: %w", dir, err)
 	}
@@ -282,7 +284,7 @@ func (s *DanglingSource) localRepoDir() (string, error) {
 		return s.fetchDir, nil
 	}
 	if dir, err := gitutil.NewClient().ToplevelDir(s.ctx); err == nil {
-		if s.checkoutMatchesRepo() {
+		if matched, _ := s.checkoutMatchesRepo(); matched {
 			s.fetchDir = dir
 			return dir, nil
 		}
@@ -300,7 +302,9 @@ func (s *DanglingSource) localRepoDir() (string, error) {
 		_, err = cmd.Output()
 	}
 	if err != nil {
-		os.RemoveAll(dir)
+		if rmErr := os.RemoveAll(dir); rmErr != nil {
+			logger.Debug("failed to remove the temporary repository", "dir", dir, "error", rmErr)
+		}
 		return "", fmt.Errorf("failed to initialize a temporary git repository to fetch dangling commits into: %w", err)
 	}
 	s.tempDir = dir
@@ -310,11 +314,12 @@ func (s *DanglingSource) localRepoDir() (string, error) {
 }
 
 // checkoutMatchesRepo reports whether a remote of the current checkout points
-// at the scanned repository.
-func (s *DanglingSource) checkoutMatchesRepo() bool {
+// at the scanned repository. It returns an error only when the remotes cannot
+// be inspected, so a genuine mismatch is distinguishable from a lookup failure.
+func (s *DanglingSource) checkoutMatchesRepo() (bool, error) {
 	remotes, err := gitutil.NewClient().Remotes(s.ctx)
 	if err != nil {
-		return false
+		return false, err
 	}
 	for _, remote := range remotes {
 		for _, u := range []*url.URL{remote.FetchURL, remote.PushURL} {
@@ -329,11 +334,11 @@ func (s *DanglingSource) checkoutMatchesRepo() bool {
 				continue
 			}
 			if s.repo.Host == "" || strings.EqualFold(parsed.Host, s.repo.Host) {
-				return true
+				return true, nil
 			}
 		}
 	}
-	return false
+	return false, nil
 }
 
 // cloneURL is the git URL commits are fetched from.
@@ -387,6 +392,13 @@ func (s *DanglingSource) commitSHAs() ([]string, error) {
 // localDanglingCommits returns the commits that no local ref reaches but that
 // the remote repository still serves.
 func (s *DanglingSource) localDanglingCommits() ([]*dangling.DanglingCommit, error) {
+	matched, err := s.checkoutMatchesRepo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify that the current checkout is a clone of %s/%s: %w", s.repo.Owner, s.repo.Name, err)
+	}
+	if !matched {
+		return nil, fmt.Errorf("the current directory is not a clone of %s/%s; run --local from a clone of the scanned repository", s.repo.Owner, s.repo.Name)
+	}
 	unreachable, err := gitutil.ListUnreachableCommits(s.ctx, s.opts.NoReflogs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list the commits that are unreachable in the local repository: %w", err)

@@ -167,6 +167,18 @@ func downloadFindings(ctx context.Context, client *gh.GitHubClient, repo reposit
 	if err != nil {
 		return fmt.Errorf("failed to resolve download directory %q: %w", dir, err)
 	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return fmt.Errorf("failed to create download directory %q: %w", root, err)
+	}
+	// Confine every write to the download directory: os.Root refuses paths that
+	// leave the root through "..", an absolute path, or a symlinked component,
+	// so a crafted repository path cannot overwrite unrelated files even when a
+	// parent directory is a symlink.
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return fmt.Errorf("failed to open download directory %q: %w", root, err)
+	}
+	defer rootFS.Close()
 
 	downloaded := make(map[string]bool, len(findings))
 	for _, finding := range findings {
@@ -179,7 +191,7 @@ func downloadFindings(ctx context.Context, client *gh.GitHubClient, repo reposit
 		}
 		downloaded[key] = true
 
-		dest, err := secureJoin(root, finding.Commit, finding.File)
+		rel, err := secureRelPath(finding.Commit, finding.File)
 		if err != nil {
 			return err
 		}
@@ -187,13 +199,15 @@ func downloadFindings(ctx context.Context, client *gh.GitHubClient, repo reposit
 		if err != nil {
 			return fmt.Errorf("failed to read %q at commit %s: %w", finding.File, finding.Commit, err)
 		}
-		if err := os.MkdirAll(filepath.Dir(dest), 0o700); err != nil {
-			return fmt.Errorf("failed to create directory for %q: %w", dest, err)
+		if parent := filepath.Dir(rel); parent != "." {
+			if err := rootFS.MkdirAll(parent, 0o700); err != nil {
+				return fmt.Errorf("failed to create directory for %q: %w", rel, err)
+			}
 		}
-		if err := os.WriteFile(dest, content, 0o600); err != nil {
-			return fmt.Errorf("failed to write %q: %w", dest, err)
+		if err := rootFS.WriteFile(rel, content, 0o600); err != nil {
+			return fmt.Errorf("failed to write %q: %w", rel, err)
 		}
-		logger.Info("downloaded a file that contains a secret", "commit", finding.Commit, "file", finding.File, "path", dest)
+		logger.Info("downloaded a file that contains a secret", "commit", finding.Commit, "file", finding.File, "path", filepath.Join(root, rel))
 	}
 	return nil
 }
@@ -202,17 +216,13 @@ func downloadFindings(ctx context.Context, client *gh.GitHubClient, repo reposit
 // the download directory.
 var errPathEscapesRoot = errors.New("the path escapes the download directory")
 
-// secureJoin joins repository-controlled path elements under root and rejects
-// any result that leaves it, so a crafted path cannot overwrite unrelated
-// files.
-func secureJoin(root string, elems ...string) (string, error) {
-	dest := filepath.Join(append([]string{root}, elems...)...)
-	rel, err := filepath.Rel(root, dest)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve %q under %q: %w", filepath.Join(elems...), root, err)
-	}
+// secureRelPath joins repository-controlled path elements into a path relative
+// to the download root and rejects any result that leaves it, so a crafted
+// path cannot target files outside the download directory.
+func secureRelPath(elems ...string) (string, error) {
+	rel := filepath.Join(elems...)
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
 		return "", fmt.Errorf("refusing to write %q: %w", filepath.Join(elems...), errPathEscapesRoot)
 	}
-	return dest, nil
+	return rel, nil
 }
