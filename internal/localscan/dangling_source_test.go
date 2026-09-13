@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 func TestDanglingSourceOpenLocalRepoBare(t *testing.T) {
@@ -67,5 +69,41 @@ func TestDanglingSourceOpenLocalRepoLinkedWorktree(t *testing.T) {
 	}
 	if _, err := repo.CommitObject(plumbing.NewHash(sha)); err != nil {
 		t.Fatalf("CommitObject(%s) error = %v", sha, err)
+	}
+}
+
+// TestDanglingSourceFileContentReadsLocalObjects verifies that FileContent
+// serves a file from the fetched git objects without falling back to the
+// GitHub API (the nil client would be used only on the API path).
+func TestDanglingSourceFileContentReadsLocalObjects(t *testing.T) {
+	dir := t.TempDir()
+	repo, err := git.PlainInit(dir, false)
+	if err != nil {
+		t.Fatalf("failed to initialize a repository: %v", err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatalf("failed to open worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("local-secret"), 0o600); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	if _, err := wt.Add("a.txt"); err != nil {
+		t.Fatalf("failed to add file: %v", err)
+	}
+	hash, err := wt.Commit("init", &git.CommitOptions{
+		Author: &object.Signature{Name: "test", Email: "test@example.com", When: time.Now()},
+	})
+	if err != nil {
+		t.Fatalf("failed to commit: %v", err)
+	}
+
+	s := &DanglingSource{ctx: context.Background(), fetchDir: dir}
+	content, err := s.FileContent(hash.String(), "a.txt")
+	if err != nil {
+		t.Fatalf("FileContent() error = %v", err)
+	}
+	if string(content) != "local-secret" {
+		t.Errorf("FileContent() = %q, want %q", content, "local-secret")
 	}
 }

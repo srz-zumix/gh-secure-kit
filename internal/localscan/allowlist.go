@@ -11,13 +11,14 @@ import (
 // config. AWS's documentation style guide requires example access key IDs to
 // end in "EXAMPLE" and example secret keys to end in "EXAMPLEKEY" (e.g. the
 // AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY pair used
-// throughout AWS docs), so any AWS match following that convention is a sample,
-// not a leak. The patterns are scoped to their pattern ID so a custom or
-// other-provider pattern whose value happens to end in "EXAMPLE" is not
-// silently suppressed.
+// throughout AWS docs), so an AWS token of the documented shape ending that way
+// is a sample, not a leak. The patterns are scoped to their pattern ID and, for
+// the access key ID, anchored to the full 20-character token, so a custom or
+// other-provider value that merely ends in "EXAMPLE" is not silently
+// suppressed.
 var defaultAllowlistPatterns = map[string]*regexp.Regexp{
-	"aws_access_key_id":     regexp.MustCompile(`EXAMPLE$`),
-	"aws_secret_access_key": regexp.MustCompile(`EXAMPLEKEY['"]?$`),
+	"aws_access_key_id":     regexp.MustCompile(`^[A-Z0-9]{13}EXAMPLE$`),
+	"aws_secret_access_key": regexp.MustCompile(`[0-9a-zA-Z/+]{30}EXAMPLEKEY['"]?$`),
 }
 
 // Allowlist filters out findings that are known to be safe, e.g. test

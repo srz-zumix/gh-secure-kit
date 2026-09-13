@@ -1,19 +1,13 @@
 package secretscanning
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
-	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-secure-kit/internal/localscan"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
-	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
@@ -112,6 +106,9 @@ Exits with status 1 if any secret is found.`,
 				NoFetch:           noFetch,
 				PRConcurrency:     prConcurrency,
 			})
+			// The source keeps the fetched commits available until it is closed
+			// so the download step can read file contents locally.
+			defer source.Close()
 
 			findings, err := localscan.Scan(source, scanner)
 			if err != nil {
@@ -124,12 +121,15 @@ Exits with status 1 if any secret is found.`,
 			}
 
 			if downloadDir != "" {
-				if err := downloadFindings(cmd.Context(), client, repository, findings, downloadDir); err != nil {
+				if err := localscan.DownloadFindings(source, findings, downloadDir); err != nil {
 					return fmt.Errorf("failed to download the files that contain a secret: %w", err)
 				}
 			}
 
 			if len(findings) > 0 {
+				// os.Exit skips deferred calls, so remove the temporary fetch
+				// repository before exiting.
+				source.Close()
 				os.Exit(1)
 			}
 			return nil
@@ -157,72 +157,4 @@ Exits with status 1 if any secret is found.`,
 	f.StringVar(&downloadDir, "download-dir", "", "Directory to write the files that contain a detected secret to, as <dir>/<commit>/<path>")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 	return cmd
-}
-
-// downloadFindings writes each file that contains a detected secret to
-// <dir>/<commit>/<path>, reading it at the dangling commit that introduced it.
-// A file is downloaded once even when it holds several findings.
-func downloadFindings(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, findings []localscan.Finding, dir string) error {
-	root, err := filepath.Abs(dir)
-	if err != nil {
-		return fmt.Errorf("failed to resolve download directory %q: %w", dir, err)
-	}
-	if err := os.MkdirAll(root, 0o700); err != nil {
-		return fmt.Errorf("failed to create download directory %q: %w", root, err)
-	}
-	// Confine every write to the download directory: os.Root refuses paths that
-	// leave the root through "..", an absolute path, or a symlinked component,
-	// so a crafted repository path cannot overwrite unrelated files even when a
-	// parent directory is a symlink.
-	rootFS, err := os.OpenRoot(root)
-	if err != nil {
-		return fmt.Errorf("failed to open download directory %q: %w", root, err)
-	}
-	defer rootFS.Close()
-
-	downloaded := make(map[string]bool, len(findings))
-	for _, finding := range findings {
-		if finding.Commit == "" || finding.File == "" {
-			continue
-		}
-		key := finding.Commit + "\x00" + finding.File
-		if downloaded[key] {
-			continue
-		}
-		downloaded[key] = true
-
-		rel, err := secureRelPath(finding.Commit, finding.File)
-		if err != nil {
-			return err
-		}
-		content, err := gh.GetFileContent(ctx, client, repo, finding.File, &finding.Commit)
-		if err != nil {
-			return fmt.Errorf("failed to read %q at commit %s: %w", finding.File, finding.Commit, err)
-		}
-		if parent := filepath.Dir(rel); parent != "." {
-			if err := rootFS.MkdirAll(parent, 0o700); err != nil {
-				return fmt.Errorf("failed to create directory for %q: %w", rel, err)
-			}
-		}
-		if err := rootFS.WriteFile(rel, content, 0o600); err != nil {
-			return fmt.Errorf("failed to write %q: %w", rel, err)
-		}
-		logger.Info("downloaded a file that contains a secret", "commit", finding.Commit, "file", finding.File, "path", filepath.Join(root, rel))
-	}
-	return nil
-}
-
-// errPathEscapesRoot reports that a repository path would be written outside
-// the download directory.
-var errPathEscapesRoot = errors.New("the path escapes the download directory")
-
-// secureRelPath joins repository-controlled path elements into a path relative
-// to the download root and rejects any result that leaves it, so a crafted
-// path cannot target files outside the download directory.
-func secureRelPath(elems ...string) (string, error) {
-	rel := filepath.Join(elems...)
-	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-		return "", fmt.Errorf("refusing to write %q: %w", filepath.Join(elems...), errPathEscapesRoot)
-	}
-	return rel, nil
 }

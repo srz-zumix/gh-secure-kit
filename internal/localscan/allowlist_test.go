@@ -53,6 +53,8 @@ func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
 		{"real-looking access key id", "aws_access_key_id", "AKIAIVRN52PLDBP55LBQ", false},
 		{"custom pattern ending in EXAMPLE is not suppressed", "custom_token", "SECRET_EXAMPLE", false},
 		{"other provider ending in EXAMPLE is not suppressed", "github_personal_access_token", "ghp_EXAMPLE", false},
+		{"same id but not a key shape is not suppressed", "aws_access_key_id", "totally_not_a_key_EXAMPLE", false},
+		{"same id but wrong secret shape is not suppressed", "aws_secret_access_key", `note = "just an EXAMPLEKEY"`, false},
 	}
 
 	for _, tt := range tests {

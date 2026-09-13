@@ -103,14 +103,16 @@ func NewDanglingSource(ctx context.Context, client *gh.GitHubClient, repo reposi
 	return &DanglingSource{ctx: ctx, client: client, repo: repo, opts: opts}
 }
 
-// Fragments implements Source.
+// Fragments implements Source. The caller owns the source lifetime and must
+// call Close when done so any temporary fetch repository is removed; Fragments
+// no longer cleans up on return, so the fetched objects stay available for a
+// follow-up read such as downloading the files that contain a secret.
 func (s *DanglingSource) Fragments() ([]Fragment, error) {
 	shas, err := s.commitSHAs()
 	if err != nil {
 		return nil, err
 	}
 	logger.Debug("scanning dangling commits", "repository", s.repo.Owner+"/"+s.repo.Name, "local", s.opts.Local, "commits", len(shas))
-	defer s.cleanup()
 
 	if !s.opts.NoFetch {
 		if err := s.fetchCommits(shas); err != nil {
@@ -168,6 +170,65 @@ func (s *DanglingSource) localCommitFragments(sha string) ([]Fragment, error) {
 		return nil, err
 	}
 	return fragmentsForCommit(commit)
+}
+
+// FileContent returns the contents of path at commit, reading it from the
+// fetched git objects when they are available and falling back to the GitHub
+// API otherwise. It lets callers such as the downloader avoid one API request
+// per file when the commits were fetched locally, matching the documented
+// behavior that only --no-fetch reads contents through the API.
+func (s *DanglingSource) FileContent(commit, path string) ([]byte, error) {
+	if !s.opts.NoFetch {
+		content, err := s.localFileContent(commit, path)
+		if errors.Is(err, dotgit.ErrPackfileNotFound) {
+			// Another process repacked the repository, so the open one lists
+			// packfiles that no longer exist; reopen it and read the file again.
+			logger.Debug("the git repository was repacked while downloading, reopening it", "commit", commit, "file", path, "dir", s.fetchDir)
+			s.localRepo = nil
+			content, err = s.localFileContent(commit, path)
+		}
+		if err == nil {
+			return content, nil
+		}
+		if !errors.Is(err, ErrLocalContentMissing) {
+			return nil, err
+		}
+		logger.Debug("the fetched repository does not hold the file, reading it through the GitHub API", "commit", commit, "file", path, "reason", err)
+	}
+
+	content, err := gh.GetFileContent(s.ctx, s.client, s.repo, path, &commit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %q at commit %s through the GitHub API: %w", path, commit, err)
+	}
+	return content, nil
+}
+
+// localFileContent reads path at commit from the fetch repository, reporting
+// ErrLocalContentMissing when the commit or file was not fetched.
+func (s *DanglingSource) localFileContent(commit, path string) ([]byte, error) {
+	repo, err := s.openLocalRepo()
+	if err != nil {
+		return nil, err
+	}
+	c, err := repo.CommitObject(plumbing.NewHash(commit))
+	if err != nil {
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			return nil, fmt.Errorf("%w: commit %s is not in %q", ErrLocalContentMissing, commit, s.fetchDir)
+		}
+		return nil, fmt.Errorf("failed to read commit %s from %q: %w", commit, s.fetchDir, err)
+	}
+	f, err := c.File(path)
+	if err != nil {
+		if errors.Is(err, object.ErrFileNotFound) {
+			return nil, fmt.Errorf("%w: file %q is not in commit %s", ErrLocalContentMissing, path, commit)
+		}
+		return nil, fmt.Errorf("failed to read file %q at commit %s from %q: %w", path, commit, s.fetchDir, err)
+	}
+	content, err := f.Contents()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %q at commit %s from %q: %w", path, commit, s.fetchDir, err)
+	}
+	return []byte(content), nil
 }
 
 // localCommit returns a commit from the fetch repository. It reports
@@ -348,6 +409,12 @@ func (s *DanglingSource) cloneURL() string {
 		host = "github.com"
 	}
 	return fmt.Sprintf("https://%s/%s/%s.git", host, s.repo.Owner, s.repo.Name)
+}
+
+// Close releases the resources the source holds, removing the temporary fetch
+// repository when one was created. It is safe to call more than once.
+func (s *DanglingSource) Close() {
+	s.cleanup()
 }
 
 // cleanup removes the temporary repository, if one was created.
