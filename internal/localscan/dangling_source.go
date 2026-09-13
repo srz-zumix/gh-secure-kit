@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	cligit "github.com/cli/cli/v2/git"
 	"github.com/cli/go-gh/v2/pkg/repository"
@@ -66,11 +67,21 @@ type DanglingSourceOptions struct {
 	// NoFetch reads the commit contents through the GitHub API instead of
 	// fetching the commits into a local git repository.
 	NoFetch bool
+	// PRConcurrency caps how many pull requests are inspected concurrently.
+	// A value <= 0 uses the package default.
+	PRConcurrency int
 }
 
 // fetchBatchSize caps how many commits a single git fetch asks for, to keep
 // the command line within the limits of the platform.
 const fetchBatchSize = 50
+
+// fetchAttempts and fetchRetryDelay control how a failed git fetch is retried;
+// the delay grows with each attempt.
+const (
+	fetchAttempts   = 3
+	fetchRetryDelay = 2 * time.Second
+)
 
 // DanglingSource produces fragments from commits that are no longer reachable
 // from any branch or tag ref but are still served by the GitHub API, such as
@@ -210,20 +221,38 @@ func (s *DanglingSource) fetchCommits(shas []string) error {
 	for start := 0; start < len(missing); start += fetchBatchSize {
 		end := min(start+fetchBatchSize, len(missing))
 		batch := missing[start:end]
-		// Auto gc runs detached and would repack the objects out from under the
-		// scan, so it is disabled for the fetch.
-		args := append([]string{"-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--no-tags", "--quiet", s.cloneURL()}, batch...)
-		cmd, err := client.AuthenticatedCommand(s.ctx, cligit.AllMatchingCredentialsPattern, args...)
-		if err == nil {
-			_, err = cmd.Output()
-		}
-		if err != nil {
+		if err := s.fetchBatch(client, batch); err != nil {
 			return fmt.Errorf("failed to fetch %d dangling commit(s) into %q: %w; pass --no-fetch to read them through the GitHub API instead", len(batch), s.fetchDir, err)
 		}
 	}
 	// The fetch added objects the already opened repository may not see.
 	s.localRepo = nil
 	return nil
+}
+
+// fetchBatch fetches one batch of commits, retrying because the GitHub git
+// endpoint intermittently drops large fetches.
+func (s *DanglingSource) fetchBatch(client *cligit.Client, batch []string) error {
+	// Auto gc runs detached and would repack the objects out from under the
+	// scan, so it is disabled for the fetch.
+	args := append([]string{"-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--no-tags", "--quiet", s.cloneURL()}, batch...)
+	var err error
+	for attempt := 1; ; attempt++ {
+		var cmd *cligit.Command
+		cmd, err = client.AuthenticatedCommand(s.ctx, cligit.AllMatchingCredentialsPattern, args...)
+		if err == nil {
+			_, err = cmd.Output()
+		}
+		if err == nil || attempt >= fetchAttempts {
+			return err
+		}
+		logger.Debug("retrying the git fetch of dangling commits", "attempt", attempt, "commits", len(batch), "error", err)
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-time.After(time.Duration(attempt) * fetchRetryDelay):
+		}
+	}
 }
 
 // openLocalRepo opens the fetch repository, creating it if needed.
@@ -386,6 +415,7 @@ func (s *DanglingSource) pullRequestDanglingCommits() ([]*dangling.DanglingCommi
 		StrictErrors:        s.opts.StrictErrors,
 		NoCache:             s.opts.NoCache,
 		ClearCache:          s.opts.ClearCache,
+		PRConcurrency:       s.opts.PRConcurrency,
 		// Blob sizes are irrelevant to a secret scan and cost extra API calls.
 		NoBlobSize: true,
 	}

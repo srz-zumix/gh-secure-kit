@@ -38,3 +38,25 @@ func TestAllowlistNilIsNeverAllowed(t *testing.T) {
 		t.Error("nil allowlist should never allow")
 	}
 }
+
+func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
+	al := &Allowlist{}
+
+	tests := []struct {
+		name  string
+		match string
+		want  bool
+	}{
+		{"aws access key id example", "AKIAIOSFODNN7EXAMPLE", true},
+		{"aws secret access key example", `aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`, true},
+		{"real-looking access key id", "AKIAIVRN52PLDBP55LBQ", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := al.Allowed(Finding{}, tt.match, tt.match); got != tt.want {
+				t.Errorf("Allowed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

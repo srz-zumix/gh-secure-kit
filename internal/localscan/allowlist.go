@@ -6,6 +6,18 @@ import (
 	"strings"
 )
 
+// defaultAllowlistPatterns match known documentation placeholder values that
+// are never real secrets, so they are excluded regardless of user config.
+// AWS's documentation style guide requires example access key IDs to end in
+// "EXAMPLE" and example secret keys to end in "EXAMPLEKEY" (e.g. the
+// AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY pair used
+// throughout AWS docs), so any match following that convention is a sample,
+// not a leak.
+var defaultAllowlistPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`EXAMPLE$`),
+	regexp.MustCompile(`EXAMPLEKEY['"]?$`),
+}
+
 // Allowlist filters out findings that are known to be safe, e.g. test
 // fixtures or documentation examples.
 type Allowlist struct {
@@ -21,6 +33,11 @@ type Allowlist struct {
 func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
 	if a == nil {
 		return false
+	}
+	for _, re := range defaultAllowlistPatterns {
+		if re.MatchString(matchedText) {
+			return true
+		}
 	}
 	for _, re := range a.Regexes {
 		if re.MatchString(matchedText) {

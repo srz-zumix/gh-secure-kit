@@ -44,6 +44,7 @@ func NewDanglingCommitsCmd() *cobra.Command {
 		usePatternCfg     bool
 		showSecret        bool
 		downloadDir       string
+		prConcurrency     int
 	)
 	opts := &DanglingCommitsOptions{}
 
@@ -65,7 +66,7 @@ Exits with status 1 if any secret is found.`,
 					return fmt.Errorf("--no-reflogs only applies to --local")
 				}
 			} else {
-				for _, name := range []string{"pr", "limit", "no-squash-merge", "no-force-push", "no-closed", "reachability-check", "no-cache", "clear-cache"} {
+				for _, name := range []string{"pr", "limit", "no-squash-merge", "no-force-push", "no-closed", "reachability-check", "no-cache", "clear-cache", "pr-concurrency"} {
 					if cmd.Flags().Changed(name) {
 						return fmt.Errorf("--%s does not apply to --local, which inspects local refs instead of pull requests", name)
 					}
@@ -109,6 +110,7 @@ Exits with status 1 if any secret is found.`,
 				NoCache:           noCache,
 				ClearCache:        clearCache,
 				NoFetch:           noFetch,
+				PRConcurrency:     prConcurrency,
 			})
 
 			findings, err := localscan.Scan(source, scanner)
@@ -148,6 +150,7 @@ Exits with status 1 if any secret is found.`,
 	f.BoolVar(&noCache, "no-cache", false, "Disable the per-pull-request detection cache; does not clear existing entries")
 	f.BoolVar(&clearCache, "clear-cache", false, "Clear the detection cache before scanning, then use it normally")
 	f.BoolVar(&noFetch, "no-fetch", false, "Read the commit contents through the GitHub API instead of fetching the commits into a local git repository")
+	f.IntVar(&prConcurrency, "pr-concurrency", 0, "Maximum number of pull requests inspected concurrently (<=0 uses the default of 4); higher values are faster but risk GitHub secondary rate limits")
 	f.StringVar(&configFile, "config", "", "Path to a local secret scanning config file (default: auto-discover .gh-secure-kit-secret-scanning.yml)")
 	f.BoolVar(&usePatternCfg, "pattern-config", false, "Filter patterns using the organization's secret scanning pattern configuration")
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")

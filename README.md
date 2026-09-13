@@ -1523,6 +1523,7 @@ Discovering dangling commits costs roughly one API request per inspected pull re
 | `--no-squash-merge` | | `false` | Do not detect the commits left behind by a squash or rebase merge |
 | `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
 | `--pr` | | | The pull request numbers to inspect (default: every closed pull request) |
+| `--pr-concurrency` | | `0` | Maximum number of pull requests inspected concurrently (`<=0` uses the default of 4); higher values are faster but risk GitHub secondary rate limits |
 | `--reachability-check` | | `"none"` | Verify that a candidate commit really is unreachable before scanning it {none\|default-branch\|branches\|refs\|local-object\|local-refs} |
 | `--repo` | `-R` | `""` | The repository in the format `[HOST/]OWNER/REPO` (default: current repository) |
 | `--show-secret` | | `false` | Show the full matched secret value instead of a redacted form |
