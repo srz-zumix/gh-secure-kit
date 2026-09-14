@@ -6,19 +6,25 @@ import (
 	"strings"
 )
 
-// defaultAllowlistPatterns maps a built-in pattern ID to the documentation
-// placeholder values it should never flag as a real secret, regardless of user
-// config. AWS's documentation style guide requires example access key IDs to
-// end in "EXAMPLE" and example secret keys to end in "EXAMPLEKEY" (e.g. the
-// AKIAIOSFODNN7EXAMPLE / wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY pair used
-// throughout AWS docs), so an AWS token of the documented shape ending that way
-// is a sample, not a leak. The patterns are scoped to their pattern ID and, for
-// the access key ID, anchored to the full 20-character token, so a custom or
-// other-provider value that merely ends in "EXAMPLE" is not silently
-// suppressed.
-var defaultAllowlistPatterns = map[string]*regexp.Regexp{
-	"aws_access_key_id":     regexp.MustCompile(`^[A-Z0-9]{13}EXAMPLE$`),
-	"aws_secret_access_key": regexp.MustCompile(`[0-9a-zA-Z/+]{30}EXAMPLEKEY['"]?$`),
+// defaultAllowlistValues maps a built-in AWS pattern ID to the exact
+// documentation sample credentials AWS publishes throughout its docs. Only
+// these exact fixtures are suppressed regardless of user config, so a real
+// credential that merely shares the "EXAMPLE"/"EXAMPLEKEY" suffix is still
+// reported instead of being silently discarded. The list is intentionally not
+// exhaustive: a missing sample only causes a false positive (a documented
+// example flagged), which is the safe direction for a security scanner. Values
+// are matched by substring because the secret detector returns the surrounding
+// assignment text (e.g. `aws_secret_access_key = "<value>"`), not the bare
+// value.
+var defaultAllowlistValues = map[string][]string{
+	"aws_access_key_id": {
+		"AKIAIOSFODNN7EXAMPLE",
+		"AKIAI44QH8DHBEXAMPLE",
+	},
+	"aws_secret_access_key": {
+		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY",
+	},
 }
 
 // Allowlist filters out findings that are known to be safe, e.g. test
@@ -37,8 +43,12 @@ func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
 	if a == nil {
 		return false
 	}
-	if re, ok := defaultAllowlistPatterns[f.PatternID]; ok && re.MatchString(matchedText) {
-		return true
+	if samples, ok := defaultAllowlistValues[f.PatternID]; ok {
+		for _, sample := range samples {
+			if strings.Contains(matchedText, sample) {
+				return true
+			}
+		}
 	}
 	for _, re := range a.Regexes {
 		if re.MatchString(matchedText) {

@@ -96,11 +96,27 @@ type DanglingSource struct {
 	fetchDir  string
 	tempDir   string
 	localRepo *git.Repository
+
+	// Function seams, defaulted in NewDanglingSource, let tests intercept the
+	// GitHub API and git fetch operations without touching the network.
+	listClosedPRs   func(context.Context, *gh.GitHubClient, repository.Repository, int) ([]*github.PullRequest, error)
+	getPRsByNumbers func(context.Context, *gh.GitHubClient, repository.Repository, []int) ([]*github.PullRequest, error)
+	findDangling    func(context.Context, *gh.GitHubClient, repository.Repository, []*github.PullRequest, dangling.DanglingOptions) ([]*dangling.DanglingCommit, error)
+	getCommit       func(context.Context, *gh.GitHubClient, repository.Repository, string) (*github.RepositoryCommit, error)
+	getFileContent  func(context.Context, *gh.GitHubClient, repository.Repository, string, *string) ([]byte, error)
+	fetchBatchFn    func(*cligit.Client, []string) error
 }
 
 // NewDanglingSource creates a DanglingSource for the given repository.
 func NewDanglingSource(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, opts DanglingSourceOptions) *DanglingSource {
-	return &DanglingSource{ctx: ctx, client: client, repo: repo, opts: opts}
+	s := &DanglingSource{ctx: ctx, client: client, repo: repo, opts: opts}
+	s.listClosedPRs = dangling.ListClosedPRs
+	s.getPRsByNumbers = dangling.GetPRsByNumbers
+	s.findDangling = dangling.FindDanglingCommits
+	s.getCommit = gh.GetCommit
+	s.getFileContent = gh.GetFileContent
+	s.fetchBatchFn = s.fetchBatch
+	return s
 }
 
 // Fragments implements Source. The caller owns the source lifetime and must
@@ -155,7 +171,7 @@ func (s *DanglingSource) commitFragments(sha string) ([]Fragment, error) {
 		logger.Debug("the fetched repository does not hold the dangling commit, reading it through the GitHub API", "commit", sha, "reason", err)
 	}
 
-	commit, err := gh.GetCommit(s.ctx, s.client, s.repo, sha)
+	commit, err := s.getCommit(s.ctx, s.client, s.repo, sha)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read dangling commit %s through the GitHub API: %w", sha, err)
 	}
@@ -196,7 +212,7 @@ func (s *DanglingSource) FileContent(commit, path string) ([]byte, error) {
 		logger.Debug("the fetched repository does not hold the file, reading it through the GitHub API", "commit", commit, "file", path, "reason", err)
 	}
 
-	content, err := gh.GetFileContent(s.ctx, s.client, s.repo, path, &commit)
+	content, err := s.getFileContent(s.ctx, s.client, s.repo, path, &commit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read %q at commit %s through the GitHub API: %w", path, commit, err)
 	}
@@ -282,7 +298,7 @@ func (s *DanglingSource) fetchCommits(shas []string) error {
 	for start := 0; start < len(missing); start += fetchBatchSize {
 		end := min(start+fetchBatchSize, len(missing))
 		batch := missing[start:end]
-		if err := s.fetchBatch(client, batch); err != nil {
+		if err := s.fetchBatchFn(client, batch); err != nil {
 			return fmt.Errorf("failed to fetch %d dangling commit(s) into %q: %w; pass --no-fetch to read them through the GitHub API instead", len(batch), s.fetchDir, err)
 		}
 	}
@@ -498,7 +514,7 @@ func (s *DanglingSource) pullRequestDanglingCommits() ([]*dangling.DanglingCommi
 		// Blob sizes are irrelevant to a secret scan and cost extra API calls.
 		NoBlobSize: true,
 	}
-	commits, err := dangling.FindDanglingCommits(s.ctx, s.client, s.repo, prs, opts)
+	commits, err := s.findDangling(s.ctx, s.client, s.repo, prs, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find dangling commits: %w", err)
 	}
@@ -509,13 +525,13 @@ func (s *DanglingSource) pullRequestDanglingCommits() ([]*dangling.DanglingCommi
 // ones, or every closed pull request up to the configured limit.
 func (s *DanglingSource) pullRequests() ([]*github.PullRequest, error) {
 	if len(s.opts.PRNumbers) > 0 {
-		prs, err := dangling.GetPRsByNumbers(s.ctx, s.client, s.repo, s.opts.PRNumbers)
+		prs, err := s.getPRsByNumbers(s.ctx, s.client, s.repo, s.opts.PRNumbers)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get the requested pull requests: %w", err)
 		}
 		return prs, nil
 	}
-	prs, err := dangling.ListClosedPRs(s.ctx, s.client, s.repo, s.opts.Limit)
+	prs, err := s.listClosedPRs(s.ctx, s.client, s.repo, s.opts.Limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list the closed pull requests: %w", err)
 	}
