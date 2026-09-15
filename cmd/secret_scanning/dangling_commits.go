@@ -55,16 +55,8 @@ This is an independent reimplementation and does not use GitHub's official secre
 Exits with status 1 if any secret is found.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !local {
-				if cmd.Flags().Changed("no-reflogs") {
-					return fmt.Errorf("--no-reflogs only applies to --local")
-				}
-			} else {
-				for _, name := range []string{"pr", "limit", "no-squash-merge", "no-force-push", "no-closed", "reachability-check", "no-cache", "clear-cache", "pr-concurrency"} {
-					if cmd.Flags().Changed(name) {
-						return fmt.Errorf("--%s does not apply to --local, which inspects local refs instead of pull requests", name)
-					}
-				}
+			if err := localscan.ValidateDanglingModeFlags(local, cmd.Flags().Changed); err != nil {
+				return err
 			}
 
 			repository, err := parser.Repository(parser.RepositoryInput(repo))
