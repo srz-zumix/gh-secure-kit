@@ -16,7 +16,9 @@ func BuiltinPatterns() []Pattern {
 		mustPattern("github_oauth_token", "github_oauth_token", "GitHub OAuth Access Token", `gho_[0-9A-Za-z]{36}`),
 		mustPattern("github_app_token", "github_app_token", "GitHub App Installation Access Token", `ghs_[0-9A-Za-z]{36}`),
 		mustPattern("github_refresh_token", "github_refresh_token", "GitHub Refresh Token", `ghr_[0-9A-Za-z]{36}`),
-		mustPattern("aws_access_key_id", "aws_access_key_id", "AWS Access Key ID", `(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}`),
+		// The key ID is exactly 20 characters, so word boundaries keep it from
+		// matching a substring of a longer run such as base64 encoded data.
+		mustPattern("aws_access_key_id", "aws_access_key_id", "AWS Access Key ID", `\b(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b`),
 		mustPattern("aws_secret_access_key", "aws_secret_access_key", "AWS Secret Access Key", `(?i)aws.{0,20}?(secret|access)?_?key.{0,20}?['"]\s*[:=]\s*['"][0-9a-zA-Z/+]{40}['"]`),
 		mustPattern("google_api_key", "google_api_key", "Google API Key", `AIza[0-9A-Za-z\-_]{35}`),
 		mustPattern("slack_token", "slack_token", "Slack Token", `xox[baprs]-[0-9A-Za-z-]{10,48}`),

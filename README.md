@@ -1477,6 +1477,59 @@ Get the latest default incremental and backfill secret scanning scan history for
 | `--repo` | `-R` | `""` | The repository in the format 'owner/repo' |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 
+### Scan dangling commits for secrets
+
+```sh
+gh secure-kit secret-scanning dangling-commits [flags]
+```
+
+Scan commits that are no longer reachable from any branch or tag ref, but that the GitHub API still serves, for secrets. Such commits are left behind by squash or rebase merges, by force-pushes on a pull request head branch, and by closed unmerged pull requests, so a secret removed by rewriting history can still be read from them. By default every closed pull request is inspected, up to `--limit`; pass `--pr` to inspect specific pull requests instead. With `--local`, the commits that no local ref reaches but that still exist on the remote are scanned instead, which requires running inside a clone of the repository. The detected commits are fetched into the current clone when it is a clone of the scanned repository, otherwise into a temporary repository, and scanned from the fetched git objects; pass `--no-fetch` to read their contents through the GitHub API instead, which is slower and consumes API rate limit. Files that contain a detected secret are written under `--download-dir` when it is set. This is an independent reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+
+```sh
+# Inspect every closed pull request of the current repository
+gh secure-kit secret-scanning dangling-commits
+
+# Inspect specific pull requests and output JSON
+gh secure-kit secret-scanning dangling-commits --repo my-org/my-repo --pr 12,34 --format json
+
+# Only look at the commits left behind by force-pushes, confirming they are really unreachable
+gh secure-kit secret-scanning dangling-commits --no-squash-merge --no-closed --reachability-check refs
+
+# Scan the commits that no local ref reaches but that still exist on the remote
+gh secure-kit secret-scanning dangling-commits --local
+
+# Download the files that contain a secret, as <dir>/<commit>/<path>
+gh secure-kit secret-scanning dangling-commits --download-dir ./dangling-secrets
+```
+
+Discovering dangling commits costs roughly one API request per inspected pull request, plus one per candidate commit, so limit the scope with `--pr` or `--limit` on a large repository. Results are cached per pull request, so an interrupted run resumes without re-inspecting the pull requests it already covered. Reading the commit contents costs no API request unless `--no-fetch` is given.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--clear-cache` | | `false` | Clear the detection cache before scanning, then use it normally |
+| `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--download-dir` | | `""` | Directory to write the files that contain a detected secret to, as `<dir>/<commit>/<path>` |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--limit` | | `-1` | Maximum number of closed pull requests to inspect, or `-1` for no limit (ignored with `--pr`) |
+| `--local` | | `false` | Scan the commits that no local ref reaches but that still exist on the remote, instead of inspecting pull requests |
+| `--no-cache` | | `false` | Disable the per-pull-request detection cache; does not clear existing entries |
+| `--no-closed` | | `false` | Do not detect the commits of closed unmerged pull requests |
+| `--no-force-push` | | `false` | Do not detect the commits dropped by a force-push on a pull request head branch |
+| `--no-fetch` | | `false` | Read the commit contents through the GitHub API instead of fetching the commits into a local git repository |
+| `--no-reflogs` | | `false` | With `--local`, ignore reflog entries when determining local reachability |
+| `--no-squash-merge` | | `false` | Do not detect the commits left behind by a squash or rebase merge |
+| `--pattern-config` | | `false` | Filter patterns using the organization's secret scanning pattern configuration |
+| `--pr` | | | The pull request numbers to inspect (default: every closed pull request) |
+| `--pr-concurrency` | | `0` | Maximum number of pull requests inspected concurrently (`<=0` uses the default of 4); higher values are faster but risk GitHub secondary rate limits |
+| `--reachability-check` | | `"none"` | Verify that a candidate commit really is unreachable before scanning it {none\|default-branch\|branches\|refs\|local-object\|local-refs} |
+| `--repo` | `-R` | `""` | The repository in the format `[HOST/]OWNER/REPO` (default: current repository) |
+| `--show-secret` | | `false` | Show the full matched secret value instead of a redacted form |
+| `--strict-errors` | | `false` | Fail on the first API or git error instead of logging it and continuing with partial results |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
 ### Scan local git content for secrets
 
 ```sh

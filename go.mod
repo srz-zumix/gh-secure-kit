@@ -9,7 +9,8 @@ require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-github/v90 v90.0.0
 	github.com/spf13/cobra v1.10.2
-	github.com/srz-zumix/go-gh-extension v0.6.7
+	github.com/srz-zumix/gh-diet-kit v0.5.0
+	github.com/srz-zumix/go-gh-extension v0.6.14
 )
 
 require (
@@ -101,7 +102,7 @@ require (
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/text v0.41.0 // indirect

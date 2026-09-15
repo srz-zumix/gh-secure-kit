@@ -10,7 +10,6 @@ import (
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
 	"github.com/srz-zumix/gh-secure-kit/internal/localscan"
-	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
@@ -124,7 +123,7 @@ Exits with status 1 if any secret is found.`,
 				source = localscan.NewGitSource(target)
 			}
 
-			scanner, err := buildScanner(absPath, configFile, showSecret)
+			scanner, err := localscan.BuildScanner(absPath, configFile, showSecret)
 			if err != nil {
 				return err
 			}
@@ -146,7 +145,7 @@ Exits with status 1 if any secret is found.`,
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
-			if err := renderFindings(renderer, findings); err != nil {
+			if err := localscan.RenderFindings(renderer, findings); err != nil {
 				return fmt.Errorf("failed to render findings: %w", err)
 			}
 
@@ -182,74 +181,12 @@ Exits with status 1 if any secret is found.`,
 	return cmd
 }
 
-// buildScanner loads the config file (explicit or auto-discovered) and
-// builds a Scanner from it.
-func buildScanner(searchDir, configFile string, showSecret bool) (*localscan.Scanner, error) {
-	if configFile == "" {
-		configFile = localscan.DiscoverConfig(searchDir)
-	}
-
-	var cfg *localscan.Config
-	if configFile != "" {
-		var err error
-		cfg, err = localscan.LoadConfig(configFile)
-		if err != nil {
-			return nil, fmt.Errorf("failed to load config file %q: %w", configFile, err)
-		}
-	}
-
-	scanner, err := localscan.NewScanner(cfg, showSecret)
-	if err != nil {
-		return nil, fmt.Errorf("failed to build scanner: %w", err)
-	}
-	return scanner, nil
-}
-
-// applyPatternConfig fetches the organization's secret scanning pattern
-// configuration and narrows the scanner's patterns accordingly, warning
-// instead of failing if the configuration cannot be fetched.
+// applyPatternConfig narrows the scanner's patterns using the pattern
+// configuration of the organization selected by --owner or --repo.
 func applyPatternConfig(cmd *cobra.Command, scanner *localscan.Scanner, owner, repo string) error {
 	repository, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
 	if err != nil {
 		return fmt.Errorf("failed to parse repository: %w", err)
 	}
-	client, err := gh.NewGitHubClientWithRepo(repository)
-	if err != nil {
-		return fmt.Errorf("failed to create GitHub client: %w", err)
-	}
-	configs, err := gh.ListSecretScanningPatternConfigs(cmd.Context(), client, repository)
-	if err != nil {
-		logger.Warn("failed to fetch secret scanning pattern configurations, using local settings", "error", err)
-		return nil
-	}
-	scanner.Patterns = localscan.ApplyPatternConfigs(scanner.Patterns, configs)
-	return nil
-}
-
-// renderFindings renders findings as a table, or via the configured
-// exporter (e.g. JSON) when one is set.
-func renderFindings(r *render.Renderer, findings []localscan.Finding) error {
-	if r.HasExporter() {
-		return r.RenderExportedData(findings)
-	}
-	if len(findings) == 0 {
-		return nil
-	}
-	headers := []string{"Pattern", "Token Type", "Commit", "File", "Line", "Secret"}
-	table := r.NewTableWriter(headers)
-	for _, f := range findings {
-		commit := f.Commit
-		if len(commit) > 12 {
-			commit = commit[:12]
-		}
-		table.Append([]string{
-			f.PatternID,
-			f.TokenType,
-			commit,
-			f.File,
-			fmt.Sprintf("%d", f.StartLine),
-			f.Secret,
-		})
-	}
-	return table.Render()
+	return localscan.ApplyPatternConfig(cmd.Context(), scanner, repository)
 }

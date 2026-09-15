@@ -30,7 +30,7 @@ func NewPatternsCmd() *cobra.Command {
 		Long:  "List the built-in and user-defined secret scanning patterns used by 'secret-scanning local check', including whether each is enabled.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			scanner, err := buildScanner(".", configFile, false)
+			scanner, err := localscan.BuildScanner(".", configFile, false)
 			if err != nil {
 				return err
 			}

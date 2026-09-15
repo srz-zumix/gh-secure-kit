@@ -22,3 +22,12 @@ type Fragment struct {
 type Source interface {
 	Fragments() ([]Fragment, error)
 }
+
+// FragmentStreamer is an optional Source capability that yields fragments one
+// at a time instead of returning them all at once, so a large scan does not
+// retain every fragment in memory. yield is called synchronously for each
+// fragment; the producer must not keep a fragment after yield returns, and it
+// stops and returns yield's error unchanged as soon as yield reports one.
+type FragmentStreamer interface {
+	StreamFragments(yield func(Fragment) error) error
+}

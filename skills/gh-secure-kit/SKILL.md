@@ -120,6 +120,7 @@ gh secure-kit                      # Root command
 │   │   ├── list                   # List secret scanning alerts
 │   │   ├── locations              # List locations for a secret scanning alert
 │   │   └── update                 # Update a secret scanning alert
+│   ├── dangling-commits           # Scan commits unreachable from any branch or tag for secrets
 │   ├── local                      # Offline local secret scanning subcommands
 │   │   ├── check                  # Scan local git content for secrets
 │   │   ├── hook                   # Manage git hooks running local secret scanning
@@ -1831,6 +1832,33 @@ gh secure-kit secret-scanning push-protection update \
   --custom-pattern "my_pattern=disabled" \
   --custom-pattern "other_pattern:2=not_set"
 ```
+
+### Scan dangling commits for secrets (gh secure-kit secret-scanning dangling-commits)
+
+```sh
+gh secure-kit secret-scanning dangling-commits [flags]
+```
+
+Scan commits that are no longer reachable from any branch or tag ref, but that the GitHub API still serves, for secrets. Such commits are left behind by squash or rebase merges, by force-pushes on a pull request head branch, and by closed unmerged pull requests, so a secret removed by rewriting history can still be read from them. By default every closed pull request is inspected, up to `--limit`; pass `--pr` to inspect specific pull requests instead. With `--local`, the commits that no local ref reaches but that still exist on the remote are scanned instead, which requires running inside a clone of the repository. The detected commits are fetched into the current clone when it is a clone of the scanned repository, otherwise into a temporary repository, and scanned from the fetched git objects; pass `--no-fetch` to read their contents through the GitHub API instead, which is slower and consumes API rate limit. Files that contain a detected secret are written under `--download-dir` when it is set. This is an independent reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
+
+```sh
+# Inspect every closed pull request of the current repository
+gh secure-kit secret-scanning dangling-commits
+
+# Inspect specific pull requests and output JSON
+gh secure-kit secret-scanning dangling-commits --repo my-org/my-repo --pr 12,34 --format json
+
+# Only look at the commits left behind by force-pushes, confirming they are really unreachable
+gh secure-kit secret-scanning dangling-commits --no-squash-merge --no-closed --reachability-check refs
+
+# Scan the commits that no local ref reaches but that still exist on the remote
+gh secure-kit secret-scanning dangling-commits --local
+
+# Download the files that contain a secret, as <dir>/<commit>/<path>
+gh secure-kit secret-scanning dangling-commits --download-dir ./dangling-secrets
+```
+
+Discovering dangling commits costs roughly one API request per inspected pull request, plus one per candidate commit, so limit the scope with `--pr` or `--limit` on a large repository. Results are cached per pull request, so an interrupted run resumes without re-inspecting the pull requests it already covered. Reading the commit contents costs no API request unless `--no-fetch` is given.
 
 ### Scan local git content for secrets (gh secure-kit secret-scanning local check)
 

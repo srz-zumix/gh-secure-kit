@@ -135,11 +135,6 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 // detected by the scanner. It keeps command handlers free of scan
 // orchestration logic.
 func Scan(src Source, scanner *Scanner) ([]Finding, error) {
-	fragments, err := src.Fragments()
-	if err != nil {
-		return nil, err
-	}
-	logger.Debug("scanning fragments", "fragments", len(fragments), "patterns", len(scanner.Patterns))
 	// Gate the per-fragment bookkeeping used only for the debug summary so it
 	// allocates nothing and does no extra work when debug logging is disabled.
 	debugEnabled := slog.Default().Enabled(context.Background(), slog.LevelDebug)
@@ -149,7 +144,9 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 		commits = make(map[string]struct{})
 		files = make(map[string]struct{})
 	}
-	for _, frag := range fragments {
+	fragmentCount := 0
+	handle := func(frag Fragment) error {
+		fragmentCount++
 		fragFindings := scanner.ScanFragment(frag)
 		if debugEnabled {
 			logger.Debug("scanned fragment", "commit", frag.CommitSHA, "file", frag.FilePath, "base_line", frag.BaseLine, "findings", len(fragFindings))
@@ -161,9 +158,30 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 			}
 		}
 		findings = append(findings, fragFindings...)
+		return nil
+	}
+
+	// Prefer streaming so the source can release each fragment's content as it
+	// is scanned instead of holding the whole run in memory at once.
+	if streamer, ok := src.(FragmentStreamer); ok {
+		logger.Debug("streaming fragments", "patterns", len(scanner.Patterns))
+		if err := streamer.StreamFragments(handle); err != nil {
+			return nil, err
+		}
+	} else {
+		fragments, err := src.Fragments()
+		if err != nil {
+			return nil, err
+		}
+		logger.Debug("scanning fragments", "fragments", len(fragments), "patterns", len(scanner.Patterns))
+		for _, frag := range fragments {
+			if err := handle(frag); err != nil {
+				return nil, err
+			}
+		}
 	}
 	if debugEnabled {
-		logger.Debug("scan completed", "commits", len(commits), "files", len(files), "findings", len(findings))
+		logger.Debug("scan completed", "fragments", fragmentCount, "commits", len(commits), "files", len(files), "findings", len(findings))
 	}
 	return findings, nil
 }
