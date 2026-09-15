@@ -1,6 +1,8 @@
 package localscan
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -67,10 +69,46 @@ func DownloadFindings(reader FileContentReader, findings []Finding, dir string) 
 				return fmt.Errorf("failed to create directory for %q: %w", rel, err)
 			}
 		}
-		if err := rootFS.WriteFile(rel, content, 0o600); err != nil {
-			return fmt.Errorf("failed to write %q: %w", rel, err)
+		if err := writeSecureFile(rootFS, rel, content); err != nil {
+			return err
 		}
 		logger.Info("downloaded a file that contains a secret", "commit", finding.Commit, "file", finding.File, "path", filepath.Join(root, rel))
+	}
+	return nil
+}
+
+// writeSecureFile writes content to rel with mode 0o600 by creating a fresh
+// temporary file and renaming it into place. The atomic replace never inherits
+// an existing target's permissive mode, never follows it when it is a symlink,
+// and never writes through a hardlink into another inode, so secret content
+// cannot land in a file a third party can read.
+func writeSecureFile(rootFS *os.Root, rel string, content []byte) (err error) {
+	suffix := make([]byte, 8)
+	if _, err := rand.Read(suffix); err != nil {
+		return fmt.Errorf("failed to generate a temporary file name for %q: %w", rel, err)
+	}
+	tmp := rel + "." + hex.EncodeToString(suffix) + ".tmp"
+
+	f, err := rootFS.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to create a temporary file for %q: %w", rel, err)
+	}
+	// Remove the temporary file whenever it is not renamed into place.
+	defer func() {
+		if err != nil {
+			_ = rootFS.Remove(tmp)
+		}
+	}()
+
+	if _, werr := f.Write(content); werr != nil {
+		_ = f.Close()
+		return fmt.Errorf("failed to write %q: %w", rel, werr)
+	}
+	if cerr := f.Close(); cerr != nil {
+		return fmt.Errorf("failed to close %q: %w", rel, cerr)
+	}
+	if rerr := rootFS.Rename(tmp, rel); rerr != nil {
+		return fmt.Errorf("failed to finalize %q: %w", rel, rerr)
 	}
 	return nil
 }

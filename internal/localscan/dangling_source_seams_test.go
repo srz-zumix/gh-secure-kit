@@ -2,6 +2,7 @@ package localscan
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -185,5 +186,91 @@ func TestDanglingSourceFragmentsNoFetchUsesAPI(t *testing.T) {
 	}
 	if frags[0].Content != "leaked-secret-value\n" {
 		t.Errorf("fragment content = %q, want %q", frags[0].Content, "leaked-secret-value\n")
+	}
+}
+
+// TestDanglingSourceStreamFragmentsIsCommitIncremental verifies that
+// StreamFragments processes one commit at a time: when the yield callback stops
+// after the first commit's fragment, the second commit is never read and the
+// callback's error is returned unchanged.
+func TestDanglingSourceStreamFragmentsIsCommitIncremental(t *testing.T) {
+	const sha1 = "1111111111111111111111111111111111111111"
+	const sha2 = "2222222222222222222222222222222222222222"
+	var requested []string
+	s := &DanglingSource{
+		ctx:  context.Background(),
+		opts: DanglingSourceOptions{NoFetch: true},
+		listClosedPRs: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ int) ([]*github.PullRequest, error) {
+			return []*github.PullRequest{{}}, nil
+		},
+		findDangling: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ []*github.PullRequest, _ dangling.DanglingOptions) ([]*dangling.DanglingCommit, error) {
+			return []*dangling.DanglingCommit{{SHA: sha1}, {SHA: sha2}}, nil
+		},
+		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
+			requested = append(requested, sha)
+			return &github.RepositoryCommit{
+				SHA: github.Ptr(sha),
+				Files: []*github.CommitFile{{
+					Filename:  github.Ptr("config.txt"),
+					Additions: github.Ptr(1),
+					Patch:     github.Ptr("@@ -0,0 +1 @@\n+leaked-secret-value"),
+				}},
+			}, nil
+		},
+	}
+
+	errStop := errors.New("stop after first fragment")
+	var seen int
+	err := s.StreamFragments(func(Fragment) error {
+		seen++
+		return errStop
+	})
+
+	if !errors.Is(err, errStop) {
+		t.Fatalf("StreamFragments() error = %v, want errStop", err)
+	}
+	if seen != 1 {
+		t.Errorf("yield called %d times, want 1", seen)
+	}
+	if len(requested) != 1 || requested[0] != sha1 {
+		t.Errorf("getCommit requested = %v, want only [%s] (second commit must not be read)", requested, sha1)
+	}
+}
+
+// TestDanglingSourceStreamFragmentsYieldsAllCommits verifies that, absent an
+// early stop, StreamFragments yields every commit's fragments in order.
+func TestDanglingSourceStreamFragmentsYieldsAllCommits(t *testing.T) {
+	const sha1 = "1111111111111111111111111111111111111111"
+	const sha2 = "2222222222222222222222222222222222222222"
+	s := &DanglingSource{
+		ctx:  context.Background(),
+		opts: DanglingSourceOptions{NoFetch: true},
+		listClosedPRs: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ int) ([]*github.PullRequest, error) {
+			return []*github.PullRequest{{}}, nil
+		},
+		findDangling: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ []*github.PullRequest, _ dangling.DanglingOptions) ([]*dangling.DanglingCommit, error) {
+			return []*dangling.DanglingCommit{{SHA: sha1}, {SHA: sha2}}, nil
+		},
+		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
+			return &github.RepositoryCommit{
+				SHA: github.Ptr(sha),
+				Files: []*github.CommitFile{{
+					Filename:  github.Ptr("config.txt"),
+					Additions: github.Ptr(1),
+					Patch:     github.Ptr("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
+				}},
+			}, nil
+		},
+	}
+
+	var order []string
+	if err := s.StreamFragments(func(f Fragment) error {
+		order = append(order, f.CommitSHA)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamFragments() error = %v", err)
+	}
+	if len(order) != 2 || order[0] != sha1 || order[1] != sha2 {
+		t.Errorf("yielded commit order = %v, want [%s %s]", order, sha1, sha2)
 	}
 }

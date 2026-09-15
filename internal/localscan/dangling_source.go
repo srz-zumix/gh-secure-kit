@@ -124,30 +124,49 @@ func NewDanglingSource(ctx context.Context, client *gh.GitHubClient, repo reposi
 // no longer cleans up on return, so the fetched objects stay available for a
 // follow-up read such as downloading the files that contain a secret.
 func (s *DanglingSource) Fragments() ([]Fragment, error) {
-	shas, err := s.commitSHAs()
+	var frags []Fragment
+	err := s.StreamFragments(func(f Fragment) error {
+		frags = append(frags, f)
+		return nil
+	})
 	if err != nil {
 		return nil, err
+	}
+	return frags, nil
+}
+
+// StreamFragments implements FragmentStreamer. It yields the fragments of one
+// dangling commit at a time so the scanner can release a commit's diff and file
+// content before the next commit is read, keeping memory bounded per commit
+// rather than for the whole run.
+func (s *DanglingSource) StreamFragments(yield func(Fragment) error) error {
+	shas, err := s.commitSHAs()
+	if err != nil {
+		return err
 	}
 	logger.Debug("scanning dangling commits", "repository", s.repo.Owner+"/"+s.repo.Name, "local", s.opts.Local, "commits", len(shas))
 
 	if !s.opts.NoFetch {
 		if err := s.fetchCommits(shas); err != nil {
-			return nil, err
+			return err
 		}
 	}
 
-	var frags []Fragment
 	for _, sha := range shas {
 		if err := s.ctx.Err(); err != nil {
-			return nil, err
+			return err
 		}
 		f, err := s.commitFragments(sha)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		frags = append(frags, f...)
+		for _, frag := range f {
+			if err := yield(frag); err != nil {
+				return err
+			}
+		}
 	}
-	return frags, nil
+	return nil
 }
 
 // commitFragments reads a commit from the fetched git objects, falling back to
