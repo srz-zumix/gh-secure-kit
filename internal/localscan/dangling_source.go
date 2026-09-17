@@ -313,16 +313,37 @@ func (s *DanglingSource) fetchCommits(shas []string) error {
 	}
 
 	logger.Debug("fetching dangling commits", "dir", s.fetchDir, "commits", len(missing))
+	// A fetch adds objects the already opened repository cannot see, and a
+	// failed fetch can still leave some objects behind, so drop the open handle
+	// after any fetch attempt.
+	defer func() { s.localRepo = nil }()
+
 	client := gitutil.NewClientWithDir(s.fetchDir)
+	apiFallback := 0
 	for start := 0; start < len(missing); start += fetchBatchSize {
 		end := min(start+fetchBatchSize, len(missing))
 		batch := missing[start:end]
 		if err := s.fetchBatchFn(client, batch); err != nil {
-			return fmt.Errorf("failed to fetch %d dangling commit(s) into %q: %w; pass --no-fetch to read them through the GitHub API instead", len(batch), s.fetchDir, err)
+			// A canceled or timed-out context must stay fatal instead of being
+			// masked by the git failure it caused.
+			if ctxErr := s.ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			if s.opts.StrictErrors {
+				return fmt.Errorf("failed to fetch %d dangling commit(s) into %q: %w; pass --no-fetch to read them through the GitHub API instead", len(batch), s.fetchDir, err)
+			}
+			// A dangling commit is sometimes served by the GitHub commit API but
+			// not by "git fetch <sha>", and one unfetchable SHA fails its whole
+			// batch, so leave these commits missing and let commitFragments read
+			// them through the GitHub API instead of aborting the whole scan.
+			logger.Debug("a batch of dangling commits could not be fetched and will be read through the GitHub API", "commits", len(batch), "error", err)
+			apiFallback += len(batch)
+			continue
 		}
 	}
-	// The fetch added objects the already opened repository may not see.
-	s.localRepo = nil
+	if apiFallback > 0 {
+		logger.Warn("some dangling commits could not be fetched and will be read through the GitHub API instead", "commits", apiFallback)
+	}
 	return nil
 }
 

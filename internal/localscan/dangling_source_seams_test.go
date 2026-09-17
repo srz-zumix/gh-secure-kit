@@ -274,3 +274,144 @@ func TestDanglingSourceStreamFragmentsYieldsAllCommits(t *testing.T) {
 		t.Errorf("yielded commit order = %v, want [%s %s]", order, sha1, sha2)
 	}
 }
+
+// newEmptyFetchRepo initializes an empty git repository so that fetchCommits
+// treats every candidate SHA as missing from the local objects.
+func newEmptyFetchRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if _, err := git.PlainInit(dir, false); err != nil {
+		t.Fatalf("failed to initialize a repository: %v", err)
+	}
+	return dir
+}
+
+// TestDanglingSourceFetchCommitsFallsBackToAPIOnFetchFailure verifies that,
+// outside strict mode, a failed batch fetch is non-fatal: the whole batch is
+// left missing for the GitHub API fallback and the open repository handle is
+// dropped so a partially written fetch is not reused.
+func TestDanglingSourceFetchCommitsFallsBackToAPIOnFetchFailure(t *testing.T) {
+	dir := newEmptyFetchRepo(t)
+	const sha1 = "1111111111111111111111111111111111111111"
+	const sha2 = "2222222222222222222222222222222222222222"
+
+	var calls [][]string
+	s := &DanglingSource{
+		ctx:      context.Background(),
+		fetchDir: dir,
+		fetchBatchFn: func(_ *cligit.Client, batch []string) error {
+			calls = append(calls, append([]string(nil), batch...))
+			return errors.New("git fetch failed")
+		},
+	}
+
+	if err := s.fetchCommits([]string{sha1, sha2}); err != nil {
+		t.Fatalf("fetchCommits() error = %v, want nil", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("fetchBatchFn called %d times, want 1 (no per-SHA retry)", len(calls))
+	}
+	if len(calls[0]) != 2 || calls[0][0] != sha1 || calls[0][1] != sha2 {
+		t.Errorf("fetched batch = %v, want [%s %s]", calls[0], sha1, sha2)
+	}
+	if s.localRepo != nil {
+		t.Error("localRepo must be reset after a fetch attempt, even on failure")
+	}
+}
+
+// TestDanglingSourceFetchCommitsStrictErrorsIsFatal verifies that strict mode
+// keeps a batch fetch failure fatal so partial results are not returned.
+func TestDanglingSourceFetchCommitsStrictErrorsIsFatal(t *testing.T) {
+	dir := newEmptyFetchRepo(t)
+	const sha = "1111111111111111111111111111111111111111"
+
+	var calls int
+	s := &DanglingSource{
+		ctx:      context.Background(),
+		fetchDir: dir,
+		opts:     DanglingSourceOptions{StrictErrors: true},
+		fetchBatchFn: func(_ *cligit.Client, _ []string) error {
+			calls++
+			return errors.New("git fetch failed")
+		},
+	}
+
+	err := s.fetchCommits([]string{sha})
+	if err == nil {
+		t.Fatal("fetchCommits() error = nil, want a fatal error in strict mode")
+	}
+	if calls != 1 {
+		t.Errorf("fetchBatchFn called %d times, want 1", calls)
+	}
+}
+
+// TestDanglingSourceFetchCommitsCanceledContextIsFatal verifies that a canceled
+// context stays fatal and is not masked by the git failure it caused.
+func TestDanglingSourceFetchCommitsCanceledContextIsFatal(t *testing.T) {
+	dir := newEmptyFetchRepo(t)
+	const sha = "1111111111111111111111111111111111111111"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := &DanglingSource{
+		ctx:      ctx,
+		fetchDir: dir,
+		fetchBatchFn: func(_ *cligit.Client, _ []string) error {
+			return errors.New("git fetch failed")
+		},
+	}
+
+	err := s.fetchCommits([]string{sha})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("fetchCommits() error = %v, want context.Canceled", err)
+	}
+}
+
+// TestDanglingSourceStreamFragmentsFallsBackToAPIWhenFetchFails verifies the
+// end-to-end degradation: when git fetch fails outside strict mode, every
+// dangling commit is still read through the GitHub API and yielded in order.
+func TestDanglingSourceStreamFragmentsFallsBackToAPIWhenFetchFails(t *testing.T) {
+	dir := newEmptyFetchRepo(t)
+	const sha1 = "1111111111111111111111111111111111111111"
+	const sha2 = "2222222222222222222222222222222222222222"
+
+	var requested []string
+	s := &DanglingSource{
+		ctx:      context.Background(),
+		fetchDir: dir,
+		listClosedPRs: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ int) ([]*github.PullRequest, error) {
+			return []*github.PullRequest{{}}, nil
+		},
+		findDangling: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, _ []*github.PullRequest, _ dangling.DanglingOptions) ([]*dangling.DanglingCommit, error) {
+			return []*dangling.DanglingCommit{{SHA: sha1}, {SHA: sha2}}, nil
+		},
+		fetchBatchFn: func(_ *cligit.Client, _ []string) error {
+			return errors.New("git fetch failed")
+		},
+		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
+			requested = append(requested, sha)
+			return &github.RepositoryCommit{
+				SHA: github.Ptr(sha),
+				Files: []*github.CommitFile{{
+					Filename:  github.Ptr("config.txt"),
+					Additions: github.Ptr(1),
+					Patch:     github.Ptr("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
+				}},
+			}, nil
+		},
+	}
+
+	var order []string
+	if err := s.StreamFragments(func(f Fragment) error {
+		order = append(order, f.Content)
+		return nil
+	}); err != nil {
+		t.Fatalf("StreamFragments() error = %v", err)
+	}
+	if len(requested) != 2 || requested[0] != sha1 || requested[1] != sha2 {
+		t.Errorf("getCommit requested = %v, want [%s %s]", requested, sha1, sha2)
+	}
+	if len(order) != 2 || order[0] != "secret-1111\n" || order[1] != "secret-2222\n" {
+		t.Errorf("yielded fragments = %v, want [secret-1111 secret-2222]", order)
+	}
+}
