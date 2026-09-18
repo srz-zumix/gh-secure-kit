@@ -44,10 +44,11 @@ func NewDanglingCommitsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "dangling-commits",
-		Short: "Scan commits that are no longer reachable from any branch or tag for secrets",
-		Long: `Scan commits that are no longer reachable from any branch or tag ref, but that the GitHub API still serves, for secrets.
+		Short: "Scan commits that may no longer be reachable from any branch or tag for secrets",
+		Long: `Scan candidate commits that may no longer be reachable from any branch or tag ref, but that the GitHub API still serves, for secrets.
 Such commits are left behind by squash or rebase merges, by force-pushes on a pull request head branch, and by closed unmerged pull requests, so a secret removed by rewriting history can still be read from them.
 By default every closed pull request is inspected, up to --limit; pass --pr to inspect specific pull requests instead.
+When inspecting pull requests, these candidates are reported without confirming that they are truly unreachable, so some may still be reachable from a branch or tag; pass --reachability-check=refs to verify reachability from remote branches and tags before scanning.
 With --local, the commits that no local ref reaches but that still exist on the remote are scanned instead, which requires running inside a clone of the repository.
 The detected commits are fetched into the current clone when it is a clone of the scanned repository, otherwise into a temporary repository, and scanned from the fetched git objects, falling back to the GitHub API for any commit or file the fetch could not provide; pass --no-fetch to read their contents through the GitHub API instead, which is slower and consumes API rate limit.
 Files that contain a detected secret are written under --download-dir when it is set.
