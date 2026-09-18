@@ -18,7 +18,22 @@ func init() {
 // branch. A ruleset that only targets other branches, or that carries no rules,
 // does not count as default-branch protection.
 func activeRulesetProtectsDefaultBranch(f *RepositoryFacts) bool {
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if gh.HasAnyRulesetRule(rs.Rules) {
+			return true
+		}
+	}
+	return false
+}
+
+// activeDefaultBranchRulesets returns active branch rulesets that apply to the
+// repository's default branch, including rulesets with no branch-protection rule.
+func activeDefaultBranchRulesets(f *RepositoryFacts) []*github.RepositoryRuleset {
+	if f == nil || f.Repo == nil {
+		return nil
+	}
 	branch := f.Repo.GetDefaultBranch()
+	var result []*github.RepositoryRuleset
 	for _, rs := range f.Rulesets {
 		if rs.GetEnforcement() != "active" {
 			continue
@@ -26,14 +41,31 @@ func activeRulesetProtectsDefaultBranch(f *RepositoryFacts) bool {
 		if t := rs.Target; t != nil && *t != github.RulesetTargetBranch {
 			continue
 		}
-		if !gh.HasAnyRulesetRule(rs.Rules) {
-			continue
-		}
 		if rulesetTargetsBranch(rs.Conditions, branch) {
-			return true
+			result = append(result, rs)
 		}
 	}
-	return false
+	return result
+}
+
+func rulesetPullRequestRules(f *RepositoryFacts) []*github.PullRequestRuleParameters {
+	var result []*github.PullRequestRuleParameters
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if rs.Rules != nil && rs.Rules.PullRequest != nil {
+			result = append(result, rs.Rules.PullRequest)
+		}
+	}
+	return result
+}
+
+func rulesetStatusCheckRules(f *RepositoryFacts) []*github.RequiredStatusChecksRuleParameters {
+	var result []*github.RequiredStatusChecksRuleParameters
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if rs.Rules != nil && rs.Rules.RequiredStatusChecks != nil {
+			result = append(result, rs.Rules.RequiredStatusChecks)
+		}
+	}
+	return result
 }
 
 // rulesetTargetsBranch reports whether a ruleset's ref-name conditions include
@@ -131,7 +163,16 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				reviews := rulesetPullRequestRules(f)
+				if len(reviews) == 0 {
+					return Skip("no pull request review rule found in the default branch rulesets")
+				}
+				for _, review := range reviews {
+					if !review.DismissStaleReviewsOnPush {
+						return Fail("stale reviews are not dismissed on new commits")
+					}
+				}
+				return Pass("stale reviews are dismissed on new commits")
 			}
 			if f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews() {
 				return Pass("stale reviews are dismissed on new commits")
@@ -145,7 +186,16 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				reviews := rulesetPullRequestRules(f)
+				if len(reviews) == 0 {
+					return Skip("no pull request review rule found in the default branch rulesets")
+				}
+				for _, review := range reviews {
+					if !review.RequireCodeOwnerReview {
+						return Fail("code owner review is not required")
+					}
+				}
+				return Pass("code owner review is required")
 			}
 			if f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews() {
 				return Pass("code owner review is required")
@@ -159,7 +209,16 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				checks := rulesetStatusCheckRules(f)
+				if len(checks) == 0 {
+					return Skip("no required status check rule found in the default branch rulesets")
+				}
+				for _, check := range checks {
+					if !check.StrictRequiredStatusChecksPolicy {
+						return Fail("required status checks do not require branches to be up to date")
+					}
+				}
+				return Pass("required status checks require branches to be up to date")
 			}
 			checks := f.Protection.GetRequiredStatusChecks()
 			if checks == nil {
@@ -177,7 +236,18 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "No required status checks configured",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				checks := rulesetStatusCheckRules(f)
+				if len(checks) == 0 {
+					return Skip("no required status check rule found in the default branch rulesets")
+				}
+				count := 0
+				for _, check := range checks {
+					count += len(check.RequiredStatusChecks)
+				}
+				if count == 0 {
+					return Fail("no required status checks are configured; CI failures do not block merges")
+				}
+				return Pass(fmt.Sprintf("%d required status checks configured", count))
 			}
 			checks := f.Protection.GetRequiredStatusChecks()
 			count := 0
@@ -196,7 +266,16 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				rulesets := activeDefaultBranchRulesets(f)
+				if len(rulesets) == 0 {
+					return Skip("no active branch ruleset targets the default branch")
+				}
+				for _, rs := range rulesets {
+					if rs.Rules != nil && rs.Rules.NonFastForward != nil {
+						return Pass("force pushes are disabled on the protected branch")
+					}
+				}
+				return Fail("force pushes are allowed on the protected branch")
 			}
 			if f.Protection.GetAllowForcePushes().GetEnabled() {
 				return Fail("force pushes are allowed on the protected branch")
@@ -210,7 +289,16 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+				rulesets := activeDefaultBranchRulesets(f)
+				if len(rulesets) == 0 {
+					return Skip("no active branch ruleset targets the default branch")
+				}
+				for _, rs := range rulesets {
+					if rs.Rules != nil && rs.Rules.RequiredSignatures != nil {
+						return Pass("signed commits are required")
+					}
+				}
+				return Fail("signed commits are not required")
 			}
 			if f.Protection.GetRequiredSignatures().GetEnabled() {
 				return Pass("signed commits are required")
@@ -228,7 +316,20 @@ func registerBranchProtectionRules() {
 func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
 		if f.Protection == nil {
-			return Skip("no legacy branch protection rule; verify equivalent settings in repository rulesets")
+			reviews := rulesetPullRequestRules(f)
+			if len(reviews) == 0 {
+				return Skip("no pull request review rule found in the default branch rulesets")
+			}
+			count := 0
+			for _, review := range reviews {
+				if review.RequiredApprovingReviewCount > count {
+					count = review.RequiredApprovingReviewCount
+				}
+			}
+			if count != expected {
+				return Pass(fmt.Sprintf("%d approving reviews are required", count))
+			}
+			return Fail(fmt.Sprintf("%s (required: %d)", failDetail, count))
 		}
 		reviews := f.Protection.GetRequiredPullRequestReviews()
 		count := 0

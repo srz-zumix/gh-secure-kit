@@ -3,6 +3,7 @@ package recommended
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
@@ -58,6 +59,14 @@ func isNotFound(err error) bool {
 	var ghErr *github.ErrorResponse
 	if errors.As(err, &ghErr) && ghErr.Response != nil {
 		return ghErr.Response.StatusCode == 404
+	}
+	// Some GitHub client transports drop the HTTP response while preserving the
+	// standard branch-protection message returned for an unprotected branch.
+	if errors.As(err, &ghErr) && ghErr.Message == "Branch not protected" {
+		return true
+	}
+	if strings.Contains(err.Error(), "branch is not protected") || strings.Contains(err.Error(), "Branch not protected") {
+		return true
 	}
 	return false
 }

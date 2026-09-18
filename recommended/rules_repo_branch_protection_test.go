@@ -1,10 +1,41 @@
 package recommended
 
 import (
+	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/google/go-github/v90/github"
 )
+
+func TestIsNotFound(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "branch protection response",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}},
+			want: true,
+		},
+		{
+			name: "branch protection message without response",
+			err:  &github.ErrorResponse{Message: "Branch not protected"},
+			want: true,
+		},
+		{name: "branch protection client error", err: errors.New("branch is not protected"), want: true},
+		{name: "wrapped branch protection message", err: errors.New("GET branch: Branch not protected (HTTP 404)"), want: true},
+		{name: "other error", err: errors.New("request failed"), want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isNotFound(tc.err); got != tc.want {
+				t.Errorf("isNotFound() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestMatchRefPattern(t *testing.T) {
 	cases := []struct {
@@ -176,6 +207,75 @@ func TestGSK117AllowForcePushesNilSafe(t *testing.T) {
 	}}
 	if got := rule.CheckRepo(f).Status; got != StatusPass {
 		t.Errorf("force pushes disabled: got %v, want pass", got)
+	}
+}
+
+func TestBranchProtectionRulesUseRulesets(t *testing.T) {
+	reviewRule := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	reviewRule.Rules.PullRequest = &github.PullRequestRuleParameters{
+		RequiredApprovingReviewCount: 2,
+		DismissStaleReviewsOnPush:    true,
+		RequireCodeOwnerReview:       true,
+	}
+	statusRule := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+	statusRule.Rules = &github.RepositoryRulesetRules{
+		RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{
+			RequiredStatusChecks:             []*github.RuleStatusCheck{{Context: "test"}},
+			StrictRequiredStatusChecksPolicy: true,
+		},
+	}
+	protectedRule := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+	protectedRule.Rules = &github.RepositoryRulesetRules{
+		NonFastForward:     &github.EmptyRuleParameters{},
+		RequiredSignatures: &github.EmptyRuleParameters{},
+	}
+	facts := factsWithRulesets(reviewRule, statusRule, protectedRule)
+
+	for _, id := range []string{"GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK116", "GSK117", "GSK118"} {
+		rule, ok := RuleByID(id)
+		if !ok {
+			t.Fatalf("%s not registered", id)
+		}
+		if got := rule.CheckRepo(facts).Status; got != StatusPass {
+			t.Errorf("%s: got %v, want pass", id, got)
+		}
+	}
+}
+
+func TestBranchProtectionRulesetFailures(t *testing.T) {
+	ruleCases := []struct {
+		id string
+		rs *github.RepositoryRuleset
+	}{
+		{"GSK111", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+		{"GSK112", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+		{"GSK113", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+		{"GSK114", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+		{"GSK115", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)},
+		{"GSK116", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)},
+		{"GSK117", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+		{"GSK118", branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)},
+	}
+	ruleCases[1].rs.Rules.PullRequest.RequiredApprovingReviewCount = 1
+	ruleCases[2].rs.Rules.PullRequest.DismissStaleReviewsOnPush = false
+	ruleCases[3].rs.Rules.PullRequest.RequireCodeOwnerReview = false
+	ruleCases[4].rs.Rules = &github.RepositoryRulesetRules{
+		RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{},
+	}
+	ruleCases[5].rs.Rules = &github.RepositoryRulesetRules{
+		RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{},
+	}
+
+	for _, tc := range ruleCases {
+		t.Run(tc.id, func(t *testing.T) {
+			rule, ok := RuleByID(tc.id)
+			if !ok {
+				t.Fatalf("%s not registered", tc.id)
+			}
+			if got := rule.CheckRepo(factsWithRulesets(tc.rs)).Status; got != StatusFail {
+				t.Errorf("got %v, want fail", got)
+			}
+		})
 	}
 }
 
