@@ -17,6 +17,7 @@ func NewSecretScanningCmd() *cobra.Command {
 		Long:  "Manage secret scanning alerts, scan history, and push protection pattern configurations for organizations and repositories.",
 	}
 	cmd.AddCommand(secretscanning.NewAlertsCmd())
+	cmd.AddCommand(secretscanning.NewDanglingCommitsCmd())
 	cmd.AddCommand(secretscanning.NewLocalCmd())
 	cmd.AddCommand(secretscanning.NewPushProtectionCmd())
 	cmd.AddCommand(secretscanning.NewScanHistoryCmd())

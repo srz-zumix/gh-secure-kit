@@ -1,0 +1,579 @@
+package localscan
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
+	"os"
+	"strings"
+	"time"
+
+	cligit "github.com/cli/cli/v2/git"
+	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/storage/filesystem/dotgit"
+	"github.com/google/go-github/v90/github"
+	"github.com/srz-zumix/gh-diet-kit/pkg/dangling"
+	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/gitutil"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
+)
+
+// DanglingReachabilityCheckValues lists the accepted reachability check modes,
+// so command flags can offer them without importing the detection package.
+var DanglingReachabilityCheckValues = dangling.ReachabilityCheckModeValues
+
+// DanglingReachabilityCheckNone is the default reachability check mode, which
+// reports candidate commits without any extra verification.
+var DanglingReachabilityCheckNone = string(dangling.ReachabilityCheckNone)
+
+// DanglingSourceOptions selects which dangling commits are scanned and how
+// they are discovered.
+type DanglingSourceOptions struct {
+	// Local discovers commits that are unreachable in the local clone and
+	// still exist on the remote, instead of inspecting pull requests.
+	Local bool
+	// NoReflogs ignores reflog entries when determining local reachability.
+	// It only applies to Local.
+	NoReflogs bool
+	// PRNumbers restricts the inspected pull requests. When empty, every
+	// closed pull request is inspected, up to Limit.
+	PRNumbers []int
+	// Limit caps the number of closed pull requests to inspect. A negative
+	// value means unlimited.
+	Limit int
+	// NoSquashMerge disables detection of commits left behind by squash or
+	// rebase merges.
+	NoSquashMerge bool
+	// NoForcePush disables detection of commits dropped by a force-push on a
+	// pull request head branch.
+	NoForcePush bool
+	// NoClosed disables detection of commits from closed unmerged pull
+	// requests.
+	NoClosed bool
+	// ReachabilityCheck verifies that a candidate commit really is unreachable
+	// before it is scanned. An empty value skips the check.
+	ReachabilityCheck string
+	// StrictErrors fails on the first API or git error instead of logging it
+	// and continuing with partial results.
+	StrictErrors bool
+	// NoCache disables the per-pull-request detection cache.
+	NoCache bool
+	// ClearCache clears the detection cache before discovering commits.
+	ClearCache bool
+	// NoFetch reads the commit contents through the GitHub API instead of
+	// fetching the commits into a local git repository.
+	NoFetch bool
+	// PRConcurrency caps how many pull requests are inspected concurrently.
+	// A value <= 0 uses the package default.
+	PRConcurrency int
+}
+
+// fetchBatchSize caps how many commits a single git fetch asks for, to keep
+// the command line within the limits of the platform.
+const fetchBatchSize = 50
+
+// fetchAttempts and fetchRetryDelay control how a failed git fetch is retried;
+// the delay grows with each attempt.
+const (
+	fetchAttempts   = 3
+	fetchRetryDelay = 2 * time.Second
+)
+
+// DanglingSource produces fragments from commits that are no longer reachable
+// from any branch or tag ref but are still served by the GitHub API, such as
+// the commits left behind by a squash merge or a force-push.
+type DanglingSource struct {
+	ctx    context.Context
+	client *gh.GitHubClient
+	repo   repository.Repository
+	opts   DanglingSourceOptions
+	// fetchDir is the git repository commits are fetched into, and tempDir is
+	// set when that repository is a throwaway one this source created.
+	fetchDir  string
+	tempDir   string
+	localRepo *git.Repository
+
+	// Function seams, defaulted in NewDanglingSource, let tests intercept the
+	// GitHub API and git fetch operations without touching the network.
+	listClosedPRs   func(context.Context, *gh.GitHubClient, repository.Repository, int) ([]*github.PullRequest, error)
+	getPRsByNumbers func(context.Context, *gh.GitHubClient, repository.Repository, []int) ([]*github.PullRequest, error)
+	findDangling    func(context.Context, *gh.GitHubClient, repository.Repository, []*github.PullRequest, dangling.DanglingOptions) ([]*dangling.DanglingCommit, error)
+	getCommit       func(context.Context, *gh.GitHubClient, repository.Repository, string) (*github.RepositoryCommit, error)
+	getFileContent  func(context.Context, *gh.GitHubClient, repository.Repository, string, *string) ([]byte, error)
+	fetchBatchFn    func(*cligit.Client, []string) error
+}
+
+// NewDanglingSource creates a DanglingSource for the given repository.
+func NewDanglingSource(ctx context.Context, client *gh.GitHubClient, repo repository.Repository, opts DanglingSourceOptions) *DanglingSource {
+	s := &DanglingSource{ctx: ctx, client: client, repo: repo, opts: opts}
+	s.listClosedPRs = dangling.ListClosedPRs
+	s.getPRsByNumbers = dangling.GetPRsByNumbers
+	s.findDangling = dangling.FindDanglingCommits
+	s.getCommit = gh.GetCommit
+	s.getFileContent = gh.GetFileContent
+	s.fetchBatchFn = s.fetchBatch
+	return s
+}
+
+// Fragments implements Source. The caller owns the source lifetime and must
+// call Close when done so any temporary fetch repository is removed; Fragments
+// no longer cleans up on return, so the fetched objects stay available for a
+// follow-up read such as downloading the files that contain a secret.
+func (s *DanglingSource) Fragments() ([]Fragment, error) {
+	var frags []Fragment
+	err := s.StreamFragments(func(f Fragment) error {
+		frags = append(frags, f)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return frags, nil
+}
+
+// StreamFragments implements FragmentStreamer. It yields the fragments of one
+// dangling commit at a time so the scanner can release a commit's diff and file
+// content before the next commit is read, keeping memory bounded per commit
+// rather than for the whole run.
+func (s *DanglingSource) StreamFragments(yield func(Fragment) error) error {
+	shas, err := s.commitSHAs()
+	if err != nil {
+		return err
+	}
+	logger.Debug("scanning dangling commits", "repository", s.repo.Owner+"/"+s.repo.Name, "local", s.opts.Local, "commits", len(shas))
+
+	if !s.opts.NoFetch {
+		if err := s.fetchCommits(shas); err != nil {
+			return err
+		}
+	}
+
+	for _, sha := range shas {
+		if err := s.ctx.Err(); err != nil {
+			return err
+		}
+		f, err := s.commitFragments(sha)
+		if err != nil {
+			return err
+		}
+		for _, frag := range f {
+			if err := yield(frag); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// commitFragments reads a commit from the fetched git objects, falling back to
+// the GitHub API when the local repository does not hold it.
+func (s *DanglingSource) commitFragments(sha string) ([]Fragment, error) {
+	if !s.opts.NoFetch {
+		frags, err := s.localCommitFragments(sha)
+		if errors.Is(err, dotgit.ErrPackfileNotFound) {
+			// Another process repacked the repository, so the open one lists
+			// packfiles that no longer exist; reopen it and read the commit again.
+			logger.Debug("the git repository was repacked while scanning, reopening it", "commit", sha, "dir", s.fetchDir)
+			s.localRepo = nil
+			frags, err = s.localCommitFragments(sha)
+		}
+		if err == nil {
+			return frags, nil
+		}
+		if !errors.Is(err, ErrLocalContentMissing) {
+			return nil, err
+		}
+		logger.Debug("the fetched repository does not hold the dangling commit, reading it through the GitHub API", "commit", sha, "reason", err)
+	}
+
+	commit, err := s.getCommit(s.ctx, s.client, s.repo, sha)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read dangling commit %s through the GitHub API: %w", sha, err)
+	}
+	return fragmentsForAPICommit(commit)
+}
+
+// localCommitFragments reads a commit from the git objects of the fetch
+// repository.
+func (s *DanglingSource) localCommitFragments(sha string) ([]Fragment, error) {
+	commit, err := s.localCommit(sha)
+	if err != nil {
+		return nil, err
+	}
+	return fragmentsForCommit(commit)
+}
+
+// FileContent returns the contents of path at commit, reading it from the
+// fetched git objects when they are available and falling back to the GitHub
+// API otherwise. It lets callers such as the downloader avoid one API request
+// per file when the commits were fetched locally; contents the fetched objects
+// do not hold, and every read under --no-fetch, are served through the API.
+func (s *DanglingSource) FileContent(commit, path string) ([]byte, error) {
+	if !s.opts.NoFetch {
+		content, err := s.localFileContent(commit, path)
+		if errors.Is(err, dotgit.ErrPackfileNotFound) {
+			// Another process repacked the repository, so the open one lists
+			// packfiles that no longer exist; reopen it and read the file again.
+			logger.Debug("the git repository was repacked while downloading, reopening it", "commit", commit, "file", path, "dir", s.fetchDir)
+			s.localRepo = nil
+			content, err = s.localFileContent(commit, path)
+		}
+		if err == nil {
+			return content, nil
+		}
+		if !errors.Is(err, ErrLocalContentMissing) {
+			return nil, err
+		}
+		logger.Debug("the fetched repository does not hold the file, reading it through the GitHub API", "commit", commit, "file", path, "reason", err)
+	}
+
+	content, err := s.getFileContent(s.ctx, s.client, s.repo, path, &commit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %q at commit %s through the GitHub API: %w", path, commit, err)
+	}
+	return content, nil
+}
+
+// localFileContent reads path at commit from the fetch repository, reporting
+// ErrLocalContentMissing when the commit or file was not fetched.
+func (s *DanglingSource) localFileContent(commit, path string) ([]byte, error) {
+	repo, err := s.openLocalRepo()
+	if err != nil {
+		return nil, err
+	}
+	c, err := repo.CommitObject(plumbing.NewHash(commit))
+	if err != nil {
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			return nil, fmt.Errorf("%w: commit %s is not in %q", ErrLocalContentMissing, commit, s.fetchDir)
+		}
+		return nil, fmt.Errorf("failed to read commit %s from %q: %w", commit, s.fetchDir, err)
+	}
+	f, err := c.File(path)
+	if err != nil {
+		if errors.Is(err, object.ErrFileNotFound) {
+			return nil, fmt.Errorf("%w: file %q is not in commit %s", ErrLocalContentMissing, path, commit)
+		}
+		return nil, fmt.Errorf("failed to read file %q at commit %s from %q: %w", path, commit, s.fetchDir, err)
+	}
+	content, err := f.Contents()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file %q at commit %s from %q: %w", path, commit, s.fetchDir, err)
+	}
+	return []byte(content), nil
+}
+
+// localCommit returns a commit from the fetch repository. It reports
+// ErrLocalContentMissing when the commit, or the parent its diff is computed
+// against, was not fetched.
+func (s *DanglingSource) localCommit(sha string) (*object.Commit, error) {
+	repo, err := s.openLocalRepo()
+	if err != nil {
+		return nil, err
+	}
+	commit, err := repo.CommitObject(plumbing.NewHash(sha))
+	if err != nil {
+		if errors.Is(err, plumbing.ErrObjectNotFound) {
+			return nil, fmt.Errorf("%w: commit %s is not in %q", ErrLocalContentMissing, sha, s.fetchDir)
+		}
+		return nil, fmt.Errorf("failed to read commit %s from %q: %w", sha, s.fetchDir, err)
+	}
+	if commit.NumParents() > 0 {
+		if _, err := commit.Parent(0); err != nil {
+			return nil, fmt.Errorf("%w: the parent of commit %s is not in %q", ErrLocalContentMissing, sha, s.fetchDir)
+		}
+	}
+	return commit, nil
+}
+
+// fetchCommits downloads the commits that the fetch repository does not hold
+// yet, so they can be scanned from git objects instead of the GitHub API.
+func (s *DanglingSource) fetchCommits(shas []string) error {
+	if len(shas) == 0 {
+		return nil
+	}
+	if _, err := s.localRepoDir(); err != nil {
+		return err
+	}
+
+	missing := make([]string, 0, len(shas))
+	for _, sha := range shas {
+		if _, err := s.localCommit(sha); err != nil {
+			if !errors.Is(err, ErrLocalContentMissing) {
+				return err
+			}
+			missing = append(missing, sha)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	logger.Debug("fetching dangling commits", "dir", s.fetchDir, "commits", len(missing))
+	// A fetch adds objects the already opened repository cannot see, and a
+	// failed fetch can still leave some objects behind, so drop the open handle
+	// after any fetch attempt.
+	defer func() { s.localRepo = nil }()
+
+	client := gitutil.NewClientWithDir(s.fetchDir)
+	apiFallback := 0
+	for start := 0; start < len(missing); start += fetchBatchSize {
+		end := min(start+fetchBatchSize, len(missing))
+		batch := missing[start:end]
+		if err := s.fetchBatchFn(client, batch); err != nil {
+			// A canceled or timed-out context must stay fatal instead of being
+			// masked by the git failure it caused.
+			if ctxErr := s.ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			if s.opts.StrictErrors {
+				return fmt.Errorf("failed to fetch %d dangling commit(s) into %q: %w; pass --no-fetch to read them through the GitHub API instead", len(batch), s.fetchDir, err)
+			}
+			// A dangling commit is sometimes served by the GitHub commit API but
+			// not by "git fetch <sha>", and one unfetchable SHA fails its whole
+			// batch, so leave these commits missing and let commitFragments read
+			// them through the GitHub API instead of aborting the whole scan.
+			logger.Debug("a batch of dangling commits could not be fetched and will be read through the GitHub API", "commits", len(batch), "error", err)
+			apiFallback += len(batch)
+			continue
+		}
+	}
+	if apiFallback > 0 {
+		logger.Warn("some dangling commits could not be fetched and will be read through the GitHub API instead", "commits", apiFallback)
+	}
+	return nil
+}
+
+// fetchBatch fetches one batch of commits, retrying because the GitHub git
+// endpoint intermittently drops large fetches.
+func (s *DanglingSource) fetchBatch(client *cligit.Client, batch []string) error {
+	// Auto gc runs detached and would repack the objects out from under the
+	// scan, so it is disabled for the fetch.
+	args := append([]string{"-c", "gc.auto=0", "-c", "maintenance.auto=false", "fetch", "--no-tags", "--quiet", s.cloneURL()}, batch...)
+	var err error
+	for attempt := 1; ; attempt++ {
+		var cmd *cligit.Command
+		cmd, err = client.AuthenticatedCommand(s.ctx, cligit.AllMatchingCredentialsPattern, args...)
+		if err == nil {
+			_, err = cmd.Output()
+		}
+		if err == nil || attempt >= fetchAttempts {
+			return err
+		}
+		logger.Debug("retrying the git fetch of dangling commits", "attempt", attempt, "commits", len(batch), "error", err)
+		select {
+		case <-s.ctx.Done():
+			return s.ctx.Err()
+		case <-time.After(time.Duration(attempt) * fetchRetryDelay):
+		}
+	}
+}
+
+// openLocalRepo opens the fetch repository, creating it if needed.
+func (s *DanglingSource) openLocalRepo() (*git.Repository, error) {
+	if s.localRepo != nil {
+		return s.localRepo, nil
+	}
+	dir, err := s.localRepoDir()
+	if err != nil {
+		return nil, err
+	}
+	// The directory is either a checkout toplevel or a bare repository this
+	// source created, so parent directories must not be searched. Linked
+	// worktrees keep their objects in the shared common dir, so follow the
+	// worktree's commondir metadata to read fetched commits.
+	repo, err := git.PlainOpenWithOptions(dir, &git.PlainOpenOptions{EnableDotGitCommonDir: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the git repository at %q: %w", dir, err)
+	}
+	s.localRepo = repo
+	return repo, nil
+}
+
+// localRepoDir returns the git repository to fetch commits into: the current
+// checkout when it is a clone of the scanned repository, otherwise a temporary
+// repository.
+func (s *DanglingSource) localRepoDir() (string, error) {
+	if s.fetchDir != "" {
+		return s.fetchDir, nil
+	}
+	if dir, err := gitutil.NewClient().ToplevelDir(s.ctx); err == nil {
+		if matched, _ := s.checkoutMatchesRepo(); matched {
+			s.fetchDir = dir
+			return dir, nil
+		}
+		// Fetching into an unrelated checkout would grow it by the whole
+		// history of the scanned repository.
+		logger.Debug("the current checkout is not a clone of the scanned repository, using a temporary one", "dir", dir, "repository", s.repo.Owner+"/"+s.repo.Name)
+	}
+
+	dir, err := os.MkdirTemp("", "gh-secure-kit-dangling-")
+	if err != nil {
+		return "", fmt.Errorf("failed to create a temporary directory to fetch dangling commits into: %w", err)
+	}
+	cmd, err := gitutil.NewClientWithDir(dir).Command(s.ctx, "init", "--bare", "--quiet")
+	if err == nil {
+		_, err = cmd.Output()
+	}
+	if err != nil {
+		if rmErr := os.RemoveAll(dir); rmErr != nil {
+			logger.Debug("failed to remove the temporary repository", "dir", dir, "error", rmErr)
+		}
+		return "", fmt.Errorf("failed to initialize a temporary git repository to fetch dangling commits into: %w", err)
+	}
+	s.tempDir = dir
+	s.fetchDir = dir
+	logger.Debug("fetching dangling commits into a temporary repository", "dir", dir)
+	return dir, nil
+}
+
+// checkoutMatchesRepo reports whether a remote of the current checkout points
+// at the scanned repository. It returns an error only when the remotes cannot
+// be inspected, so a genuine mismatch is distinguishable from a lookup failure.
+func (s *DanglingSource) checkoutMatchesRepo() (bool, error) {
+	remotes, err := gitutil.NewClient().Remotes(s.ctx)
+	if err != nil {
+		return false, err
+	}
+	for _, remote := range remotes {
+		for _, u := range []*url.URL{remote.FetchURL, remote.PushURL} {
+			if u == nil {
+				continue
+			}
+			parsed, err := repository.Parse(u.String())
+			if err != nil {
+				continue
+			}
+			if !strings.EqualFold(parsed.Owner, s.repo.Owner) || !strings.EqualFold(parsed.Name, s.repo.Name) {
+				continue
+			}
+			if s.repo.Host == "" || strings.EqualFold(parsed.Host, s.repo.Host) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
+// cloneURL is the git URL commits are fetched from.
+func (s *DanglingSource) cloneURL() string {
+	host := s.repo.Host
+	if host == "" {
+		host = "github.com"
+	}
+	return fmt.Sprintf("https://%s/%s/%s.git", host, s.repo.Owner, s.repo.Name)
+}
+
+// Close releases the resources the source holds, removing the temporary fetch
+// repository when one was created. It is safe to call more than once.
+func (s *DanglingSource) Close() {
+	s.cleanup()
+}
+
+// cleanup removes the temporary repository, if one was created.
+func (s *DanglingSource) cleanup() {
+	if s.tempDir == "" {
+		return
+	}
+	if err := os.RemoveAll(s.tempDir); err != nil {
+		logger.Debug("failed to remove the temporary repository", "dir", s.tempDir, "error", err)
+	}
+	s.tempDir = ""
+	s.fetchDir = ""
+	s.localRepo = nil
+}
+
+// commitSHAs discovers the dangling commits to scan, oldest first and without
+// duplicates.
+func (s *DanglingSource) commitSHAs() ([]string, error) {
+	var commits []*dangling.DanglingCommit
+	var err error
+	if s.opts.Local {
+		commits, err = s.localDanglingCommits()
+	} else {
+		commits, err = s.pullRequestDanglingCommits()
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool, len(commits))
+	shas := make([]string, 0, len(commits))
+	for _, c := range commits {
+		if c.SHA == "" || seen[c.SHA] {
+			continue
+		}
+		seen[c.SHA] = true
+		shas = append(shas, c.SHA)
+	}
+	return shas, nil
+}
+
+// localDanglingCommits returns the commits that no local ref reaches but that
+// the remote repository still serves.
+func (s *DanglingSource) localDanglingCommits() ([]*dangling.DanglingCommit, error) {
+	matched, err := s.checkoutMatchesRepo()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify that the current checkout is a clone of %s/%s: %w", s.repo.Owner, s.repo.Name, err)
+	}
+	if !matched {
+		return nil, fmt.Errorf("the current directory is not a clone of %s/%s; run --local from a clone of the scanned repository", s.repo.Owner, s.repo.Name)
+	}
+	unreachable, err := gitutil.ListUnreachableCommits(s.ctx, s.opts.NoReflogs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list the commits that are unreachable in the local repository: %w", err)
+	}
+	commits, err := dangling.FindLocalDanglingCommitsOnRemote(s.ctx, s.client, s.repo, unreachable)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check the locally unreachable commits against the remote: %w", err)
+	}
+	return commits, nil
+}
+
+// pullRequestDanglingCommits returns the commits that pull request history
+// left behind, e.g. by a squash merge, a force-push, or a closed pull request.
+func (s *DanglingSource) pullRequestDanglingCommits() ([]*dangling.DanglingCommit, error) {
+	prs, err := s.pullRequests()
+	if err != nil {
+		return nil, err
+	}
+	logger.Debug("inspecting pull requests for dangling commits", "pull_requests", len(prs))
+
+	opts := dangling.DanglingOptions{
+		DisableSquashRebase: s.opts.NoSquashMerge,
+		DisableForcePush:    s.opts.NoForcePush,
+		DisableClosed:       s.opts.NoClosed,
+		ReachabilityCheck:   dangling.ReachabilityCheckMode(s.opts.ReachabilityCheck),
+		StrictErrors:        s.opts.StrictErrors,
+		NoCache:             s.opts.NoCache,
+		ClearCache:          s.opts.ClearCache,
+		PRConcurrency:       s.opts.PRConcurrency,
+		// Blob sizes are irrelevant to a secret scan and cost extra API calls.
+		NoBlobSize: true,
+	}
+	commits, err := s.findDangling(s.ctx, s.client, s.repo, prs, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find dangling commits: %w", err)
+	}
+	return commits, nil
+}
+
+// pullRequests returns the pull requests to inspect: the explicitly requested
+// ones, or every closed pull request up to the configured limit.
+func (s *DanglingSource) pullRequests() ([]*github.PullRequest, error) {
+	if len(s.opts.PRNumbers) > 0 {
+		prs, err := s.getPRsByNumbers(s.ctx, s.client, s.repo, s.opts.PRNumbers)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get the requested pull requests: %w", err)
+		}
+		return prs, nil
+	}
+	prs, err := s.listClosedPRs(s.ctx, s.client, s.repo, s.opts.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list the closed pull requests: %w", err)
+	}
+	return prs, nil
+}
