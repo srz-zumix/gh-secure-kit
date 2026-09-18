@@ -210,8 +210,8 @@ func (s *DanglingSource) localCommitFragments(sha string) ([]Fragment, error) {
 // FileContent returns the contents of path at commit, reading it from the
 // fetched git objects when they are available and falling back to the GitHub
 // API otherwise. It lets callers such as the downloader avoid one API request
-// per file when the commits were fetched locally, matching the documented
-// behavior that only --no-fetch reads contents through the API.
+// per file when the commits were fetched locally; contents the fetched objects
+// do not hold, and every read under --no-fetch, are served through the API.
 func (s *DanglingSource) FileContent(commit, path string) ([]byte, error) {
 	if !s.opts.NoFetch {
 		content, err := s.localFileContent(commit, path)
