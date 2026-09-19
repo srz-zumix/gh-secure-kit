@@ -51,7 +51,10 @@ type RepositoryFacts struct {
 	PrivateVulnerabilityReporting *gh.RepositorySecurityFeatureStatus
 }
 
-// isNotFound reports whether err represents a GitHub 404 response.
+// isNotFound reports whether err represents a GitHub 404 response. It relies on
+// the HTTP status code only, so it is safe to use for any endpoint. Callers that
+// need the branch-protection-specific "Branch not protected" fallback must use
+// isBranchNotProtected instead.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
@@ -60,15 +63,27 @@ func isNotFound(err error) bool {
 	if errors.As(err, &ghErr) && ghErr.Response != nil {
 		return ghErr.Response.StatusCode == 404
 	}
-	// Some GitHub client transports drop the HTTP response while preserving the
-	// standard branch-protection message returned for an unprotected branch.
+	return false
+}
+
+// isBranchNotProtected reports whether err means the default branch has no legacy
+// branch protection. GitHub answers the branch-protection endpoint with a 404 for
+// an unprotected branch, but some client transports drop the HTTP response while
+// preserving the standard "Branch not protected" message, so this
+// branch-protection-specific check also accepts that message. An authoritative
+// non-404 HTTP status always takes precedence over the message text.
+func isBranchNotProtected(err error) bool {
+	if err == nil {
+		return false
+	}
+	var ghErr *github.ErrorResponse
+	if errors.As(err, &ghErr) && ghErr.Response != nil {
+		return ghErr.Response.StatusCode == 404
+	}
 	if errors.As(err, &ghErr) && ghErr.Message == "Branch not protected" {
 		return true
 	}
-	if strings.Contains(err.Error(), "branch is not protected") || strings.Contains(err.Error(), "Branch not protected") {
-		return true
-	}
-	return false
+	return strings.Contains(err.Error(), "branch is not protected") || strings.Contains(err.Error(), "Branch not protected")
 }
 
 // fileExists reports whether the given path exists in the repository's default
@@ -122,7 +137,7 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	if protection, err := gh.GetBranchProtection(ctx, g, repo, repoInfo.GetDefaultBranch()); err == nil {
 		f.Protection = protection
 		f.ProtectionKnown = true
-	} else if isNotFound(err) {
+	} else if isBranchNotProtected(err) {
 		// The legacy protection API returns 404 both for "no protection" and for
 		// "branch not found"; either way the branch has no legacy protection.
 		f.ProtectionKnown = true

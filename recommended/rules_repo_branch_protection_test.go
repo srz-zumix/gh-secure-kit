@@ -15,9 +15,47 @@ func TestIsNotFound(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "branch protection response",
+			name: "404 response",
 			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}},
 			want: true,
+		},
+		{
+			name: "non-404 response",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusForbidden}},
+			want: false,
+		},
+		{
+			name: "branch protection message without response is not a generic 404",
+			err:  &github.ErrorResponse{Message: "Branch not protected"},
+			want: false,
+		},
+		{name: "untyped branch protection text is not a generic 404", err: errors.New("branch is not protected"), want: false},
+		{name: "other error", err: errors.New("request failed"), want: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isNotFound(tc.err); got != tc.want {
+				t.Errorf("isNotFound() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIsBranchNotProtected(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "404 response",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusNotFound}},
+			want: true,
+		},
+		{
+			name: "authoritative non-404 status wins over message",
+			err:  &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusForbidden}, Message: "Branch not protected"},
+			want: false,
 		},
 		{
 			name: "branch protection message without response",
@@ -30,8 +68,8 @@ func TestIsNotFound(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isNotFound(tc.err); got != tc.want {
-				t.Errorf("isNotFound() = %v, want %v", got, tc.want)
+			if got := isBranchNotProtected(tc.err); got != tc.want {
+				t.Errorf("isBranchNotProtected() = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -367,6 +405,125 @@ func TestFilterApplySortsByID(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Fatalf("Apply order: got %v, want %v", got, want)
+		}
+	}
+}
+
+// ruleStatus evaluates the registered rule with the given facts.
+func ruleStatus(t *testing.T, id string, f *RepositoryFacts) Status {
+	t.Helper()
+	r, ok := RuleByID(id)
+	if !ok {
+		t.Fatalf("%s not registered", id)
+	}
+	return r.CheckRepo(f).Status
+}
+
+var branchProtectionRuleIDs = []string{"GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK116", "GSK117", "GSK118"}
+
+// TestGSK110RulesetsPartialSkips verifies that a protective ruleset in a partial
+// (unknown) ruleset slice does not let GSK110 report a false pass: the helper
+// returns no candidates while RulesetsKnown is false, so GSK110 skips.
+func TestGSK110RulesetsPartialSkips(t *testing.T) {
+	f := factsWithRulesets(branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false))
+	f.RulesetsKnown = false
+	if got := gsk110(t).CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("partial ruleset slice: got %v, want skip", got)
+	}
+}
+
+// TestBranchProtectionRulesetUnknownStateSkips verifies that every ruleset-backed
+// rule skips when the branch-protection facts are incomplete, rather than
+// evaluating a partial or missing source and reporting a false failure.
+func TestBranchProtectionRulesetUnknownStateSkips(t *testing.T) {
+	// A fully known, applicable ruleset that would otherwise drive a result.
+	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+
+	t.Run("protection unknown", func(t *testing.T) {
+		for _, id := range branchProtectionRuleIDs {
+			f := factsWithRulesets(rs)
+			f.ProtectionKnown = false
+			if got := ruleStatus(t, id, f); got != StatusSkip {
+				t.Errorf("%s protection unknown: got %v, want skip", id, got)
+			}
+		}
+	})
+
+	t.Run("rulesets unknown with partial slice", func(t *testing.T) {
+		for _, id := range branchProtectionRuleIDs {
+			f := factsWithRulesets(rs)
+			f.RulesetsKnown = false
+			if got := ruleStatus(t, id, f); got != StatusSkip {
+				t.Errorf("%s rulesets unknown: got %v, want skip", id, got)
+			}
+		}
+	})
+}
+
+// TestBranchProtectionRulesetKnownAbsenceFails verifies that an applicable,
+// fully known ruleset that omits a specific protection rule is reported as a
+// known absence (fail), not skipped as if the state were unknown.
+func TestBranchProtectionRulesetKnownAbsenceFails(t *testing.T) {
+	// Active ruleset targeting the default branch with a rule (so the branch is
+	// protected) but no pull-request or status-check rule.
+	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+	rs.Rules = &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}}
+	f := factsWithRulesets(rs)
+
+	want := map[string]Status{
+		"GSK111": StatusFail, // zero required reviews
+		"GSK112": StatusPass, // zero is not "only 1"
+		"GSK113": StatusFail, // stale reviews not dismissed
+		"GSK114": StatusFail, // code owner review not required
+		"GSK115": StatusFail, // strict checks not enabled
+		"GSK116": StatusFail, // no required status checks
+	}
+	for id, exp := range want {
+		if got := ruleStatus(t, id, f); got != exp {
+			t.Errorf("%s known absence: got %v, want %v", id, got, exp)
+		}
+	}
+}
+
+// TestBranchProtectionRulesetUnionPasses verifies that overlapping active
+// rulesets combine into the most restrictive setting: a requirement satisfied by
+// any one applicable rule passes regardless of ruleset order.
+func TestBranchProtectionRulesetUnionPasses(t *testing.T) {
+	weakReview := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	strongReview := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	strongReview.Rules.PullRequest = &github.PullRequestRuleParameters{
+		DismissStaleReviewsOnPush: true,
+		RequireCodeOwnerReview:    true,
+	}
+
+	weakStatus := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+	weakStatus.Rules = &github.RepositoryRulesetRules{
+		RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{StrictRequiredStatusChecksPolicy: false},
+	}
+	strongStatus := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+	strongStatus.Rules = &github.RepositoryRulesetRules{
+		RequiredStatusChecks: &github.RequiredStatusChecksRuleParameters{
+			RequiredStatusChecks:             []*github.RuleStatusCheck{{Context: "test"}},
+			StrictRequiredStatusChecksPolicy: true,
+		},
+	}
+
+	cases := []struct {
+		id       string
+		rulesets []*github.RepositoryRuleset
+	}{
+		{"GSK113", []*github.RepositoryRuleset{weakReview, strongReview}},
+		{"GSK113", []*github.RepositoryRuleset{strongReview, weakReview}},
+		{"GSK114", []*github.RepositoryRuleset{weakReview, strongReview}},
+		{"GSK114", []*github.RepositoryRuleset{strongReview, weakReview}},
+		{"GSK115", []*github.RepositoryRuleset{weakStatus, strongStatus}},
+		{"GSK115", []*github.RepositoryRuleset{strongStatus, weakStatus}},
+		{"GSK116", []*github.RepositoryRuleset{weakStatus, strongStatus}},
+		{"GSK116", []*github.RepositoryRuleset{strongStatus, weakStatus}},
+	}
+	for _, tc := range cases {
+		if got := ruleStatus(t, tc.id, factsWithRulesets(tc.rulesets...)); got != StatusPass {
+			t.Errorf("%s union: got %v, want pass", tc.id, got)
 		}
 	}
 }

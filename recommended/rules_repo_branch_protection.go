@@ -28,8 +28,11 @@ func activeRulesetProtectsDefaultBranch(f *RepositoryFacts) bool {
 
 // activeDefaultBranchRulesets returns active branch rulesets that apply to the
 // repository's default branch, including rulesets with no branch-protection rule.
+// It returns no candidates while the ruleset state is unknown, so callers skip
+// rather than evaluate a partial ruleset slice that could change the effective
+// protection once the missing details are read.
 func activeDefaultBranchRulesets(f *RepositoryFacts) []*github.RepositoryRuleset {
-	if f == nil || f.Repo == nil {
+	if f == nil || f.Repo == nil || !f.RulesetsKnown {
 		return nil
 	}
 	branch := f.Repo.GetDefaultBranch()
@@ -46,6 +49,24 @@ func activeDefaultBranchRulesets(f *RepositoryFacts) []*github.RepositoryRuleset
 		}
 	}
 	return result
+}
+
+// rulesetFallback returns the active rulesets that protect the default branch
+// when legacy branch protection is absent. ok is false, with the Skip outcome to
+// return, when the branch-protection facts are incomplete (either the legacy
+// protection or the ruleset state is unknown) or when no active ruleset targets
+// the default branch. In those cases a missing rule must not be treated as a
+// known absence, so the caller returns the Skip outcome instead of evaluating
+// the rulesets.
+func rulesetFallback(f *RepositoryFacts) ([]*github.RepositoryRuleset, Outcome, bool) {
+	if !f.ProtectionKnown || !f.RulesetsKnown {
+		return nil, Skip("could not determine branch protection or ruleset status for the default branch"), false
+	}
+	rulesets := activeDefaultBranchRulesets(f)
+	if len(rulesets) == 0 {
+		return nil, Skip("no active branch ruleset targets the default branch"), false
+	}
+	return rulesets, Outcome{}, true
 }
 
 func rulesetPullRequestRules(f *RepositoryFacts) []*github.PullRequestRuleParameters {
@@ -163,16 +184,19 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				reviews := rulesetPullRequestRules(f)
-				if len(reviews) == 0 {
-					return Skip("no pull request review rule found in the default branch rulesets")
+				if _, skip, ok := rulesetFallback(f); !ok {
+					return skip
 				}
-				for _, review := range reviews {
-					if !review.DismissStaleReviewsOnPush {
-						return Fail("stale reviews are not dismissed on new commits")
+				// Overlapping active rulesets combine into the most restrictive
+				// setting, so the requirement is met if any applicable review rule
+				// enables it. An applicable ruleset with no pull request rule is a
+				// known absence of the requirement.
+				for _, review := range rulesetPullRequestRules(f) {
+					if review.DismissStaleReviewsOnPush {
+						return Pass("stale reviews are dismissed on new commits")
 					}
 				}
-				return Pass("stale reviews are dismissed on new commits")
+				return Fail("stale reviews are not dismissed on new commits")
 			}
 			if f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews() {
 				return Pass("stale reviews are dismissed on new commits")
@@ -186,16 +210,19 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				reviews := rulesetPullRequestRules(f)
-				if len(reviews) == 0 {
-					return Skip("no pull request review rule found in the default branch rulesets")
+				if _, skip, ok := rulesetFallback(f); !ok {
+					return skip
 				}
-				for _, review := range reviews {
-					if !review.RequireCodeOwnerReview {
-						return Fail("code owner review is not required")
+				// Overlapping active rulesets combine into the most restrictive
+				// setting, so code owner review is required if any applicable review
+				// rule requires it. An applicable ruleset with no pull request rule
+				// is a known absence of the requirement.
+				for _, review := range rulesetPullRequestRules(f) {
+					if review.RequireCodeOwnerReview {
+						return Pass("code owner review is required")
 					}
 				}
-				return Pass("code owner review is required")
+				return Fail("code owner review is not required")
 			}
 			if f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews() {
 				return Pass("code owner review is required")
@@ -209,16 +236,19 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				checks := rulesetStatusCheckRules(f)
-				if len(checks) == 0 {
-					return Skip("no required status check rule found in the default branch rulesets")
+				if _, skip, ok := rulesetFallback(f); !ok {
+					return skip
 				}
-				for _, check := range checks {
-					if !check.StrictRequiredStatusChecksPolicy {
-						return Fail("required status checks do not require branches to be up to date")
+				// Overlapping active rulesets combine into the most restrictive
+				// setting, so strict checks are enabled if any applicable status
+				// check rule enables them. An applicable ruleset with no status
+				// check rule is a known absence.
+				for _, check := range rulesetStatusCheckRules(f) {
+					if check.StrictRequiredStatusChecksPolicy {
+						return Pass("required status checks require branches to be up to date")
 					}
 				}
-				return Pass("required status checks require branches to be up to date")
+				return Fail("required status checks do not require branches to be up to date")
 			}
 			checks := f.Protection.GetRequiredStatusChecks()
 			if checks == nil {
@@ -236,12 +266,14 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityHigh, Title: "No required status checks configured",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				checks := rulesetStatusCheckRules(f)
-				if len(checks) == 0 {
-					return Skip("no required status check rule found in the default branch rulesets")
+				if _, skip, ok := rulesetFallback(f); !ok {
+					return skip
 				}
+				// Overlapping active rulesets combine their required status checks,
+				// so count them across every applicable rule. An applicable ruleset
+				// with no configured check is a known absence.
 				count := 0
-				for _, check := range checks {
+				for _, check := range rulesetStatusCheckRules(f) {
 					count += len(check.RequiredStatusChecks)
 				}
 				if count == 0 {
@@ -266,9 +298,9 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				rulesets := activeDefaultBranchRulesets(f)
-				if len(rulesets) == 0 {
-					return Skip("no active branch ruleset targets the default branch")
+				rulesets, skip, ok := rulesetFallback(f)
+				if !ok {
+					return skip
 				}
 				for _, rs := range rulesets {
 					if rs.Rules != nil && rs.Rules.NonFastForward != nil {
@@ -289,9 +321,9 @@ func registerBranchProtectionRules() {
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection == nil {
-				rulesets := activeDefaultBranchRulesets(f)
-				if len(rulesets) == 0 {
-					return Skip("no active branch ruleset targets the default branch")
+				rulesets, skip, ok := rulesetFallback(f)
+				if !ok {
+					return skip
 				}
 				for _, rs := range rulesets {
 					if rs.Rules != nil && rs.Rules.RequiredSignatures != nil {
@@ -316,12 +348,15 @@ func registerBranchProtectionRules() {
 func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
 		if f.Protection == nil {
-			reviews := rulesetPullRequestRules(f)
-			if len(reviews) == 0 {
-				return Skip("no pull request review rule found in the default branch rulesets")
+			if _, skip, ok := rulesetFallback(f); !ok {
+				return skip
 			}
+			// Overlapping active rulesets combine into the most restrictive
+			// setting, so the required count is the maximum across applicable
+			// review rules. An applicable ruleset with no pull request rule is a
+			// known absence, i.e. zero required reviews.
 			count := 0
-			for _, review := range reviews {
+			for _, review := range rulesetPullRequestRules(f) {
 				if review.RequiredApprovingReviewCount > count {
 					count = review.RequiredApprovingReviewCount
 				}
