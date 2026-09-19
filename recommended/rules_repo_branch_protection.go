@@ -51,22 +51,89 @@ func activeDefaultBranchRulesets(f *RepositoryFacts) []*github.RepositoryRuleset
 	return result
 }
 
-// rulesetFallback returns the active rulesets that protect the default branch
-// when legacy branch protection is absent. ok is false, with the Skip outcome to
-// return, when the branch-protection facts are incomplete (either the legacy
-// protection or the ruleset state is unknown) or when no active ruleset targets
-// the default branch. In those cases a missing rule must not be treated as a
-// known absence, so the caller returns the Skip outcome instead of evaluating
-// the rulesets.
-func rulesetFallback(f *RepositoryFacts) ([]*github.RepositoryRuleset, Outcome, bool) {
+// combinedRequirement decides a boolean branch-protection requirement whose
+// effective value is the union (most restrictive) of legacy branch protection and
+// every applicable active ruleset. satisfied reports whether a readable source
+// already enforces the requirement; because overlapping rules combine into the
+// most restrictive setting, a satisfied requirement is authoritative even when
+// another source could not be read. When no readable source enforces it, the
+// requirement is only failed once both the legacy protection and ruleset states
+// are known and the default branch has some protection, so an unreadable source
+// or a wholly unprotected branch is not misreported as a specific
+// misconfiguration (GSK110 reports the missing protection instead).
+func combinedRequirement(f *RepositoryFacts, satisfied bool, passDetail, failDetail string) Outcome {
+	if satisfied {
+		return Pass(passDetail)
+	}
 	if !f.ProtectionKnown || !f.RulesetsKnown {
-		return nil, Skip("could not determine branch protection or ruleset status for the default branch"), false
+		return Skip("could not determine branch protection or ruleset status for the default branch")
 	}
-	rulesets := activeDefaultBranchRulesets(f)
-	if len(rulesets) == 0 {
-		return nil, Skip("no active branch ruleset targets the default branch"), false
+	if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
+		return Skip("no branch protection or active ruleset is configured on the default branch")
 	}
-	return rulesets, Outcome{}, true
+	return Fail(failDetail)
+}
+
+// combinedReviewCount returns the effective required approving review count for
+// the default branch: the maximum required by legacy protection and by any
+// applicable active ruleset, because overlapping rules combine into the most
+// restrictive setting.
+func combinedReviewCount(f *RepositoryFacts) int {
+	count := 0
+	if f.Protection != nil {
+		count = f.Protection.GetRequiredPullRequestReviews().GetRequiredApprovingReviewCount()
+	}
+	for _, review := range rulesetPullRequestRules(f) {
+		if review.RequiredApprovingReviewCount > count {
+			count = review.RequiredApprovingReviewCount
+		}
+	}
+	return count
+}
+
+// hasPullRequestReviewConfig reports whether any readable source configures pull
+// request reviews on the default branch, used to distinguish a missing
+// reviews block from an explicit zero-review requirement.
+func hasPullRequestReviewConfig(f *RepositoryFacts) bool {
+	if f.Protection != nil && f.Protection.GetRequiredPullRequestReviews() != nil {
+		return true
+	}
+	return len(rulesetPullRequestRules(f)) > 0
+}
+
+// combinedRequiredStatusCheckCount returns the number of distinct required status
+// checks enforced on the default branch across legacy protection and every
+// applicable active ruleset. Checks are keyed by context and integration so the
+// same check enforced by two sources is counted once; entries without a context
+// are ignored.
+func combinedRequiredStatusCheckCount(f *RepositoryFacts) int {
+	seen := map[string]struct{}{}
+	add := func(context string, integration int64) {
+		if context == "" {
+			return
+		}
+		seen[fmt.Sprintf("%s\x00%d", context, integration)] = struct{}{}
+	}
+	if f.Protection != nil {
+		if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
+			if checks.Checks != nil {
+				for _, c := range *checks.Checks {
+					add(c.GetContext(), c.GetAppID())
+				}
+			}
+			// Contexts is the deprecated representation still returned for some
+			// repositories; it carries no app identity.
+			for _, context := range checks.GetContexts() {
+				add(context, 0)
+			}
+		}
+	}
+	for _, params := range rulesetStatusCheckRules(f) {
+		for _, c := range params.RequiredStatusChecks {
+			add(c.GetContext(), c.GetIntegrationID())
+		}
+	}
+	return len(seen)
 }
 
 func rulesetPullRequestRules(f *RepositoryFacts) []*github.PullRequestRuleParameters {
@@ -183,25 +250,18 @@ func registerBranchProtectionRules() {
 		ID: "GSK113", GHQRID: "repo-bp-004", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				if _, skip, ok := rulesetFallback(f); !ok {
-					return skip
+			// Effective value is the union of legacy protection and every
+			// applicable active ruleset, so the requirement is met when any
+			// readable source enables it.
+			satisfied := f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews()
+			for _, review := range rulesetPullRequestRules(f) {
+				if review.DismissStaleReviewsOnPush {
+					satisfied = true
 				}
-				// Overlapping active rulesets combine into the most restrictive
-				// setting, so the requirement is met if any applicable review rule
-				// enables it. An applicable ruleset with no pull request rule is a
-				// known absence of the requirement.
-				for _, review := range rulesetPullRequestRules(f) {
-					if review.DismissStaleReviewsOnPush {
-						return Pass("stale reviews are dismissed on new commits")
-					}
-				}
-				return Fail("stale reviews are not dismissed on new commits")
 			}
-			if f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews() {
-				return Pass("stale reviews are dismissed on new commits")
-			}
-			return Fail("stale reviews are not dismissed on new commits")
+			return combinedRequirement(f, satisfied,
+				"stale reviews are dismissed on new commits",
+				"stale reviews are not dismissed on new commits")
 		},
 	})
 
@@ -209,25 +269,15 @@ func registerBranchProtectionRules() {
 		ID: "GSK114", GHQRID: "repo-bp-005", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				if _, skip, ok := rulesetFallback(f); !ok {
-					return skip
+			satisfied := f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews()
+			for _, review := range rulesetPullRequestRules(f) {
+				if review.RequireCodeOwnerReview {
+					satisfied = true
 				}
-				// Overlapping active rulesets combine into the most restrictive
-				// setting, so code owner review is required if any applicable review
-				// rule requires it. An applicable ruleset with no pull request rule
-				// is a known absence of the requirement.
-				for _, review := range rulesetPullRequestRules(f) {
-					if review.RequireCodeOwnerReview {
-						return Pass("code owner review is required")
-					}
-				}
-				return Fail("code owner review is not required")
 			}
-			if f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews() {
-				return Pass("code owner review is required")
-			}
-			return Fail("code owner review is not required")
+			return combinedRequirement(f, satisfied,
+				"code owner review is required",
+				"code owner review is not required")
 		},
 	})
 
@@ -235,29 +285,18 @@ func registerBranchProtectionRules() {
 		ID: "GSK115", GHQRID: "repo-bp-007", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				if _, skip, ok := rulesetFallback(f); !ok {
-					return skip
+			satisfied := false
+			if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
+				satisfied = checks.Strict
+			}
+			for _, check := range rulesetStatusCheckRules(f) {
+				if check.StrictRequiredStatusChecksPolicy {
+					satisfied = true
 				}
-				// Overlapping active rulesets combine into the most restrictive
-				// setting, so strict checks are enabled if any applicable status
-				// check rule enables them. An applicable ruleset with no status
-				// check rule is a known absence.
-				for _, check := range rulesetStatusCheckRules(f) {
-					if check.StrictRequiredStatusChecksPolicy {
-						return Pass("required status checks require branches to be up to date")
-					}
-				}
-				return Fail("required status checks do not require branches to be up to date")
 			}
-			checks := f.Protection.GetRequiredStatusChecks()
-			if checks == nil {
-				return Fail("no required status checks are configured")
-			}
-			if checks.Strict {
-				return Pass("required status checks require branches to be up to date")
-			}
-			return Fail("required status checks do not require branches to be up to date")
+			return combinedRequirement(f, satisfied,
+				"required status checks require branches to be up to date",
+				"required status checks do not require branches to be up to date")
 		},
 	})
 
@@ -265,31 +304,10 @@ func registerBranchProtectionRules() {
 		ID: "GSK116", GHQRID: "repo-bp-009", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityHigh, Title: "No required status checks configured",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				if _, skip, ok := rulesetFallback(f); !ok {
-					return skip
-				}
-				// Overlapping active rulesets combine their required status checks,
-				// so count them across every applicable rule. An applicable ruleset
-				// with no configured check is a known absence.
-				count := 0
-				for _, check := range rulesetStatusCheckRules(f) {
-					count += len(check.RequiredStatusChecks)
-				}
-				if count == 0 {
-					return Fail("no required status checks are configured; CI failures do not block merges")
-				}
-				return Pass(fmt.Sprintf("%d required status checks configured", count))
-			}
-			checks := f.Protection.GetRequiredStatusChecks()
-			count := 0
-			if checks != nil && checks.Checks != nil {
-				count = len(*checks.Checks)
-			}
-			if count == 0 {
-				return Fail("no required status checks are configured; CI failures do not block merges")
-			}
-			return Pass(fmt.Sprintf("%d required status checks configured", count))
+			count := combinedRequiredStatusCheckCount(f)
+			return combinedRequirement(f, count > 0,
+				fmt.Sprintf("%d required status checks configured", count),
+				"no required status checks are configured; CI failures do not block merges")
 		},
 	})
 
@@ -297,22 +315,18 @@ func registerBranchProtectionRules() {
 		ID: "GSK117", GHQRID: "repo-bp-010", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				rulesets, skip, ok := rulesetFallback(f)
-				if !ok {
-					return skip
+			// Legacy protection satisfies the rule only when it is present and does
+			// not allow force pushes; an applicable ruleset satisfies it with a
+			// non-fast-forward rule.
+			satisfied := f.Protection != nil && !f.Protection.GetAllowForcePushes().GetEnabled()
+			for _, rs := range activeDefaultBranchRulesets(f) {
+				if rs.Rules != nil && rs.Rules.NonFastForward != nil {
+					satisfied = true
 				}
-				for _, rs := range rulesets {
-					if rs.Rules != nil && rs.Rules.NonFastForward != nil {
-						return Pass("force pushes are disabled on the protected branch")
-					}
-				}
-				return Fail("force pushes are allowed on the protected branch")
 			}
-			if f.Protection.GetAllowForcePushes().GetEnabled() {
-				return Fail("force pushes are allowed on the protected branch")
-			}
-			return Pass("force pushes are disabled on the protected branch")
+			return combinedRequirement(f, satisfied,
+				"force pushes are disabled on the protected branch",
+				"force pushes are allowed on the protected branch")
 		},
 	})
 
@@ -320,61 +334,45 @@ func registerBranchProtectionRules() {
 		ID: "GSK118", GHQRID: "repo-bp-012", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if f.Protection == nil {
-				rulesets, skip, ok := rulesetFallback(f)
-				if !ok {
-					return skip
+			satisfied := f.Protection.GetRequiredSignatures().GetEnabled()
+			for _, rs := range activeDefaultBranchRulesets(f) {
+				if rs.Rules != nil && rs.Rules.RequiredSignatures != nil {
+					satisfied = true
 				}
-				for _, rs := range rulesets {
-					if rs.Rules != nil && rs.Rules.RequiredSignatures != nil {
-						return Pass("signed commits are required")
-					}
-				}
-				return Fail("signed commits are not required")
 			}
-			if f.Protection.GetRequiredSignatures().GetEnabled() {
-				return Pass("signed commits are required")
-			}
-			return Fail("signed commits are not required")
+			return combinedRequirement(f, satisfied,
+				"signed commits are required",
+				"signed commits are not required")
 		},
 	})
 }
 
-// checkRequiredReviews returns a CheckRepo function that fails when the
-// required approving review count equals expected. Using equality (rather than
-// a threshold) keeps each rule aligned with its title and avoids GSK111/GSK112
-// overlapping at a count of 0. An absent required-reviews block is treated as a
-// count of 0 so only the zero-review rule (GSK111) reports it.
+// checkRequiredReviews returns a CheckRepo function that fails when the effective
+// required approving review count equals expected. The effective count is the
+// union (maximum) of legacy protection and every applicable active ruleset, so a
+// weak legacy setting no longer hides a stricter ruleset (or vice versa). Using
+// equality (rather than a threshold) keeps each rule aligned with its title and
+// avoids GSK111/GSK112 overlapping at a count of 0. An absent required-reviews
+// block is treated as a count of 0 so only the zero-review rule (GSK111) reports
+// it.
 func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
-		if f.Protection == nil {
-			if _, skip, ok := rulesetFallback(f); !ok {
-				return skip
-			}
-			// Overlapping active rulesets combine into the most restrictive
-			// setting, so the required count is the maximum across applicable
-			// review rules. An applicable ruleset with no pull request rule is a
-			// known absence, i.e. zero required reviews.
-			count := 0
-			for _, review := range rulesetPullRequestRules(f) {
-				if review.RequiredApprovingReviewCount > count {
-					count = review.RequiredApprovingReviewCount
-				}
-			}
-			if count != expected {
-				return Pass(fmt.Sprintf("%d approving reviews are required", count))
-			}
-			return Fail(fmt.Sprintf("%s (required: %d)", failDetail, count))
+		count := combinedReviewCount(f)
+		if count > expected {
+			// The union only raises the count, so a readable source already above
+			// the failing threshold is authoritative even under unknowns.
+			return Pass(fmt.Sprintf("%d approving reviews are required", count))
 		}
-		reviews := f.Protection.GetRequiredPullRequestReviews()
-		count := 0
-		if reviews != nil {
-			count = reviews.GetRequiredApprovingReviewCount()
+		if !f.ProtectionKnown || !f.RulesetsKnown {
+			return Skip("could not determine branch protection or ruleset status for the default branch")
+		}
+		if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
+			return Skip("no branch protection or active ruleset is configured on the default branch")
 		}
 		if count != expected {
 			return Pass(fmt.Sprintf("%d approving reviews are required", count))
 		}
-		if reviews == nil {
+		if !hasPullRequestReviewConfig(f) {
 			return Fail(fmt.Sprintf("%s (pull request reviews are not configured)", failDetail))
 		}
 		return Fail(fmt.Sprintf("%s (required: %d)", failDetail, count))
