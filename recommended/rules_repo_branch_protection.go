@@ -253,7 +253,10 @@ func registerBranchProtectionRules() {
 			// Effective value is the union of legacy protection and every
 			// applicable active ruleset, so the requirement is met when any
 			// readable source enables it.
-			satisfied := f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews()
+			satisfied := false
+			if f.Protection != nil {
+				satisfied = f.Protection.GetRequiredPullRequestReviews().GetDismissStaleReviews()
+			}
 			for _, review := range rulesetPullRequestRules(f) {
 				if review.DismissStaleReviewsOnPush {
 					satisfied = true
@@ -269,7 +272,10 @@ func registerBranchProtectionRules() {
 		ID: "GSK114", GHQRID: "repo-bp-005", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			satisfied := f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews()
+			satisfied := false
+			if f.Protection != nil {
+				satisfied = f.Protection.GetRequiredPullRequestReviews().GetRequireCodeOwnerReviews()
+			}
 			for _, review := range rulesetPullRequestRules(f) {
 				if review.RequireCodeOwnerReview {
 					satisfied = true
@@ -334,7 +340,10 @@ func registerBranchProtectionRules() {
 		ID: "GSK118", GHQRID: "repo-bp-012", Scope: ScopeRepository,
 		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			satisfied := f.Protection.GetRequiredSignatures().GetEnabled()
+			satisfied := false
+			if f.Protection != nil {
+				satisfied = f.Protection.GetRequiredSignatures().GetEnabled()
+			}
 			for _, rs := range activeDefaultBranchRulesets(f) {
 				if rs.Rules != nil && rs.Rules.RequiredSignatures != nil {
 					satisfied = true
