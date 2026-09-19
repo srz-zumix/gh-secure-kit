@@ -3,12 +3,17 @@ package recommended
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 )
+
+// branchErrorHTTPStatus captures the HTTP status code from a "(HTTP <code>)"
+// marker that some client transports append to a stringified error message.
+var branchErrorHTTPStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
 
 // RepositoryFacts holds the raw data collected from GitHub for a single
 // repository, used as input to every repository-scoped Rule.Check function.
@@ -71,7 +76,10 @@ func isNotFound(err error) bool {
 // an unprotected branch, but some client transports drop the HTTP response while
 // preserving the standard "Branch not protected" message, so this
 // branch-protection-specific check also accepts that message. An authoritative
-// non-404 HTTP status always takes precedence over the message text.
+// non-404 HTTP status always takes precedence over the message text: a typed
+// response, or a "(HTTP <code>)" marker in the message, is only treated as
+// no-protection when the status is 404, so a server or transport failure is not
+// misreported as an unprotected branch.
 func isBranchNotProtected(err error) bool {
 	if err == nil {
 		return false
@@ -83,7 +91,17 @@ func isBranchNotProtected(err error) bool {
 	if errors.As(err, &ghErr) && ghErr.Message == "Branch not protected" {
 		return true
 	}
-	return strings.Contains(err.Error(), "branch is not protected") || strings.Contains(err.Error(), "Branch not protected")
+	msg := err.Error()
+	switch msg {
+	case "Branch not protected", "branch is not protected":
+		return true
+	}
+	if strings.Contains(msg, "branch is not protected") || strings.Contains(msg, "Branch not protected") {
+		if m := branchErrorHTTPStatus.FindStringSubmatch(msg); m != nil {
+			return m[1] == "404"
+		}
+	}
+	return false
 }
 
 // fileExists reports whether the given path exists in the repository's default

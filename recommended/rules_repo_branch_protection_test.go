@@ -64,6 +64,9 @@ func TestIsBranchNotProtected(t *testing.T) {
 		},
 		{name: "branch protection client error", err: errors.New("branch is not protected"), want: true},
 		{name: "wrapped branch protection message", err: errors.New("GET branch: Branch not protected (HTTP 404)"), want: true},
+		{name: "wrapped non-404 status is not no-protection", err: errors.New("GET branch: Branch not protected (HTTP 500)"), want: false},
+		{name: "wrapped forbidden status is not no-protection", err: errors.New("GET branch: Branch not protected (HTTP 403)"), want: false},
+		{name: "bare non-404 status is not no-protection", err: errors.New("500 Branch not protected"), want: false},
 		{name: "other error", err: errors.New("request failed"), want: false},
 	}
 	for _, tc := range tests {
