@@ -667,3 +667,31 @@ func TestBranchProtectionLegacyRulesetCoexistence(t *testing.T) {
 		}
 	})
 }
+
+// TestGSK116DeduplicatesLegacyCheckRepresentations verifies that a required
+// status check returned in both the newer Checks representation (with a nonzero
+// app ID) and the deprecated Contexts projection is counted once.
+func TestGSK116DeduplicatesLegacyCheckRepresentations(t *testing.T) {
+	contexts := []string{"ci"}
+	f := &RepositoryFacts{
+		Protection: &github.Protection{
+			RequiredStatusChecks: &github.RequiredStatusChecks{
+				Checks:   &[]*github.RequiredStatusCheck{{Context: "ci", AppID: github.Ptr(int64(42))}},
+				Contexts: &contexts,
+			},
+		},
+		ProtectionKnown: true,
+		RulesetsKnown:   true,
+	}
+	rule, ok := RuleByID("GSK116")
+	if !ok {
+		t.Fatal("GSK116 not registered")
+	}
+	out := rule.CheckRepo(f)
+	if out.Status != StatusPass {
+		t.Fatalf("status: got %v, want pass", out.Status)
+	}
+	if want := "1 required status checks configured"; out.Detail != want {
+		t.Errorf("detail: got %q, want %q", out.Detail, want)
+	}
+}

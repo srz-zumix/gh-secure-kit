@@ -116,15 +116,17 @@ func combinedRequiredStatusCheckCount(f *RepositoryFacts) int {
 	}
 	if f.Protection != nil {
 		if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
-			if checks.Checks != nil {
+			if checks.Checks != nil && len(*checks.Checks) > 0 {
 				for _, c := range *checks.Checks {
 					add(c.GetContext(), c.GetAppID())
 				}
-			}
-			// Contexts is the deprecated representation still returned for some
-			// repositories; it carries no app identity.
-			for _, context := range checks.GetContexts() {
-				add(context, 0)
+			} else {
+				// Contexts is the deprecated projection of the same checks; use it
+				// only when the newer Checks representation is absent or empty so a
+				// check present in both is not counted twice.
+				for _, context := range checks.GetContexts() {
+					add(context, 0)
+				}
 			}
 		}
 	}
