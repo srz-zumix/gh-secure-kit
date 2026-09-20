@@ -34,11 +34,20 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 	}
 
 	out := make([]ApplyResult, 0, len(results))
+	var rulesetResultIndexes []int
+	var rulesetRuleIDs []string
 	for _, res := range results {
 		ar := ApplyResult{Result: res, DryRun: dryRun}
 		if res.Status == StatusFail {
 			rule := byID[res.Rule.ID]
-			if rule.Fixable && rule.ApplyRepo != nil {
+			if rule.Fixable && isRulesetRemediationRule(rule.ID) && canRemediateRulesetRule(rule.ID, facts) {
+				if dryRun {
+					ar.Applied = true
+				} else {
+					rulesetResultIndexes = append(rulesetResultIndexes, len(out))
+					rulesetRuleIDs = append(rulesetRuleIDs, rule.ID)
+				}
+			} else if rule.Fixable && rule.ApplyRepo != nil {
 				if dryRun {
 					ar.Applied = true
 				} else if err := rule.ApplyRepo(ctx, g, repo, facts); err != nil {
@@ -49,6 +58,17 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 			}
 		}
 		out = append(out, ar)
+	}
+	if len(rulesetRuleIDs) > 0 {
+		if err := applyBranchProtectionRuleset(ctx, g, repo, facts, rulesetRuleIDs); err != nil {
+			for _, index := range rulesetResultIndexes {
+				out[index].Error = fmt.Errorf("failed to apply branch protection ruleset: %w", err)
+			}
+		} else {
+			for _, index := range rulesetResultIndexes {
+				out[index].Applied = true
+			}
+		}
 	}
 	return out, nil
 }

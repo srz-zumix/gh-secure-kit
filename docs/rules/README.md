@@ -23,15 +23,15 @@ catalog with severity, scope, and fixability.
 | [GSK107](GSK107.md) | High | Yes | Secret scanning push protection not enabled |
 | [GSK108](GSK108.md) | Medium | Yes | Private vulnerability reporting not enabled |
 | [GSK109](GSK109.md) | Medium | Yes | Dependabot security updates not enabled |
-| [GSK110](GSK110.md) | Critical | No | No branch protection configured on default branch |
-| [GSK111](GSK111.md) | Critical | No | No approving reviews required before merge |
-| [GSK112](GSK112.md) | Medium | No | Only 1 approving review required |
-| [GSK113](GSK113.md) | High | No | Stale reviews not dismissed on new commits |
-| [GSK114](GSK114.md) | Medium | No | Code owner review not required |
-| [GSK115](GSK115.md) | High | No | Strict status checks not enabled |
+| [GSK110](GSK110.md) | Critical | Yes | No branch protection configured on default branch |
+| [GSK111](GSK111.md) | Critical | Yes | No approving reviews required before merge |
+| [GSK112](GSK112.md) | Medium | Yes | Only 1 approving review required |
+| [GSK113](GSK113.md) | High | Yes | Stale reviews not dismissed on new commits |
+| [GSK114](GSK114.md) | Medium | Yes | Code owner review not required |
+| [GSK115](GSK115.md) | High | Yes | Strict status checks not enabled |
 | [GSK116](GSK116.md) | High | No | No required status checks configured |
-| [GSK117](GSK117.md) | Critical | No | Force pushes allowed on protected branch |
-| [GSK118](GSK118.md) | Medium | No | Signed commits not required |
+| [GSK117](GSK117.md) | Critical | Yes | Force pushes allowed on protected branch |
+| [GSK118](GSK118.md) | Medium | Yes | Signed commits not required |
 | [GSK119](GSK119.md) | High | No | Excessive admin collaborators |
 | [GSK120](GSK120.md) | Medium | No | Direct collaborators instead of teams |
 | [GSK121](GSK121.md) | High | No | Deploy keys with write access |

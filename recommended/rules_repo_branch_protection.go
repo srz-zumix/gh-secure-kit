@@ -222,7 +222,7 @@ func fnmatchToRegexp(pattern string) (*regexp.Regexp, error) {
 func registerBranchProtectionRules() {
 	register(Rule{
 		ID: "GSK110", GHQRID: "repo-bp-001", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch",
+		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
 				return Pass("default branch is protected by a branch protection rule or ruleset")
@@ -238,19 +238,19 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK111", GHQRID: "repo-bp-002", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge",
+		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge", Fixable: true,
 		CheckRepo: checkRequiredReviews(0, "no approving reviews are required before merge"),
 	})
 
 	register(Rule{
 		ID: "GSK112", GHQRID: "repo-bp-003", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required", Fixable: true,
 		CheckRepo: checkRequiredReviews(1, "only 1 approving review is required"),
 	})
 
 	register(Rule{
 		ID: "GSK113", GHQRID: "repo-bp-004", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits",
+		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Effective value is the union of legacy protection and every
 			// applicable active ruleset, so the requirement is met when any
@@ -272,7 +272,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK114", GHQRID: "repo-bp-005", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -291,11 +291,13 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK115", GHQRID: "repo-bp-007", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled",
+		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
-			if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
-				satisfied = checks.Strict
+			if f.Protection != nil {
+				if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
+					satisfied = checks.Strict
+				}
 			}
 			for _, check := range rulesetStatusCheckRules(f) {
 				if check.StrictRequiredStatusChecksPolicy {
@@ -321,7 +323,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK117", GHQRID: "repo-bp-010", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch",
+		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Legacy protection satisfies the rule only when it is present and does
 			// not allow force pushes; an applicable ruleset satisfies it with a
@@ -340,7 +342,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK118", GHQRID: "repo-bp-012", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
