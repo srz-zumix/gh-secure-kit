@@ -35,6 +35,10 @@ func newBranchProtectionRulesetRemediation(facts *RepositoryFacts, existing *git
 		if existing.Rules == nil {
 			existing.Rules = &github.RepositoryRulesetRules{}
 		}
+		// Ensure the managed ruleset is active so the applied rules actually
+		// enforce protection; an evaluate/disabled ruleset would leave the
+		// branch-protection checks failing after remediation.
+		existing.Enforcement = github.RulesetEnforcementActive
 		return &branchProtectionRulesetRemediation{ruleset: existing}, nil
 	}
 

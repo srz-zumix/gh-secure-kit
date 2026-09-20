@@ -250,3 +250,32 @@ func TestApplyBranchProtectionRulesetUpdatesOnce(t *testing.T) {
 		t.Error("NonFastForward or RequiredSignatures was not added")
 	}
 }
+
+func TestApplyBranchProtectionRulesetActivatesEvaluateRuleset(t *testing.T) {
+	var payload github.RepositoryRuleset
+	existing := `[{"id":1,"name":"gh-secure-kit/branch-protection","target":"branch","enforcement":"evaluate"}]`
+	details := `{"id":1,"name":"gh-secure-kit/branch-protection","target":"branch","enforcement":"evaluate","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},"rules":[]}`
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
+			return rulesetResponse(request, http.StatusOK, existing), nil
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets/1":
+			return rulesetResponse(request, http.StatusOK, details), nil
+		case request.Method == http.MethodPut && request.URL.Path == "/repos/owner/repo/rulesets/1":
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return rulesetResponse(request, http.StatusOK, `{"id":1}`), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.String())
+			return nil, nil
+		}
+	}))
+	repo := repository.Repository{Owner: "owner", Name: "repo"}
+	if err := applyBranchProtectionRuleset(context.Background(), client, repo, remediationFacts(), []string{"GSK110"}); err != nil {
+		t.Fatalf("applyBranchProtectionRuleset() error = %v", err)
+	}
+	if payload.GetEnforcement() != github.RulesetEnforcementActive {
+		t.Errorf("Enforcement = %q, want %q", payload.GetEnforcement(), github.RulesetEnforcementActive)
+	}
+}
