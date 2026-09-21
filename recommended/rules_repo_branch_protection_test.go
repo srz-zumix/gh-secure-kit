@@ -222,9 +222,10 @@ func TestGSK117AllowForcePushesNilSafe(t *testing.T) {
 		t.Fatal("GSK117 not registered")
 	}
 
-	// No legacy protection and no ruleset -> skip.
-	if got := rule.CheckRepo(&RepositoryFacts{ProtectionKnown: true, RulesetsKnown: true}).Status; got != StatusSkip {
-		t.Errorf("no protection: got %v, want skip", got)
+	// No legacy protection and no ruleset -> fail so GSK117 can be included in
+	// a single remediation of every missing branch-protection requirement.
+	if got := rule.CheckRepo(&RepositoryFacts{ProtectionKnown: true, RulesetsKnown: true}).Status; got != StatusFail {
+		t.Errorf("no protection: got %v, want fail", got)
 	}
 
 	// Protection present but AllowForcePushes omitted (nil) must not panic
@@ -342,16 +343,16 @@ func TestRequiredReviewsEquality(t *testing.T) {
 		}
 	}
 
-	// count 0: only GSK111 (Critical) fails; GSK112 passes (no overlap).
+	// count 0: GSK111 and GSK112 both fail because neither minimum is met.
 	f := factsWithCount(0)
 	if got := gsk111.CheckRepo(f).Status; got != StatusFail {
 		t.Errorf("count0 GSK111: got %v, want fail", got)
 	}
-	if got := gsk112.CheckRepo(f).Status; got != StatusPass {
-		t.Errorf("count0 GSK112: got %v, want pass", got)
+	if got := gsk112.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("count0 GSK112: got %v, want fail", got)
 	}
 
-	// count 1: only GSK112 fails; GSK111 passes.
+	// count 1: GSK111 passes and GSK112 fails.
 	f = factsWithCount(1)
 	if got := gsk111.CheckRepo(f).Status; got != StatusPass {
 		t.Errorf("count1 GSK111: got %v, want pass", got)
@@ -360,7 +361,7 @@ func TestRequiredReviewsEquality(t *testing.T) {
 	if out.Status != StatusFail {
 		t.Errorf("count1 GSK112: got %v, want fail", out.Status)
 	}
-	if want := "only 1 approving review is required (required: 1)"; out.Detail != want {
+	if want := "fewer than 2 approving reviews are required (required: 1, minimum: 2)"; out.Detail != want {
 		t.Errorf("count1 GSK112 detail: got %q, want %q", out.Detail, want)
 	}
 
@@ -373,8 +374,7 @@ func TestRequiredReviewsEquality(t *testing.T) {
 		t.Errorf("count2 GSK112: got %v, want pass", got)
 	}
 
-	// Reviews block absent (nil): treated as count 0 -> only GSK111 fails
-	// with a "not configured" detail; GSK112 passes.
+	// Reviews block absent (nil): treated as count 0, so both review rules fail.
 	f = &RepositoryFacts{Protection: &github.Protection{}, ProtectionKnown: true, RulesetsKnown: true}
 	out = gsk111.CheckRepo(f)
 	if out.Status != StatusFail {
@@ -383,17 +383,18 @@ func TestRequiredReviewsEquality(t *testing.T) {
 	if want := "no approving reviews are required before merge (pull request reviews are not configured)"; out.Detail != want {
 		t.Errorf("nil reviews GSK111 detail: got %q, want %q", out.Detail, want)
 	}
-	if got := gsk112.CheckRepo(f).Status; got != StatusPass {
-		t.Errorf("nil reviews GSK112: got %v, want pass", got)
+	if got := gsk112.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("nil reviews GSK112: got %v, want fail", got)
 	}
 
-	// No legacy protection and no ruleset -> skip.
+	// No legacy protection and no ruleset -> fail so all missing protections can
+	// be remediated in a single apply invocation.
 	f = &RepositoryFacts{ProtectionKnown: true, RulesetsKnown: true}
-	if got := gsk111.CheckRepo(f).Status; got != StatusSkip {
-		t.Errorf("no protection GSK111: got %v, want skip", got)
+	if got := gsk111.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("no protection GSK111: got %v, want fail", got)
 	}
-	if got := gsk112.CheckRepo(f).Status; got != StatusSkip {
-		t.Errorf("no protection GSK112: got %v, want skip", got)
+	if got := gsk112.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("no protection GSK112: got %v, want fail", got)
 	}
 }
 
@@ -479,7 +480,7 @@ func TestBranchProtectionRulesetKnownAbsenceFails(t *testing.T) {
 
 	want := map[string]Status{
 		"GSK111": StatusFail, // zero required reviews
-		"GSK112": StatusPass, // zero is not "only 1"
+		"GSK112": StatusFail, // fewer than 2 reviews are required
 		"GSK113": StatusFail, // stale reviews not dismissed
 		"GSK114": StatusFail, // code owner review not required
 		"GSK115": StatusFail, // strict checks not enabled
@@ -489,6 +490,40 @@ func TestBranchProtectionRulesetKnownAbsenceFails(t *testing.T) {
 		if got := ruleStatus(t, id, f); got != exp {
 			t.Errorf("%s known absence: got %v, want %v", id, got, exp)
 		}
+	}
+}
+
+func TestNoBranchProtectionFailsEveryBranchProtectionRule(t *testing.T) {
+	facts := factsWithRulesets()
+	for _, id := range branchProtectionRuleIDs {
+		if got := ruleStatus(t, id, facts); got != StatusFail {
+			t.Errorf("%s without branch protection: got %v, want fail", id, got)
+		}
+	}
+}
+
+func TestReviewRulesSkipWhenApprovalCountExceedsMembers(t *testing.T) {
+	f := factsWithRulesets()
+	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1))}
+	f.CollaboratorsKnown = true
+	f.Collaborators = []*github.User{{Login: github.Ptr("member"), ID: github.Ptr(int64(2))}}
+	if got := ruleStatus(t, "GSK111", f); got != StatusPass && got != StatusFail {
+		t.Errorf("GSK111 with two members: got %v, want an evaluable result", got)
+	}
+	if got := ruleStatus(t, "GSK112", f); got != StatusSkip {
+		t.Errorf("GSK112 with two members: got %v, want skip", got)
+	}
+}
+
+func TestOneMemberCanUseSingleApprovalRule(t *testing.T) {
+	f := factsWithRulesets()
+	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1))}
+	f.CollaboratorsKnown = true
+	if got := ruleStatus(t, "GSK111", f); got != StatusFail {
+		t.Errorf("GSK111 with one member and no review rule: got %v, want fail", got)
+	}
+	if got := ruleStatus(t, "GSK112", f); got != StatusSkip {
+		t.Errorf("GSK112 with one member: got %v, want skip", got)
 	}
 }
 
@@ -658,12 +693,12 @@ func TestBranchProtectionLegacyRulesetCoexistence(t *testing.T) {
 		}
 	})
 
-	// An applicable ruleset that carries no rules is not protection, so with no
-	// legacy protection the sub-rule skips (GSK110 reports the missing protection).
-	t.Run("empty ruleset with no legacy protection skips GSK113", func(t *testing.T) {
+	// An applicable ruleset that carries no rules leaves stale reviews
+	// unprotected, so the sub-rule fails along with GSK110.
+	t.Run("empty ruleset with no legacy protection fails GSK113", func(t *testing.T) {
 		empty := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
-		if got := ruleStatus(t, "GSK113", factsWithRulesets(empty)); got != StatusSkip {
-			t.Errorf("got %v, want skip", got)
+		if got := ruleStatus(t, "GSK113", factsWithRulesets(empty)); got != StatusFail {
+			t.Errorf("got %v, want fail", got)
 		}
 	})
 }

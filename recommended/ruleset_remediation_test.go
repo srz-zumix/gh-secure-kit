@@ -72,11 +72,11 @@ func TestBranchProtectionRulesetRemediationCreatesMinimalGSK110Ruleset(t *testin
 	if !rulesetTargetsBranch(ruleset.Conditions, "main") {
 		t.Error("Ruleset does not target the default branch")
 	}
-	if ruleset.Rules.NonFastForward == nil {
-		t.Error("NonFastForward is nil")
+	if ruleset.Rules.PullRequest == nil {
+		t.Error("PullRequest is nil")
 	}
-	if ruleset.Rules.PullRequest != nil || ruleset.Rules.RequiredStatusChecks != nil || ruleset.Rules.RequiredSignatures != nil {
-		t.Error("GSK110 must create only the minimum non-fast-forward protection")
+	if ruleset.Rules.NonFastForward != nil || ruleset.Rules.RequiredStatusChecks != nil || ruleset.Rules.RequiredSignatures != nil {
+		t.Error("GSK110 must create only pull-request protection")
 	}
 }
 
@@ -178,17 +178,104 @@ func TestBranchProtectionRulesetRemediationDoesNotFixGSK116(t *testing.T) {
 	}
 }
 
+func TestBranchProtectionRulesetRemediationRespectsSelectedReviewRules(t *testing.T) {
+	tests := []struct {
+		name    string
+		ruleIDs []string
+		want    int
+	}{
+		{name: "GSK111 only", ruleIDs: []string{"GSK110", "GSK111"}, want: 1},
+		{name: "GSK111 and GSK112", ruleIDs: []string{"GSK110", "GSK111", "GSK112"}, want: 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			remediation, err := newBranchProtectionRulesetRemediation(remediationFacts(), nil)
+			if err != nil {
+				t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
+			}
+			for _, id := range tc.ruleIDs {
+				if err := remediation.Apply(id, remediationFacts()); err != nil {
+					t.Fatalf("Apply(%s) error = %v", id, err)
+				}
+			}
+			if got := remediation.Ruleset().Rules.PullRequest.GetRequiredApprovingReviewCount(); got != tc.want {
+				t.Errorf("RequiredApprovingReviewCount = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBranchProtectionRulesetRemediationAppliesOnlySelectedRequirements(t *testing.T) {
+	remediation, err := newBranchProtectionRulesetRemediation(remediationFacts(), nil)
+	if err != nil {
+		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
+	}
+	for _, id := range []string{"GSK110", "GSK111", "GSK113"} {
+		if err := remediation.Apply(id, remediationFacts()); err != nil {
+			t.Fatalf("Apply(%s) error = %v", id, err)
+		}
+	}
+	rules := remediation.Ruleset().Rules
+	if rules.PullRequest.GetRequiredApprovingReviewCount() != 1 || !rules.PullRequest.DismissStaleReviewsOnPush {
+		t.Errorf("PullRequest = %+v, want only GSK111 and GSK113 requirements", rules.PullRequest)
+	}
+	if rules.PullRequest.RequireCodeOwnerReview || rules.NonFastForward != nil || rules.RequiredSignatures != nil {
+		t.Errorf("Rules = %+v, want ignored requirements to remain absent", rules)
+	}
+}
+
+func TestBranchProtectionRulesetRemediationAddsStrictStatusRuleWithoutChecks(t *testing.T) {
+	remediation, err := newBranchProtectionRulesetRemediation(remediationFacts(), nil)
+	if err != nil {
+		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
+	}
+	if err := remediation.Apply("GSK115", remediationFacts()); err != nil {
+		t.Fatalf("Apply(GSK115) error = %v", err)
+	}
+	statusChecks := remediation.Ruleset().Rules.RequiredStatusChecks
+	if statusChecks == nil || !statusChecks.StrictRequiredStatusChecksPolicy {
+		t.Errorf("RequiredStatusChecks = %+v, want strict rule", statusChecks)
+	}
+	if statusChecks.RequiredStatusChecks == nil || len(statusChecks.RequiredStatusChecks) != 0 {
+		t.Errorf("RequiredStatusChecks = %#v, want empty non-nil slice", statusChecks.RequiredStatusChecks)
+	}
+}
+
+func TestAddOwnerBypassActorUsesExemptMode(t *testing.T) {
+	facts := remediationFacts()
+	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42))}
+	ruleset := &github.RepositoryRuleset{}
+	if err := addOwnerBypassActor(ruleset, facts); err != nil {
+		t.Fatalf("addOwnerBypassActor() error = %v", err)
+	}
+	if len(ruleset.BypassActors) != 1 {
+		t.Fatalf("BypassActors length = %d, want 1", len(ruleset.BypassActors))
+	}
+	actor := ruleset.BypassActors[0]
+	if actor.GetActorID() != 42 || actor.GetActorType() == nil || *actor.GetActorType() != github.BypassActorType("User") || actor.GetBypassMode() == nil || *actor.GetBypassMode() != github.BypassModeExempt {
+		t.Errorf("BypassActor = %+v, want owner User with exempt mode", actor)
+	}
+}
+
 func TestApplyBranchProtectionRulesetCreatesSingleRuleset(t *testing.T) {
 	var createCount int
 	var payload github.RepositoryRuleset
+	var rawPayload map[string]any
 	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch {
 		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
 			return rulesetResponse(request, http.StatusOK, "[]"), nil
 		case request.Method == http.MethodPost && request.URL.Path == "/repos/owner/repo/rulesets":
 			createCount++
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			body, err := io.ReadAll(request.Body)
+			if err != nil {
+				t.Fatalf("read request: %v", err)
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
 				t.Fatalf("decode request: %v", err)
+			}
+			if err := json.Unmarshal(body, &rawPayload); err != nil {
+				t.Fatalf("decode raw request: %v", err)
 			}
 			return rulesetResponse(request, http.StatusCreated, `{"id":1}`), nil
 		default:
@@ -203,11 +290,44 @@ func TestApplyBranchProtectionRulesetCreatesSingleRuleset(t *testing.T) {
 	if createCount != 1 {
 		t.Errorf("create count = %d, want 1", createCount)
 	}
-	if payload.Name != branchProtectionRulesetName || payload.Rules.NonFastForward == nil {
+	if payload.Name != branchProtectionRulesetName {
 		t.Errorf("created payload = %+v, want named minimum branch-protection ruleset", payload)
 	}
-	if payload.Rules.PullRequest != nil || payload.Rules.RequiredStatusChecks != nil || payload.Rules.RequiredSignatures != nil {
-		t.Errorf("created payload = %+v, want only non-fast-forward rule", payload.Rules)
+	if payload.Rules.PullRequest == nil || payload.Rules.NonFastForward != nil || payload.Rules.RequiredStatusChecks != nil || payload.Rules.RequiredSignatures != nil {
+		t.Errorf("created payload = %+v, want only pull-request rule", payload.Rules)
+	}
+	refName := rawPayload["conditions"].(map[string]any)["ref_name"].(map[string]any)
+	if exclude, ok := refName["exclude"].([]any); !ok || len(exclude) != 0 {
+		t.Errorf("conditions.ref_name.exclude = %#v, want []", refName["exclude"])
+	}
+}
+
+func TestApplyBranchProtectionRulesetCreatesOnlySelectedRequirements(t *testing.T) {
+	var payload github.RepositoryRuleset
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
+			return rulesetResponse(request, http.StatusOK, "[]"), nil
+		case request.Method == http.MethodPost && request.URL.Path == "/repos/owner/repo/rulesets":
+			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			return rulesetResponse(request, http.StatusCreated, `{"id":1}`), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.String())
+			return nil, nil
+		}
+	}))
+	repo := repository.Repository{Owner: "owner", Name: "repo"}
+	if err := applyBranchProtectionRuleset(context.Background(), client, repo, remediationFacts(), []string{"GSK110", "GSK111", "GSK113"}); err != nil {
+		t.Fatalf("applyBranchProtectionRuleset() error = %v", err)
+	}
+	rules := payload.Rules
+	if rules.PullRequest == nil || rules.PullRequest.RequiredApprovingReviewCount != 1 || !rules.PullRequest.DismissStaleReviewsOnPush {
+		t.Errorf("PullRequest = %+v, want only GSK111 and GSK113 requirements", rules.PullRequest)
+	}
+	if rules.PullRequest.RequireCodeOwnerReview || rules.NonFastForward != nil || rules.RequiredStatusChecks != nil || rules.RequiredSignatures != nil {
+		t.Errorf("Rules = %+v, want omitted requirements to remain absent", rules)
 	}
 }
 

@@ -10,27 +10,33 @@ import (
 )
 
 const branchProtectionRulesetName = "gh-secure-kit/branch-protection"
+const branchProtectionReviewRulesetName = "gh-secure-kit/branch-protection-review"
 
 // branchProtectionRulesetRemediation builds the repository-owned ruleset used
 // by recommended apply. It only changes rules explicitly requested by failed
 // recommendations and preserves every other rule from an existing ruleset.
 type branchProtectionRulesetRemediation struct {
+	name    string
 	ruleset *github.RepositoryRuleset
 }
 
 func newBranchProtectionRulesetRemediation(facts *RepositoryFacts, existing *github.RepositoryRuleset) (*branchProtectionRulesetRemediation, error) {
+	return newNamedBranchProtectionRulesetRemediation(facts, existing, branchProtectionRulesetName)
+}
+
+func newNamedBranchProtectionRulesetRemediation(facts *RepositoryFacts, existing *github.RepositoryRuleset, name string) (*branchProtectionRulesetRemediation, error) {
 	if facts == nil || facts.Repo == nil || facts.Repo.GetDefaultBranch() == "" {
 		return nil, fmt.Errorf("default branch is required to create a branch protection ruleset")
 	}
 	if existing != nil {
-		if existing.Name != branchProtectionRulesetName {
+		if existing.Name != name {
 			return nil, fmt.Errorf("refusing to modify ruleset %q", existing.Name)
 		}
 		if existing.Target == nil || *existing.Target != github.RulesetTargetBranch {
-			return nil, fmt.Errorf("ruleset %q does not target branches", branchProtectionRulesetName)
+			return nil, fmt.Errorf("ruleset %q does not target branches", name)
 		}
 		if !rulesetTargetsBranch(existing.Conditions, facts.Repo.GetDefaultBranch()) {
-			return nil, fmt.Errorf("ruleset %q does not target the default branch", branchProtectionRulesetName)
+			return nil, fmt.Errorf("ruleset %q does not target the default branch", name)
 		}
 		if existing.Rules == nil {
 			existing.Rules = &github.RepositoryRulesetRules{}
@@ -39,31 +45,42 @@ func newBranchProtectionRulesetRemediation(facts *RepositoryFacts, existing *git
 		// enforce protection; an evaluate/disabled ruleset would leave the
 		// branch-protection checks failing after remediation.
 		existing.Enforcement = github.RulesetEnforcementActive
-		return &branchProtectionRulesetRemediation{ruleset: existing}, nil
+		return &branchProtectionRulesetRemediation{name: name, ruleset: existing}, nil
 	}
 
 	target := github.RulesetTargetBranch
 	enforcement := github.RulesetEnforcementActive
-	return &branchProtectionRulesetRemediation{ruleset: &github.RepositoryRuleset{
-		Name:        branchProtectionRulesetName,
+	return &branchProtectionRulesetRemediation{name: name, ruleset: &github.RepositoryRuleset{
+		Name:        name,
 		Target:      &target,
 		Enforcement: enforcement,
 		Conditions: &github.RepositoryRulesetConditions{
-			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+			RefName: &github.RepositoryRulesetRefConditionParameters{
+				Include: []string{"~DEFAULT_BRANCH"},
+				Exclude: []string{},
+			},
 		},
 		Rules: &github.RepositoryRulesetRules{},
 	}}, nil
 }
 
-// Apply adds the minimum rule changes required to remediate ruleID. GSK110 is
-// deliberately limited to non-fast-forward protection; the remaining settings
-// require their own failing recommendation before they are added.
+// Apply adds the minimum rule changes required to remediate ruleID. GSK110 adds
+// pull-request protection; every additional requirement needs its own failed,
+// selected recommendation.
 func (r *branchProtectionRulesetRemediation) Apply(ruleID string, facts *RepositoryFacts) error {
 	switch ruleID {
-	case "GSK110", "GSK117":
+	case "GSK110":
+		pullRequestRule(r.ruleset)
+	case "GSK117":
 		r.ruleset.Rules.NonFastForward = &github.EmptyRuleParameters{}
-	case "GSK111", "GSK112":
-		pullRequestRule(r.ruleset).RequiredApprovingReviewCount = 2
+	case "GSK111":
+		if pullRequestRule(r.ruleset).RequiredApprovingReviewCount < 1 {
+			r.ruleset.Rules.PullRequest.RequiredApprovingReviewCount = 1
+		}
+	case "GSK112":
+		if pullRequestRule(r.ruleset).RequiredApprovingReviewCount < 2 {
+			r.ruleset.Rules.PullRequest.RequiredApprovingReviewCount = 2
+		}
 	case "GSK113":
 		pullRequestRule(r.ruleset).DismissStaleReviewsOnPush = true
 	case "GSK114":
@@ -73,11 +90,8 @@ func (r *branchProtectionRulesetRemediation) Apply(ruleID string, facts *Reposit
 		if len(checks) == 0 && r.ruleset.Rules.RequiredStatusChecks != nil {
 			checks = append(checks, r.ruleset.Rules.RequiredStatusChecks.RequiredStatusChecks...)
 		}
-		if len(checks) == 0 {
-			return fmt.Errorf("cannot make status checks strict without configured checks")
-		}
 		if r.ruleset.Rules.RequiredStatusChecks == nil {
-			r.ruleset.Rules.RequiredStatusChecks = &github.RequiredStatusChecksRuleParameters{RequiredStatusChecks: checks}
+			r.ruleset.Rules.RequiredStatusChecks = &github.RequiredStatusChecksRuleParameters{RequiredStatusChecks: nonNilStatusChecks(checks)}
 		}
 		r.ruleset.Rules.RequiredStatusChecks.StrictRequiredStatusChecksPolicy = true
 	case "GSK118":
@@ -117,29 +131,45 @@ func isRulesetRemediationRule(id string) bool {
 }
 
 func canRemediateRulesetRule(id string, facts *RepositoryFacts) bool {
-	return id != "GSK115" || len(branchProtectionStatusChecks(facts)) > 0
+	return true
+}
+
+func oneMemberRepository(facts *RepositoryFacts) bool {
+	maximum, known := maximumReviewCount(facts)
+	return known && maximum == 0
+}
+
+func nonNilStatusChecks(checks []*github.RuleStatusCheck) []*github.RuleStatusCheck {
+	if checks == nil {
+		return []*github.RuleStatusCheck{}
+	}
+	return checks
 }
 
 // applyBranchProtectionRuleset persists all requested branch-protection fixes
 // as a single create or update operation.
 func applyBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, facts *RepositoryFacts, ruleIDs []string) error {
+	return applyNamedBranchProtectionRuleset(ctx, g, repo, facts, branchProtectionRulesetName, ruleIDs, false)
+}
+
+func applyNamedBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, facts *RepositoryFacts, name string, ruleIDs []string, bypassOwner bool) error {
 	if len(ruleIDs) == 0 {
 		return nil
 	}
-	existing, err := gh.FindRepositoryRulesetByName(ctx, g, repo, branchProtectionRulesetName, false)
+	existing, err := gh.FindRepositoryRulesetByName(ctx, g, repo, name, false)
 	if err != nil {
-		return fmt.Errorf("failed to find ruleset %q: %w", branchProtectionRulesetName, err)
+		return fmt.Errorf("failed to find ruleset %q: %w", name, err)
 	}
 	if existing != nil {
 		if existing.GetID() == 0 {
-			return fmt.Errorf("ruleset %q has no ID", branchProtectionRulesetName)
+			return fmt.Errorf("ruleset %q has no ID", name)
 		}
 		existing, err = gh.GetRepositoryRuleset(ctx, g, repo, existing.GetID(), false)
 		if err != nil {
-			return fmt.Errorf("failed to get ruleset %q: %w", branchProtectionRulesetName, err)
+			return fmt.Errorf("failed to get ruleset %q: %w", name, err)
 		}
 	}
-	remediation, err := newBranchProtectionRulesetRemediation(facts, existing)
+	remediation, err := newNamedBranchProtectionRulesetRemediation(facts, existing, name)
 	if err != nil {
 		return err
 	}
@@ -148,15 +178,40 @@ func applyBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, repo 
 			return err
 		}
 	}
+	if bypassOwner {
+		if err := addOwnerBypassActor(remediation.Ruleset(), facts); err != nil {
+			return err
+		}
+	}
 	if existing == nil {
 		if _, err := gh.CreateRepositoryRuleset(ctx, g, repo, remediation.Ruleset()); err != nil {
-			return fmt.Errorf("failed to create ruleset %q: %w", branchProtectionRulesetName, err)
+			return fmt.Errorf("failed to create ruleset %q: %w", name, err)
 		}
 		return nil
 	}
 	if _, err := gh.UpdateRepositoryRuleset(ctx, g, repo, existing.GetID(), remediation.UpdatePayload()); err != nil {
-		return fmt.Errorf("failed to update ruleset %q: %w", branchProtectionRulesetName, err)
+		return fmt.Errorf("failed to update ruleset %q: %w", name, err)
 	}
+	return nil
+}
+
+func addOwnerBypassActor(ruleset *github.RepositoryRuleset, facts *RepositoryFacts) error {
+	owner := facts.Repo.GetOwner()
+	if owner == nil || owner.GetID() == 0 {
+		return fmt.Errorf("repository owner ID is required for review ruleset bypass")
+	}
+	const userActorType github.BypassActorType = "User"
+	for _, actor := range ruleset.BypassActors {
+		if actor.GetActorID() == owner.GetID() && actor.GetActorType() != nil && *actor.GetActorType() == userActorType {
+			actor.BypassMode = github.Ptr(github.BypassModeExempt)
+			return nil
+		}
+	}
+	ruleset.BypassActors = append(ruleset.BypassActors, &github.BypassActor{
+		ActorID:    github.Ptr(owner.GetID()),
+		ActorType:  github.Ptr(userActorType),
+		BypassMode: github.Ptr(github.BypassModeExempt),
+	})
 	return nil
 }
 
