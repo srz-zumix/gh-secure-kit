@@ -179,6 +179,9 @@ func applyNamedBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, 
 		}
 	}
 	if bypassOwner {
+		if !rulesetTargetsOnlyDefaultBranch(remediation.Ruleset().Conditions, facts.Repo.GetDefaultBranch()) {
+			return fmt.Errorf("refusing to add owner bypass: ruleset %q targets branches beyond the default branch", name)
+		}
 		if reviewRulesetHasUnexpectedRules(remediation.Ruleset().Rules) {
 			return fmt.Errorf("refusing to add owner bypass: ruleset %q contains rules other than pull request review", name)
 		}
@@ -233,6 +236,74 @@ func reviewRulesetHasUnexpectedRules(rules *github.RepositoryRulesetRules) bool 
 		rules.RepositoryName != nil ||
 		rules.RepositoryTransfer != nil ||
 		rules.RepositoryVisibility != nil
+}
+
+// rulesetTargetsOnlyDefaultBranch reports whether the ruleset's ref conditions
+// target the default branch and nothing else. The owner bypass added for a
+// single-member repository exempts the owner from every branch the ruleset
+// covers, so a scope broader than the default branch must be refused to avoid
+// weakening review enforcement on other branches.
+func rulesetTargetsOnlyDefaultBranch(conditions *github.RepositoryRulesetConditions, branch string) bool {
+	if conditions == nil || conditions.RefName == nil {
+		return false
+	}
+	ref := conditions.RefName
+	if len(ref.Exclude) > 0 || len(ref.Include) != 1 {
+		return false
+	}
+	switch ref.Include[0] {
+	case "~DEFAULT_BRANCH":
+		return true
+	case "refs/heads/" + branch:
+		return branch != ""
+	default:
+		return false
+	}
+}
+
+// defaultBranchHasEnforcedPullRequest reports whether the default branch already
+// requires a pull request in a way the repository owner cannot bypass. This is
+// the prerequisite for safely creating the owner-exempt review ruleset on a
+// single-member repository: without it, exempting the sole owner would leave the
+// branch unprotected. The check is conservative and only trusts protection it
+// can prove enforces pull requests against the owner.
+func defaultBranchHasEnforcedPullRequest(f *RepositoryFacts) bool {
+	if f == nil || f.Repo == nil {
+		return false
+	}
+	// Legacy branch protection requiring pull request reviews enforces a pull
+	// request against the owner (an admin) only when admin enforcement is on.
+	if f.Protection != nil && f.Protection.GetRequiredPullRequestReviews() != nil && f.Protection.GetEnforceAdmins().GetEnabled() {
+		return true
+	}
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if rs.Rules == nil || rs.Rules.PullRequest == nil {
+			continue
+		}
+		// A full bypass actor could let the owner skip the pull request, so only
+		// trust a ruleset whose pull request rule cannot be fully bypassed.
+		if !rulesetHasFullBypassActor(rs) {
+			return true
+		}
+	}
+	return false
+}
+
+// rulesetHasFullBypassActor reports whether the ruleset grants any actor an
+// unconditional bypass (always or exempt), which would let a matching owner skip
+// the ruleset's pull request requirement entirely.
+func rulesetHasFullBypassActor(rs *github.RepositoryRuleset) bool {
+	for _, actor := range rs.BypassActors {
+		mode := actor.GetBypassMode()
+		if mode == nil {
+			continue
+		}
+		switch *mode {
+		case github.BypassModeAlways, github.BypassModeExempt:
+			return true
+		}
+	}
+	return false
 }
 
 func addOwnerBypassActor(ruleset *github.RepositoryRuleset, facts *RepositoryFacts) error {

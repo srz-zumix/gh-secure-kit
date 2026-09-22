@@ -38,16 +38,42 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 	var rulesetRuleIDs []string
 	var reviewRulesetResultIndexes []int
 	var reviewRulesetRuleIDs []string
+	// The owner-exempt review ruleset for a single-member repository's GSK111 is
+	// only safe when the default branch already has a pull request requirement the
+	// owner cannot bypass, or when GSK110 is being applied in this same run to
+	// establish that protection. Without it, exempting the sole owner would leave
+	// the branch unprotected.
+	gsk110WillApply := false
+	for _, res := range results {
+		if res.Status != StatusFail {
+			continue
+		}
+		rule := byID[res.Rule.ID]
+		if rule.ID == "GSK110" && rule.Fixable && isRulesetRemediationRule(rule.ID) && canRemediateRulesetRule(rule.ID, facts) {
+			gsk110WillApply = true
+		}
+	}
+	hasEnforcedPR := defaultBranchHasEnforcedPullRequest(facts)
+	reviewPrereqMet := hasEnforcedPR || gsk110WillApply
+	// When the prerequisite is only met because GSK110 is applied in this run, the
+	// review ruleset must not be created unless that main ruleset succeeds.
+	reviewDependsOnMain := !hasEnforcedPR
 	for _, res := range results {
 		ar := ApplyResult{Result: res, DryRun: dryRun}
 		if res.Status == StatusFail {
 			rule := byID[res.Rule.ID]
 			if rule.Fixable && isRulesetRemediationRule(rule.ID) && canRemediateRulesetRule(rule.ID, facts) {
-				if dryRun {
+				if rule.ID == "GSK111" && oneMemberRepository(facts) {
+					if !reviewPrereqMet {
+						ar.Error = fmt.Errorf("cannot safely apply %s on a single-member repository without owner-enforced pull request protection: include GSK110 in this run or configure branch protection that requires pull requests", rule.ID)
+					} else if dryRun {
+						ar.Applied = true
+					} else {
+						reviewRulesetResultIndexes = append(reviewRulesetResultIndexes, len(out))
+						reviewRulesetRuleIDs = append(reviewRulesetRuleIDs, rule.ID)
+					}
+				} else if dryRun {
 					ar.Applied = true
-				} else if rule.ID == "GSK111" && oneMemberRepository(facts) {
-					reviewRulesetResultIndexes = append(reviewRulesetResultIndexes, len(out))
-					reviewRulesetRuleIDs = append(reviewRulesetRuleIDs, rule.ID)
 				} else {
 					rulesetResultIndexes = append(rulesetResultIndexes, len(out))
 					rulesetRuleIDs = append(rulesetRuleIDs, rule.ID)
@@ -64,10 +90,12 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		}
 		out = append(out, ar)
 	}
+	var mainErr error
 	if len(rulesetRuleIDs) > 0 {
-		if err := applyBranchProtectionRuleset(ctx, g, repo, facts, rulesetRuleIDs); err != nil {
+		mainErr = applyBranchProtectionRuleset(ctx, g, repo, facts, rulesetRuleIDs)
+		if mainErr != nil {
 			for _, index := range rulesetResultIndexes {
-				out[index].Error = fmt.Errorf("failed to apply branch protection ruleset: %w", err)
+				out[index].Error = fmt.Errorf("failed to apply branch protection ruleset: %w", mainErr)
 			}
 		} else {
 			for _, index := range rulesetResultIndexes {
@@ -76,7 +104,11 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 		}
 	}
 	if len(reviewRulesetRuleIDs) > 0 {
-		if err := applyNamedBranchProtectionRuleset(ctx, g, repo, facts, branchProtectionReviewRulesetName, reviewRulesetRuleIDs, true); err != nil {
+		if reviewDependsOnMain && mainErr != nil {
+			for _, index := range reviewRulesetResultIndexes {
+				out[index].Error = fmt.Errorf("skipped branch protection review ruleset because the branch protection ruleset failed: %w", mainErr)
+			}
+		} else if err := applyNamedBranchProtectionRuleset(ctx, g, repo, facts, branchProtectionReviewRulesetName, reviewRulesetRuleIDs, true); err != nil {
 			for _, index := range reviewRulesetResultIndexes {
 				out[index].Error = fmt.Errorf("failed to apply branch protection review ruleset: %w", err)
 			}

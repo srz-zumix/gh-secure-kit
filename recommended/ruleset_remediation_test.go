@@ -321,6 +321,126 @@ func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
 	}
 }
 
+func TestApplyReviewRulesetRefusesBroaderBranchScope(t *testing.T) {
+	facts := remediationFacts()
+	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	existing := github.RepositoryRuleset{
+		ID:          github.Ptr(int64(9)),
+		Name:        branchProtectionReviewRulesetName,
+		Target:      github.Ptr(github.RulesetTargetBranch),
+		Enforcement: github.RulesetEnforcementActive,
+		Conditions: &github.RepositoryRulesetConditions{
+			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH", "refs/heads/release/*"}},
+		},
+		Rules: &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}},
+	}
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	detailBody, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
+			return rulesetResponse(request, http.StatusOK, string(listBody)), nil
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets/9":
+			return rulesetResponse(request, http.StatusOK, string(detailBody)), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.String())
+			return nil, nil
+		}
+	}))
+	repo := repository.Repository{Owner: "owner", Name: "repo"}
+	err = applyNamedBranchProtectionRuleset(context.Background(), client, repo, facts, branchProtectionReviewRulesetName, []string{"GSK111"}, true)
+	if err == nil {
+		t.Fatal("applyNamedBranchProtectionRuleset() with broader branch scope: got nil error, want refusal")
+	}
+}
+
+func TestRulesetTargetsOnlyDefaultBranch(t *testing.T) {
+	onlyDefault := &github.RepositoryRulesetConditions{
+		RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+	}
+	if !rulesetTargetsOnlyDefaultBranch(onlyDefault, "main") {
+		t.Error("~DEFAULT_BRANCH only should target only the default branch")
+	}
+	explicit := &github.RepositoryRulesetConditions{
+		RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"refs/heads/main"}},
+	}
+	if !rulesetTargetsOnlyDefaultBranch(explicit, "main") {
+		t.Error("explicit default-branch ref should target only the default branch")
+	}
+	broader := &github.RepositoryRulesetConditions{
+		RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH", "refs/heads/dev"}},
+	}
+	if rulesetTargetsOnlyDefaultBranch(broader, "main") {
+		t.Error("multiple includes should not count as default-branch only")
+	}
+	excluded := &github.RepositoryRulesetConditions{
+		RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}, Exclude: []string{"refs/heads/x"}},
+	}
+	if rulesetTargetsOnlyDefaultBranch(excluded, "main") {
+		t.Error("a non-empty exclude should not count as default-branch only")
+	}
+	if rulesetTargetsOnlyDefaultBranch(nil, "main") {
+		t.Error("nil conditions should not target the default branch")
+	}
+}
+
+func TestDefaultBranchHasEnforcedPullRequest(t *testing.T) {
+	base := func() *RepositoryFacts {
+		return &RepositoryFacts{Repo: &github.Repository{DefaultBranch: github.Ptr("main")}, RulesetsKnown: true}
+	}
+	if defaultBranchHasEnforcedPullRequest(base()) {
+		t.Error("no protection should not be treated as enforced pull request")
+	}
+
+	legacyNoAdmin := base()
+	legacyNoAdmin.Protection = &github.Protection{RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{}}
+	if defaultBranchHasEnforcedPullRequest(legacyNoAdmin) {
+		t.Error("legacy PR reviews without admin enforcement should not count (owner can bypass)")
+	}
+
+	legacyAdmin := base()
+	legacyAdmin.Protection = &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: true},
+	}
+	if !defaultBranchHasEnforcedPullRequest(legacyAdmin) {
+		t.Error("legacy PR reviews with admin enforcement should count")
+	}
+
+	rulesetNoBypass := base()
+	rulesetNoBypass.Rulesets = []*github.RepositoryRuleset{{
+		Target:      github.Ptr(github.RulesetTargetBranch),
+		Enforcement: github.RulesetEnforcementActive,
+		Conditions: &github.RepositoryRulesetConditions{
+			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+		},
+		Rules: &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}},
+	}}
+	if !defaultBranchHasEnforcedPullRequest(rulesetNoBypass) {
+		t.Error("active default-branch PR ruleset without full bypass should count")
+	}
+
+	rulesetBypass := base()
+	rulesetBypass.Rulesets = []*github.RepositoryRuleset{{
+		Target:      github.Ptr(github.RulesetTargetBranch),
+		Enforcement: github.RulesetEnforcementActive,
+		Conditions: &github.RepositoryRulesetConditions{
+			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+		},
+		Rules:        &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}},
+		BypassActors: []*github.BypassActor{{ActorID: github.Ptr(int64(42)), ActorType: github.Ptr(github.BypassActorType("User")), BypassMode: github.Ptr(github.BypassModeExempt)}},
+	}}
+	if defaultBranchHasEnforcedPullRequest(rulesetBypass) {
+		t.Error("PR ruleset with a full bypass actor should not count as enforced")
+	}
+}
+
 func TestApplyBranchProtectionRulesetCreatesSingleRuleset(t *testing.T) {
 	var createCount int
 	var payload github.RepositoryRuleset
