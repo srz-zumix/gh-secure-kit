@@ -179,6 +179,9 @@ func applyNamedBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, 
 		}
 	}
 	if bypassOwner {
+		if reviewRulesetHasUnexpectedRules(remediation.Ruleset().Rules) {
+			return fmt.Errorf("refusing to add owner bypass: ruleset %q contains rules other than pull request review", name)
+		}
 		if err := addOwnerBypassActor(remediation.Ruleset(), facts); err != nil {
 			return err
 		}
@@ -195,10 +198,54 @@ func applyNamedBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, 
 	return nil
 }
 
+// reviewRulesetHasUnexpectedRules reports whether the ruleset that is expected
+// to hold only the isolated pull-request review requirement carries any other
+// rule type. The owner bypass added for a single-member repository exempts the
+// owner from every rule in the ruleset, so the caller must refuse to attach it
+// when a ruleset adopted by name contains protections the tool does not manage.
+func reviewRulesetHasUnexpectedRules(rules *github.RepositoryRulesetRules) bool {
+	if rules == nil {
+		return false
+	}
+	return rules.Creation != nil ||
+		rules.Update != nil ||
+		rules.Deletion != nil ||
+		rules.RequiredLinearHistory != nil ||
+		rules.MergeQueue != nil ||
+		rules.RequiredDeployments != nil ||
+		rules.RequiredSignatures != nil ||
+		rules.RequiredStatusChecks != nil ||
+		rules.NonFastForward != nil ||
+		rules.CommitMessagePattern != nil ||
+		rules.CommitAuthorEmailPattern != nil ||
+		rules.CommitterEmailPattern != nil ||
+		rules.BranchNamePattern != nil ||
+		rules.TagNamePattern != nil ||
+		rules.Workflows != nil ||
+		rules.CodeScanning != nil ||
+		rules.CopilotCodeReview != nil ||
+		rules.FileExtensionRestriction != nil ||
+		rules.FilePathRestriction != nil ||
+		rules.MaxFilePathLength != nil ||
+		rules.MaxFileSize != nil ||
+		rules.RepositoryCreate != nil ||
+		rules.RepositoryDelete != nil ||
+		rules.RepositoryName != nil ||
+		rules.RepositoryTransfer != nil ||
+		rules.RepositoryVisibility != nil
+}
+
 func addOwnerBypassActor(ruleset *github.RepositoryRuleset, facts *RepositoryFacts) error {
 	owner := facts.Repo.GetOwner()
 	if owner == nil || owner.GetID() == 0 {
 		return fmt.Errorf("repository owner ID is required for review ruleset bypass")
+	}
+	// The bypass actor below is serialized as a "User" actor, which GitHub only
+	// accepts for a user account. An organization owner ID would be rejected, so
+	// refuse rather than emit an invalid payload even if a caller reaches here
+	// without going through oneMemberRepository.
+	if owner.GetType() != "User" {
+		return fmt.Errorf("owner bypass is only supported for user-owned repositories")
 	}
 	const userActorType github.BypassActorType = "User"
 	for _, actor := range ruleset.BypassActors {

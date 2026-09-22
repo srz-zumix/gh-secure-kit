@@ -95,6 +95,16 @@ func maximumReviewCount(f *RepositoryFacts) (int, bool) {
 	if f == nil || !f.CollaboratorsKnown || f.Repo == nil || f.Repo.Owner == nil {
 		return 0, false
 	}
+	// The direct-collaborator list excludes team and outside collaborators, so
+	// for an organization-owned repository the complete set of possible
+	// approvers cannot be enumerated from these facts. Only a user-owned
+	// repository has a knowable maximum here; report unknown otherwise to avoid
+	// misclassifying an organization repository with team members as a
+	// single-member repository. An empty owner type is treated as unknown, not
+	// as a user, to stay conservative when the API response is incomplete.
+	if f.Repo.Owner.GetType() != "User" {
+		return 0, false
+	}
 	members := make(map[string]struct{})
 	add := func(user *github.User) {
 		if user == nil {

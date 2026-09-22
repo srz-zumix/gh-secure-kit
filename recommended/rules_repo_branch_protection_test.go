@@ -504,7 +504,7 @@ func TestNoBranchProtectionFailsEveryBranchProtectionRule(t *testing.T) {
 
 func TestReviewRulesSkipWhenApprovalCountExceedsMembers(t *testing.T) {
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1))}
+	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
 	f.CollaboratorsKnown = true
 	f.Collaborators = []*github.User{{Login: github.Ptr("member"), ID: github.Ptr(int64(2))}}
 	if got := ruleStatus(t, "GSK111", f); got != StatusPass && got != StatusFail {
@@ -515,9 +515,24 @@ func TestReviewRulesSkipWhenApprovalCountExceedsMembers(t *testing.T) {
 	}
 }
 
+func TestReviewRulesEvaluateForOrganizationOwnedRepository(t *testing.T) {
+	f := factsWithRulesets()
+	f.Repo.Owner = &github.User{Login: github.Ptr("org"), ID: github.Ptr(int64(1)), Type: github.Ptr("Organization")}
+	f.CollaboratorsKnown = true
+	// The direct-collaborator list omits team members, so an organization repo
+	// must not be classified as single-member: GSK112 must keep evaluating the
+	// real configuration instead of being skipped as infeasible.
+	if _, known := maximumReviewCount(f); known {
+		t.Error("maximumReviewCount for organization owner: got known, want unknown")
+	}
+	if got := ruleStatus(t, "GSK112", f); got != StatusFail {
+		t.Errorf("GSK112 for organization repo without reviews: got %v, want fail", got)
+	}
+}
+
 func TestOneMemberCanUseSingleApprovalRule(t *testing.T) {
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1))}
+	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
 	f.CollaboratorsKnown = true
 	if got := ruleStatus(t, "GSK111", f); got != StatusFail {
 		t.Errorf("GSK111 with one member and no review rule: got %v, want fail", got)

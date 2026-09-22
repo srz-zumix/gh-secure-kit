@@ -243,7 +243,7 @@ func TestBranchProtectionRulesetRemediationAddsStrictStatusRuleWithoutChecks(t *
 
 func TestAddOwnerBypassActorUsesExemptMode(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42))}
+	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
 	ruleset := &github.RepositoryRuleset{}
 	if err := addOwnerBypassActor(ruleset, facts); err != nil {
 		t.Fatalf("addOwnerBypassActor() error = %v", err)
@@ -254,6 +254,70 @@ func TestAddOwnerBypassActorUsesExemptMode(t *testing.T) {
 	actor := ruleset.BypassActors[0]
 	if actor.GetActorID() != 42 || actor.GetActorType() == nil || *actor.GetActorType() != github.BypassActorType("User") || actor.GetBypassMode() == nil || *actor.GetBypassMode() != github.BypassModeExempt {
 		t.Errorf("BypassActor = %+v, want owner User with exempt mode", actor)
+	}
+}
+
+func TestAddOwnerBypassActorRejectsNonUserOwner(t *testing.T) {
+	facts := remediationFacts()
+	facts.Repo.Owner = &github.User{Login: github.Ptr("org"), ID: github.Ptr(int64(7)), Type: github.Ptr("Organization")}
+	if err := addOwnerBypassActor(&github.RepositoryRuleset{}, facts); err == nil {
+		t.Fatal("addOwnerBypassActor() with organization owner: got nil error, want rejection")
+	}
+}
+
+func TestReviewRulesetHasUnexpectedRules(t *testing.T) {
+	if reviewRulesetHasUnexpectedRules(nil) {
+		t.Error("nil rules should not be unexpected")
+	}
+	onlyReview := &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}}
+	if reviewRulesetHasUnexpectedRules(onlyReview) {
+		t.Error("pull-request-only rules should not be unexpected")
+	}
+	withForeign := &github.RepositoryRulesetRules{
+		PullRequest:    &github.PullRequestRuleParameters{},
+		NonFastForward: &github.EmptyRuleParameters{},
+	}
+	if !reviewRulesetHasUnexpectedRules(withForeign) {
+		t.Error("rules other than pull request should be reported as unexpected")
+	}
+}
+
+func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
+	facts := remediationFacts()
+	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	existing := github.RepositoryRuleset{
+		ID:          github.Ptr(int64(9)),
+		Name:        branchProtectionReviewRulesetName,
+		Target:      github.Ptr(github.RulesetTargetBranch),
+		Enforcement: github.RulesetEnforcementActive,
+		Conditions: &github.RepositoryRulesetConditions{
+			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+		},
+		Rules: &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}},
+	}
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	detailBody, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
+			return rulesetResponse(request, http.StatusOK, string(listBody)), nil
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets/9":
+			return rulesetResponse(request, http.StatusOK, string(detailBody)), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.String())
+			return nil, nil
+		}
+	}))
+	repo := repository.Repository{Owner: "owner", Name: "repo"}
+	err = applyNamedBranchProtectionRuleset(context.Background(), client, repo, facts, branchProtectionReviewRulesetName, []string{"GSK111"}, true)
+	if err == nil {
+		t.Fatal("applyNamedBranchProtectionRuleset() with foreign rules: got nil error, want refusal")
 	}
 }
 
