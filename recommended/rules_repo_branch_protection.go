@@ -403,7 +403,7 @@ func registerBranchProtectionRules() {
 // ruleset, so a weak legacy setting no longer hides a stricter ruleset.
 func checkMinimumRequiredReviews(minimum int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
-		if maximum, known := maximumReviewCount(f); known && minimum > maximum && !(minimum == 1 && maximum == 0) {
+		if maximum, known := maximumReviewCount(f); known && minimum > maximum && (minimum != 1 || maximum != 0) {
 			return Skip(fmt.Sprintf("at most %d approving review(s) can be supplied by repository members", maximum))
 		}
 		count := combinedReviewCount(f)
