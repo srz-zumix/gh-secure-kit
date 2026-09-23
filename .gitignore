@@ -42,3 +42,6 @@ go-gh-extension
 
 # vscode
 .vscode/
+
+# local settings
+*.local.json

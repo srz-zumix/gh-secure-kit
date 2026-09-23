@@ -68,9 +68,6 @@ func combinedRequirement(f *RepositoryFacts, satisfied bool, passDetail, failDet
 	if !f.ProtectionKnown || !f.RulesetsKnown {
 		return Skip("could not determine branch protection or ruleset status for the default branch")
 	}
-	if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
-		return Skip("no branch protection or active ruleset is configured on the default branch")
-	}
 	return Fail(failDetail)
 }
 
@@ -89,6 +86,46 @@ func combinedReviewCount(f *RepositoryFacts) int {
 		}
 	}
 	return count
+}
+
+// maximumReviewCount returns the highest number of distinct approvals that
+// can be supplied by repository members other than the author. The owner is
+// included because the collaborators endpoint does not reliably include them.
+func maximumReviewCount(f *RepositoryFacts) (int, bool) {
+	if f == nil || !f.CollaboratorsKnown || f.Repo == nil || f.Repo.Owner == nil {
+		return 0, false
+	}
+	// The direct-collaborator list excludes team and outside collaborators, so
+	// for an organization-owned repository the complete set of possible
+	// approvers cannot be enumerated from these facts. Only a user-owned
+	// repository has a knowable maximum here; report unknown otherwise to avoid
+	// misclassifying an organization repository with team members as a
+	// single-member repository. An empty owner type is treated as unknown, not
+	// as a user, to stay conservative when the API response is incomplete.
+	if f.Repo.Owner.GetType() != "User" {
+		return 0, false
+	}
+	members := make(map[string]struct{})
+	add := func(user *github.User) {
+		if user == nil {
+			return
+		}
+		key := user.GetLogin()
+		if user.GetID() != 0 {
+			key = fmt.Sprintf("id:%d", user.GetID())
+		}
+		if key != "" {
+			members[key] = struct{}{}
+		}
+	}
+	add(f.Repo.Owner)
+	for _, collaborator := range f.Collaborators {
+		add(collaborator)
+	}
+	if len(members) == 0 {
+		return 0, false
+	}
+	return len(members) - 1, true
 }
 
 // hasPullRequestReviewConfig reports whether any readable source configures pull
@@ -222,7 +259,7 @@ func fnmatchToRegexp(pattern string) (*regexp.Regexp, error) {
 func registerBranchProtectionRules() {
 	register(Rule{
 		ID: "GSK110", GHQRID: "repo-bp-001", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch",
+		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
 				return Pass("default branch is protected by a branch protection rule or ruleset")
@@ -238,19 +275,19 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK111", GHQRID: "repo-bp-002", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge",
-		CheckRepo: checkRequiredReviews(0, "no approving reviews are required before merge"),
+		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge", Fixable: true,
+		CheckRepo: checkMinimumRequiredReviews(1, "no approving reviews are required before merge"),
 	})
 
 	register(Rule{
 		ID: "GSK112", GHQRID: "repo-bp-003", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required",
-		CheckRepo: checkRequiredReviews(1, "only 1 approving review is required"),
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required", Fixable: true,
+		CheckRepo: checkMinimumRequiredReviews(2, "fewer than 2 approving reviews are required"),
 	})
 
 	register(Rule{
 		ID: "GSK113", GHQRID: "repo-bp-004", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits",
+		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Effective value is the union of legacy protection and every
 			// applicable active ruleset, so the requirement is met when any
@@ -272,7 +309,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK114", GHQRID: "repo-bp-005", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -291,11 +328,13 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK115", GHQRID: "repo-bp-007", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled",
+		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
-			if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
-				satisfied = checks.Strict
+			if f.Protection != nil {
+				if checks := f.Protection.GetRequiredStatusChecks(); checks != nil {
+					satisfied = checks.Strict
+				}
 			}
 			for _, check := range rulesetStatusCheckRules(f) {
 				if check.StrictRequiredStatusChecksPolicy {
@@ -321,7 +360,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK117", GHQRID: "repo-bp-010", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch",
+		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Legacy protection satisfies the rule only when it is present and does
 			// not allow force pushes; an applicable ruleset satisfies it with a
@@ -340,7 +379,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK118", GHQRID: "repo-bp-012", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -358,18 +397,17 @@ func registerBranchProtectionRules() {
 	})
 }
 
-// checkRequiredReviews returns a CheckRepo function that fails when the effective
-// required approving review count equals expected. The effective count is the
-// union (maximum) of legacy protection and every applicable active ruleset, so a
-// weak legacy setting no longer hides a stricter ruleset (or vice versa). Using
-// equality (rather than a threshold) keeps each rule aligned with its title and
-// avoids GSK111/GSK112 overlapping at a count of 0. An absent required-reviews
-// block is treated as a count of 0 so only the zero-review rule (GSK111) reports
-// it.
-func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
+// checkMinimumRequiredReviews returns a CheckRepo function that fails when the
+// effective required approving review count is below minimum. The effective
+// count is the union (maximum) of legacy protection and every applicable active
+// ruleset, so a weak legacy setting no longer hides a stricter ruleset.
+func checkMinimumRequiredReviews(minimum int, failDetail string) RepositoryCheckFunc {
 	return func(f *RepositoryFacts) Outcome {
+		if maximum, known := maximumReviewCount(f); known && minimum > maximum && (minimum != 1 || maximum != 0) {
+			return Skip(fmt.Sprintf("at most %d approving review(s) can be supplied by repository members", maximum))
+		}
 		count := combinedReviewCount(f)
-		if count > expected {
+		if count >= minimum {
 			// The union only raises the count, so a readable source already above
 			// the failing threshold is authoritative even under unknowns.
 			return Pass(fmt.Sprintf("%d approving reviews are required", count))
@@ -377,15 +415,9 @@ func checkRequiredReviews(expected int, failDetail string) RepositoryCheckFunc {
 		if !f.ProtectionKnown || !f.RulesetsKnown {
 			return Skip("could not determine branch protection or ruleset status for the default branch")
 		}
-		if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
-			return Skip("no branch protection or active ruleset is configured on the default branch")
-		}
-		if count != expected {
-			return Pass(fmt.Sprintf("%d approving reviews are required", count))
-		}
 		if !hasPullRequestReviewConfig(f) {
 			return Fail(fmt.Sprintf("%s (pull request reviews are not configured)", failDetail))
 		}
-		return Fail(fmt.Sprintf("%s (required: %d)", failDetail, count))
+		return Fail(fmt.Sprintf("%s (required: %d, minimum: %d)", failDetail, count, minimum))
 	}
 }
