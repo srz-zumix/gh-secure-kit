@@ -282,6 +282,50 @@ func TestReviewRulesetHasUnexpectedRules(t *testing.T) {
 	}
 }
 
+func TestReviewPullRequestHasUnexpectedParameters(t *testing.T) {
+	if reviewPullRequestHasUnexpectedParameters(nil) {
+		t.Error("nil pull request rule should not be unexpected")
+	}
+	managed := &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+	if reviewPullRequestHasUnexpectedParameters(managed) {
+		t.Error("approval-count-only pull request rule should not be unexpected")
+	}
+	cases := map[string]*github.PullRequestRuleParameters{
+		"dismiss stale":      {DismissStaleReviewsOnPush: true},
+		"code owner":         {RequireCodeOwnerReview: true},
+		"last push":          {RequireLastPushApproval: true},
+		"thread resolution":  {RequiredReviewThreadResolution: true},
+		"merge methods":      {AllowedMergeMethods: []github.PullRequestMergeMethod{"merge"}},
+		"required reviewers": {RequiredReviewers: []*github.RulesetRequiredReviewer{{}}},
+	}
+	for name, pr := range cases {
+		if !reviewPullRequestHasUnexpectedParameters(pr) {
+			t.Errorf("%s should be reported as unexpected", name)
+		}
+	}
+}
+
+func TestCanRemediateRulesetRule(t *testing.T) {
+	unknown := remediationFacts()
+	for _, id := range []string{"GSK111", "GSK112"} {
+		if canRemediateRulesetRule(id, unknown) {
+			t.Errorf("%s should be withheld when member capacity is unknown", id)
+		}
+	}
+	if !canRemediateRulesetRule("GSK110", unknown) {
+		t.Error("GSK110 should not depend on member capacity")
+	}
+	known := remediationFacts()
+	known.CollaboratorsKnown = true
+	known.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	known.Collaborators = []*github.User{{Login: github.Ptr("reviewer"), ID: github.Ptr(int64(43))}}
+	for _, id := range []string{"GSK111", "GSK112"} {
+		if !canRemediateRulesetRule(id, known) {
+			t.Errorf("%s should be allowed when member capacity is known", id)
+		}
+	}
+}
+
 func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
 	facts := remediationFacts()
 	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
@@ -318,6 +362,45 @@ func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
 	err = applyNamedBranchProtectionRuleset(context.Background(), client, repo, facts, branchProtectionReviewRulesetName, []string{"GSK111"}, true)
 	if err == nil {
 		t.Fatal("applyNamedBranchProtectionRuleset() with foreign rules: got nil error, want refusal")
+	}
+}
+
+func TestApplyReviewRulesetRefusesExtraPullRequestParameters(t *testing.T) {
+	facts := remediationFacts()
+	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	existing := github.RepositoryRuleset{
+		ID:          github.Ptr(int64(9)),
+		Name:        branchProtectionReviewRulesetName,
+		Target:      github.Ptr(github.RulesetTargetBranch),
+		Enforcement: github.RulesetEnforcementActive,
+		Conditions: &github.RepositoryRulesetConditions{
+			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
+		},
+		Rules: &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{RequireCodeOwnerReview: true}},
+	}
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	if err != nil {
+		t.Fatalf("marshal list: %v", err)
+	}
+	detailBody, err := json.Marshal(existing)
+	if err != nil {
+		t.Fatalf("marshal detail: %v", err)
+	}
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets":
+			return rulesetResponse(request, http.StatusOK, string(listBody)), nil
+		case request.Method == http.MethodGet && request.URL.Path == "/repos/owner/repo/rulesets/9":
+			return rulesetResponse(request, http.StatusOK, string(detailBody)), nil
+		default:
+			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.String())
+			return nil, nil
+		}
+	}))
+	repo := repository.Repository{Owner: "owner", Name: "repo"}
+	err = applyNamedBranchProtectionRuleset(context.Background(), client, repo, facts, branchProtectionReviewRulesetName, []string{"GSK111"}, true)
+	if err == nil {
+		t.Fatal("applyNamedBranchProtectionRuleset() with extra pull request parameters: got nil error, want refusal")
 	}
 }
 

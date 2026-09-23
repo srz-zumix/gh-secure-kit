@@ -78,6 +78,8 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 					rulesetResultIndexes = append(rulesetResultIndexes, len(out))
 					rulesetRuleIDs = append(rulesetRuleIDs, rule.ID)
 				}
+			} else if rule.Fixable && isRulesetRemediationRule(rule.ID) && !canRemediateRulesetRule(rule.ID, facts) {
+				ar.Error = fmt.Errorf("cannot safely apply %s: the number of members who can approve pull requests is unknown, so requiring approvals could leave pull requests unmergeable", rule.ID)
 			} else if rule.Fixable && rule.ApplyRepo != nil {
 				if dryRun {
 					ar.Applied = true

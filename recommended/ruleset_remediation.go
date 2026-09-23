@@ -131,7 +131,19 @@ func isRulesetRemediationRule(id string) bool {
 }
 
 func canRemediateRulesetRule(id string, facts *RepositoryFacts) bool {
-	return true
+	switch id {
+	case "GSK111", "GSK112":
+		// Approval-count remediation can make the sole owner's pull requests
+		// unmergeable when no other member is available to approve. The number of
+		// available approvers cannot be determined for an organization repository
+		// or when the collaborator list is unreadable, and the owner-exempt review
+		// path only covers a definitively known single-member user repository, so
+		// withhold the fix until the member capacity is known.
+		_, known := maximumReviewCount(facts)
+		return known
+	default:
+		return true
+	}
 }
 
 func oneMemberRepository(facts *RepositoryFacts) bool {
@@ -185,6 +197,9 @@ func applyNamedBranchProtectionRuleset(ctx context.Context, g *gh.GitHubClient, 
 		if reviewRulesetHasUnexpectedRules(remediation.Ruleset().Rules) {
 			return fmt.Errorf("refusing to add owner bypass: ruleset %q contains rules other than pull request review", name)
 		}
+		if reviewPullRequestHasUnexpectedParameters(remediation.Ruleset().Rules.PullRequest) {
+			return fmt.Errorf("refusing to add owner bypass: ruleset %q enforces pull request protections beyond the required approving review count", name)
+		}
 		if err := addOwnerBypassActor(remediation.Ruleset(), facts); err != nil {
 			return err
 		}
@@ -236,6 +251,25 @@ func reviewRulesetHasUnexpectedRules(rules *github.RepositoryRulesetRules) bool 
 		rules.RepositoryName != nil ||
 		rules.RepositoryTransfer != nil ||
 		rules.RepositoryVisibility != nil
+}
+
+// reviewPullRequestHasUnexpectedParameters reports whether the pull request rule
+// carries any protection beyond the managed required approving review count. The
+// owner bypass added for a single-member repository exempts the owner from every
+// rule in the ruleset, so a pull request rule that additionally enforces
+// stale-review dismissal, code-owner review, last-push approval, review-thread
+// resolution, required reviewers, or a restricted set of merge methods must be
+// refused to avoid silently weakening protections the tool does not manage.
+func reviewPullRequestHasUnexpectedParameters(pr *github.PullRequestRuleParameters) bool {
+	if pr == nil {
+		return false
+	}
+	return pr.DismissStaleReviewsOnPush ||
+		pr.RequireCodeOwnerReview ||
+		pr.RequireLastPushApproval ||
+		pr.RequiredReviewThreadResolution ||
+		len(pr.AllowedMergeMethods) > 0 ||
+		len(pr.RequiredReviewers) > 0
 }
 
 // rulesetTargetsOnlyDefaultBranch reports whether the ruleset's ref conditions
