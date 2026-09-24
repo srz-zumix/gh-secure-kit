@@ -395,6 +395,64 @@ func registerBranchProtectionRules() {
 				"signed commits are not required")
 		},
 	})
+
+	register(Rule{
+		ID: "GSK128", GHQRID: "", Scope: ScopeRepository,
+		Category: "branch_protection", Severity: SeverityHigh, Title: "Branch deletion allowed on protected branch", Fixable: true,
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			satisfied := f.Protection != nil && !f.Protection.GetAllowDeletions().GetEnabled()
+			for _, rs := range activeDefaultBranchRulesets(f) {
+				if rs.Rules != nil && rs.Rules.Deletion != nil {
+					satisfied = true
+				}
+			}
+			return combinedRequirement(f, satisfied,
+				"the default branch cannot be deleted",
+				"the default branch can be deleted")
+		},
+	})
+
+	register(Rule{
+		ID: "GSK129", GHQRID: "", Scope: ScopeRepository,
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Conversation resolution not required before merge", Fixable: true,
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			satisfied := false
+			if f.Protection != nil {
+				satisfied = f.Protection.GetRequiredConversationResolution().GetEnabled()
+			}
+			for _, review := range rulesetPullRequestRules(f) {
+				if review.RequiredReviewThreadResolution {
+					satisfied = true
+				}
+			}
+			return combinedRequirement(f, satisfied,
+				"conversation resolution is required before merge",
+				"conversation resolution is not required before merge")
+		},
+	})
+
+	register(Rule{
+		ID: "GSK130", GHQRID: "", Scope: ScopeRepository,
+		Category: "branch_protection", Severity: SeverityLow, Title: "Linear history not required", Fixable: true,
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			satisfied := false
+			if f.Protection != nil {
+				// RequireLinearHistory has no nil-safe GetEnabled accessor because
+				// Enabled is a plain bool field, so the nil check is manual here.
+				if rlh := f.Protection.GetRequireLinearHistory(); rlh != nil {
+					satisfied = rlh.Enabled
+				}
+			}
+			for _, rs := range activeDefaultBranchRulesets(f) {
+				if rs.Rules != nil && rs.Rules.RequiredLinearHistory != nil {
+					satisfied = true
+				}
+			}
+			return combinedRequirement(f, satisfied,
+				"a linear history is required",
+				"a linear history is not required; merge commits are allowed")
+		},
+	})
 }
 
 // checkMinimumRequiredReviews returns a CheckRepo function that fails when the

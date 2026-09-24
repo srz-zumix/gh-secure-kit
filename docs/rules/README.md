@@ -41,6 +41,9 @@ catalog with severity, scope, and fixability.
 | [GSK125](GSK125.md) | Low | Yes | Auto-delete branches on merge not enabled |
 | [GSK126](GSK126.md) | Low | Yes | Issues and Discussions both disabled |
 | [GSK127](GSK127.md) | Low | No | Repository appears dormant but is not archived |
+| [GSK128](GSK128.md) | High | Yes | Branch deletion allowed on protected branch |
+| [GSK129](GSK129.md) | Medium | Yes | Conversation resolution not required before merge |
+| [GSK130](GSK130.md) | Low | Yes | Linear history not required |
 
 ## Organization rules
 
@@ -52,3 +55,5 @@ catalog with severity, scope, and fixability.
 | [GSK504](GSK504.md) | Medium | Yes | Members can create public repositories |
 | [GSK505](GSK505.md) | Medium | No | No security manager team assigned |
 | [GSK506](GSK506.md) | High | Yes | Actions allows all third-party actions and reusable workflows |
+| [GSK507](GSK507.md) | High | No | No default code security configuration for new repositories |
+| [GSK508](GSK508.md) | Medium | No | Actions enabled for all repositories |

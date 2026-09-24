@@ -268,12 +268,15 @@ func TestBranchProtectionRulesUseRulesets(t *testing.T) {
 	}
 	protectedRule := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
 	protectedRule.Rules = &github.RepositoryRulesetRules{
-		NonFastForward:     &github.EmptyRuleParameters{},
-		RequiredSignatures: &github.EmptyRuleParameters{},
+		NonFastForward:        &github.EmptyRuleParameters{},
+		RequiredSignatures:    &github.EmptyRuleParameters{},
+		Deletion:              &github.EmptyRuleParameters{},
+		RequiredLinearHistory: &github.EmptyRuleParameters{},
 	}
+	reviewRule.Rules.PullRequest.RequiredReviewThreadResolution = true
 	facts := factsWithRulesets(reviewRule, statusRule, protectedRule)
 
-	for _, id := range []string{"GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK116", "GSK117", "GSK118"} {
+	for _, id := range []string{"GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK116", "GSK117", "GSK118", "GSK128", "GSK129", "GSK130"} {
 		rule, ok := RuleByID(id)
 		if !ok {
 			t.Fatalf("%s not registered", id)
@@ -743,5 +746,98 @@ func TestGSK116DeduplicatesLegacyCheckRepresentations(t *testing.T) {
 	}
 	if want := "1 required status checks configured"; out.Detail != want {
 		t.Errorf("detail: got %q, want %q", out.Detail, want)
+	}
+}
+
+func TestGSK128DeletionNilSafe(t *testing.T) {
+	rule, ok := RuleByID("GSK128")
+	if !ok {
+		t.Fatal("GSK128 not registered")
+	}
+
+	// No legacy protection and no ruleset -> fail.
+	if got := rule.CheckRepo(&RepositoryFacts{ProtectionKnown: true, RulesetsKnown: true}).Status; got != StatusFail {
+		t.Errorf("no protection: got %v, want fail", got)
+	}
+
+	// Protection present but AllowDeletions omitted (nil) must not panic and is
+	// treated as disabled -> pass.
+	f := &RepositoryFacts{Protection: &github.Protection{}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("nil AllowDeletions: got %v, want pass", got)
+	}
+
+	// Explicitly enabled -> fail.
+	f = &RepositoryFacts{Protection: &github.Protection{
+		AllowDeletions: &github.AllowDeletions{Enabled: true},
+	}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("deletions allowed: got %v, want fail", got)
+	}
+
+	// Ruleset with a deletion rule -> pass.
+	f = factsWithRulesets(branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true))
+	f.Rulesets[0].Rules = &github.RepositoryRulesetRules{Deletion: &github.EmptyRuleParameters{}}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("ruleset deletion rule: got %v, want pass", got)
+	}
+}
+
+func TestGSK129ConversationResolutionNilSafe(t *testing.T) {
+	rule, ok := RuleByID("GSK129")
+	if !ok {
+		t.Fatal("GSK129 not registered")
+	}
+
+	// Protection present but RequiredConversationResolution omitted (nil) must
+	// not panic and is treated as not required -> fail.
+	f := &RepositoryFacts{Protection: &github.Protection{}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("nil RequiredConversationResolution: got %v, want fail", got)
+	}
+
+	// Legacy protection enables it -> pass.
+	f = &RepositoryFacts{Protection: &github.Protection{
+		RequiredConversationResolution: &github.RequiredConversationResolution{Enabled: true},
+	}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("legacy enabled: got %v, want pass", got)
+	}
+
+	// Ruleset pull-request rule requires review-thread resolution -> pass.
+	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	rs.Rules.PullRequest.RequiredReviewThreadResolution = true
+	f = factsWithRulesets(rs)
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("ruleset enabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK130LinearHistoryNilSafe(t *testing.T) {
+	rule, ok := RuleByID("GSK130")
+	if !ok {
+		t.Fatal("GSK130 not registered")
+	}
+
+	// Protection present but RequireLinearHistory omitted (nil) must not panic
+	// and is treated as not required -> fail.
+	f := &RepositoryFacts{Protection: &github.Protection{}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("nil RequireLinearHistory: got %v, want fail", got)
+	}
+
+	// Legacy protection enables it -> pass.
+	f = &RepositoryFacts{Protection: &github.Protection{
+		RequireLinearHistory: &github.RequireLinearHistory{Enabled: true},
+	}, ProtectionKnown: true, RulesetsKnown: true}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("legacy enabled: got %v, want pass", got)
+	}
+
+	// Ruleset with a required-linear-history rule -> pass.
+	f = factsWithRulesets(branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true))
+	f.Rulesets[0].Rules = &github.RepositoryRulesetRules{RequiredLinearHistory: &github.EmptyRuleParameters{}}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("ruleset linear history rule: got %v, want pass", got)
 	}
 }
