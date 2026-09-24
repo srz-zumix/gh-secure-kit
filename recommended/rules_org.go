@@ -103,6 +103,9 @@ func registerOrganizationRules() {
 		ID: "GSK507", GHQRID: "", Scope: ScopeOrganization,
 		Category: "security", Severity: SeverityHigh, Title: "No default code security configuration for new repositories",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if !f.DefaultSecurityConfigsKnown {
+				return Skip("could not retrieve default code security configurations for the organization")
+			}
 			for _, c := range f.DefaultSecurityConfigs {
 				if d := c.GetDefaultForNewRepos(); d != "" && d != "none" {
 					return Pass(fmt.Sprintf("a code security configuration is the default for new repositories (%q)", d))

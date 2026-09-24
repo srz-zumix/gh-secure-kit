@@ -218,6 +218,10 @@ type OrganizationFacts struct {
 	SecurityManagerTeams   []*github.Team
 	ActionsPermissions     *github.ActionsPermissions
 	DefaultSecurityConfigs []*github.CodeSecurityConfigurationWithDefaultForNewRepos
+	// DefaultSecurityConfigsKnown reports whether the default code security
+	// configurations were successfully fetched. It stays false when the API
+	// call fails so rules can distinguish "unknown" from "empty".
+	DefaultSecurityConfigsKnown bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
@@ -237,6 +241,7 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 	if configs, err := gh.ListDefaultCodeSecurityConfigurations(ctx, g, repo); err == nil {
 		f.DefaultSecurityConfigs = configs
+		f.DefaultSecurityConfigsKnown = true
 	}
 
 	return f, nil

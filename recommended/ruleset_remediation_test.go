@@ -101,7 +101,7 @@ func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) 
 	if err != nil {
 		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
 	}
-	for _, id := range []string{"GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118"} {
+	for _, id := range []string{"GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118", "GSK128", "GSK129", "GSK130"} {
 		if err := remediation.Apply(id, remediationFacts()); err != nil {
 			t.Fatalf("Apply(%s) error = %v", id, err)
 		}
@@ -122,6 +122,15 @@ func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) 
 	}
 	if got.Rules.NonFastForward == nil || got.Rules.RequiredSignatures == nil {
 		t.Error("NonFastForward or RequiredSignatures was not added")
+	}
+	if got.Rules.Deletion == nil {
+		t.Error("Deletion rule (GSK128) was not added")
+	}
+	if !got.Rules.PullRequest.RequiredReviewThreadResolution {
+		t.Error("RequiredReviewThreadResolution (GSK129) was not enabled")
+	}
+	if got.Rules.RequiredLinearHistory == nil {
+		t.Error("RequiredLinearHistory rule (GSK130) was not added")
 	}
 }
 

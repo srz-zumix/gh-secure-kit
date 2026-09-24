@@ -19,18 +19,22 @@ func orgRuleOutcome(t *testing.T, id string, f *OrganizationFacts) Status {
 }
 
 func TestGSK507DefaultCodeSecurityConfiguration(t *testing.T) {
-	if got := orgRuleOutcome(t, "GSK507", &OrganizationFacts{}); got != StatusFail {
+	if got := orgRuleOutcome(t, "GSK507", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown configs: got %v, want skip", got)
+	}
+
+	if got := orgRuleOutcome(t, "GSK507", &OrganizationFacts{DefaultSecurityConfigsKnown: true}); got != StatusFail {
 		t.Errorf("no defaults: got %v, want fail", got)
 	}
 
-	f := &OrganizationFacts{DefaultSecurityConfigs: []*github.CodeSecurityConfigurationWithDefaultForNewRepos{
+	f := &OrganizationFacts{DefaultSecurityConfigsKnown: true, DefaultSecurityConfigs: []*github.CodeSecurityConfigurationWithDefaultForNewRepos{
 		{DefaultForNewRepos: github.Ptr("none")},
 	}}
 	if got := orgRuleOutcome(t, "GSK507", f); got != StatusFail {
 		t.Errorf("only none: got %v, want fail", got)
 	}
 
-	f = &OrganizationFacts{DefaultSecurityConfigs: []*github.CodeSecurityConfigurationWithDefaultForNewRepos{
+	f = &OrganizationFacts{DefaultSecurityConfigsKnown: true, DefaultSecurityConfigs: []*github.CodeSecurityConfigurationWithDefaultForNewRepos{
 		{DefaultForNewRepos: github.Ptr("none")},
 		{DefaultForNewRepos: github.Ptr("public")},
 	}}
