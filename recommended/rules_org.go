@@ -98,4 +98,32 @@ func registerOrganizationRules() {
 			return err
 		},
 	})
+
+	register(Rule{
+		ID: "GSK507", GHQRID: "", Scope: ScopeOrganization,
+		Category: "security", Severity: SeverityHigh, Title: "No default code security configuration for new repositories",
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			for _, c := range f.DefaultSecurityConfigs {
+				if d := c.GetDefaultForNewRepos(); d != "" && d != "none" {
+					return Pass(fmt.Sprintf("a code security configuration is the default for new repositories (%q)", d))
+				}
+			}
+			return Fail("no code security configuration is set as the default for new repositories; new repositories start with no baseline security settings")
+		},
+	})
+
+	register(Rule{
+		ID: "GSK508", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityMedium, Title: "Actions enabled for all repositories",
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.ActionsPermissions == nil {
+				return Skip("could not retrieve Actions permissions for the organization")
+			}
+			enabled := f.ActionsPermissions.GetEnabledRepositories()
+			if enabled == "all" {
+				return Fail("GitHub Actions is enabled for all repositories in the organization")
+			}
+			return Pass(fmt.Sprintf("GitHub Actions is restricted to a subset of repositories (%q)", enabled))
+		},
+	})
 }
