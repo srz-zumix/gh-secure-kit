@@ -453,6 +453,53 @@ func registerBranchProtectionRules() {
 				"a linear history is not required; merge commits are allowed")
 		},
 	})
+
+	register(Rule{
+		ID: "GSK131", GHQRID: "", Scope: ScopeRepository,
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed",
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.ProtectionKnown || !f.RulesetsKnown {
+				return Skip("could not determine branch protection or ruleset status for the default branch")
+			}
+			if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
+				// GSK110 already reports the missing protection; there is nothing to bypass.
+				return Skip("the default branch has no protection that could be bypassed")
+			}
+			// A sole member cannot approve their own pull request, so a bypass is
+			// the only way to merge and removing it would lock the repository.
+			if oneMemberRepository(f) {
+				return Skip("the repository has a single member who needs a bypass to merge their own pull requests")
+			}
+			reasons := bypassFindings(f)
+			if len(reasons) == 0 {
+				return Pass("branch protection on the default branch cannot be bypassed")
+			}
+			return Fail(strings.Join(reasons, "; "))
+		},
+	})
+}
+
+// bypassFindings describes every way the default branch protection can be
+// bypassed unconditionally. The review ruleset managed by recommended apply is
+// excluded because it deliberately exempts the owner of a repository that has no
+// other member available to approve a pull request.
+func bypassFindings(f *RepositoryFacts) []string {
+	var reasons []string
+	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() {
+		reasons = append(reasons, "branch protection is not enforced for administrators")
+	}
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if rs.Name == branchProtectionReviewRulesetName {
+			continue
+		}
+		if !gh.HasAnyRulesetRule(rs.Rules) {
+			continue
+		}
+		if rulesetHasFullBypassActor(rs) {
+			reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+		}
+	}
+	return reasons
 }
 
 // checkMinimumRequiredReviews returns a CheckRepo function that fails when the
