@@ -465,9 +465,12 @@ func registerBranchProtectionRules() {
 				// GSK110 already reports the missing protection; there is nothing to bypass.
 				return Skip("the default branch has no protection that could be bypassed")
 			}
-			// A sole member cannot approve their own pull request, so a bypass is
-			// the only way to merge and removing it would lock the repository.
-			if oneMemberRepository(f) {
+			// A sole member cannot approve their own pull request, so when the
+			// default branch requires an approving review the only way for that
+			// member to merge is a bypass, and removing it would lock the
+			// repository. Without such a requirement the member can merge without a
+			// bypass, so any bypass is still an avoidable finding and is reported.
+			if oneMemberRepository(f) && combinedReviewCount(f) >= 1 {
 				return Skip("the repository has a single member who needs a bypass to merge their own pull requests")
 			}
 			reasons := bypassFindings(f)
@@ -480,18 +483,16 @@ func registerBranchProtectionRules() {
 }
 
 // bypassFindings describes every way the default branch protection can be
-// bypassed unconditionally. The review ruleset managed by recommended apply is
-// excluded because it deliberately exempts the owner of a repository that has no
-// other member available to approve a pull request.
+// bypassed unconditionally. A ruleset is not trusted by name: the single-member
+// exception in the caller already permits the owner-exempt review ruleset that
+// recommended apply creates, so any surviving unconditional bypass here is a
+// genuine finding even on a ruleset that uses the managed review name.
 func bypassFindings(f *RepositoryFacts) []string {
 	var reasons []string
 	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() {
 		reasons = append(reasons, "branch protection is not enforced for administrators")
 	}
 	for _, rs := range activeDefaultBranchRulesets(f) {
-		if rs.Name == branchProtectionReviewRulesetName {
-			continue
-		}
 		if !gh.HasAnyRulesetRule(rs.Rules) {
 			continue
 		}
