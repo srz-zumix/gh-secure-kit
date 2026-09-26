@@ -841,3 +841,280 @@ func TestGSK130LinearHistoryNilSafe(t *testing.T) {
 		t.Errorf("ruleset linear history rule: got %v, want pass", got)
 	}
 }
+
+func gsk131(t *testing.T) Rule {
+	t.Helper()
+	r, ok := RuleByID("GSK131")
+	if !ok {
+		t.Fatal("GSK131 not registered")
+	}
+	return r
+}
+
+func TestGSK131SkipsWhenNothingToBypass(t *testing.T) {
+	rule := gsk131(t)
+
+	f := factsWithRulesets()
+	f.RulesetsKnown = false
+	if got := rule.CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("rulesets unknown: got %v, want skip", got)
+	}
+
+	f = factsWithRulesets()
+	f.ProtectionKnown = false
+	if got := rule.CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("protection unknown: got %v, want skip", got)
+	}
+
+	// No legacy protection and no ruleset rule: GSK110 reports the missing
+	// protection instead.
+	if got := rule.CheckRepo(factsWithRulesets()).Status; got != StatusSkip {
+		t.Errorf("unprotected: got %v, want skip", got)
+	}
+	if got := rule.CheckRepo(factsWithRulesets(branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true))).Status; got != StatusSkip {
+		t.Errorf("ruleset without rules: got %v, want skip", got)
+	}
+}
+
+func TestGSK131SkipsSingleMemberRepository(t *testing.T) {
+	rule := gsk131(t)
+
+	f := factsWithRulesets()
+	f.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	f.CollaboratorsKnown = true
+	f.Protection = &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+	}
+	// A sole member who needs another approval must keep a bypass to merge.
+	if got := rule.CheckRepo(f).Status; got != StatusSkip {
+		t.Errorf("single member requiring approval: got %v, want skip", got)
+	}
+
+	// A single member without a required approval can merge without a bypass, so
+	// the disabled admin enforcement is a real, avoidable bypass.
+	f.Protection.RequiredPullRequestReviews = &github.PullRequestReviewsEnforcement{}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("single member without required approval: got %v, want fail", got)
+	}
+
+	// A second collaborator can approve, so the bypass is no longer required.
+	f.Protection.RequiredPullRequestReviews = &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1}
+	f.Collaborators = []*github.User{{ID: github.Ptr(int64(2)), Type: github.Ptr("User")}}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("two members: got %v, want fail", got)
+	}
+}
+
+func TestGSK131SingleMemberAdminBypassOnlyExemptsReviewOnlyLegacyShape(t *testing.T) {
+	rule := gsk131(t)
+
+	singleMember := func(p *github.Protection) *RepositoryFacts {
+		f := factsWithRulesets()
+		f.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+		f.CollaboratorsKnown = true
+		f.Protection = p
+		return f
+	}
+
+	// Review-only legacy protection with disabled admin enforcement is the sole
+	// owner's required review bypass and stays exempt.
+	reviewOnly := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+	}
+	if got := rule.CheckRepo(singleMember(reviewOnly)).Status; got != StatusSkip {
+		t.Errorf("review-only legacy shape: got %v, want skip", got)
+	}
+
+	// Disabled admin enforcement alongside a required status check lets the owner
+	// skip more than the required review, so the finding is retained.
+	withStatusChecks := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequiredStatusChecks:       &github.RequiredStatusChecks{Contexts: &[]string{"ci"}},
+	}
+	if got := rule.CheckRepo(singleMember(withStatusChecks)).Status; got != StatusFail {
+		t.Errorf("legacy status checks with disabled admin enforcement: got %v, want fail", got)
+	}
+
+	// An empty status-check block imposes nothing, so the review-only shape holds.
+	emptyStatusChecks := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequiredStatusChecks:       &github.RequiredStatusChecks{},
+	}
+	if got := rule.CheckRepo(singleMember(emptyStatusChecks)).Status; got != StatusSkip {
+		t.Errorf("empty legacy status checks: got %v, want skip", got)
+	}
+
+	// Other administrator-bypassable requirements keep the finding as well.
+	withLinearHistory := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequireLinearHistory:       &github.RequireLinearHistory{Enabled: true},
+	}
+	if got := rule.CheckRepo(singleMember(withLinearHistory)).Status; got != StatusFail {
+		t.Errorf("legacy linear history with disabled admin enforcement: got %v, want fail", got)
+	}
+
+	// The review requirement must come from the legacy protection itself: a
+	// ruleset-only review does not justify a disabled legacy admin enforcement.
+	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+	fRulesetReview := factsWithRulesets(rs)
+	fRulesetReview.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	fRulesetReview.CollaboratorsKnown = true
+	fRulesetReview.Protection = &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: false}}
+	if got := rule.CheckRepo(fRulesetReview).Status; got != StatusFail {
+		t.Errorf("ruleset-only review with disabled legacy admin enforcement: got %v, want fail", got)
+	}
+}
+
+func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
+	rule := gsk131(t)
+
+	ownerID := int64(1)
+	// A single-member user repository whose default branch requires an approving
+	// review, expressed through a review ruleset the owner must bypass to merge.
+	newFacts := func(actors ...*github.BypassActor) *RepositoryFacts {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+		rs.BypassActors = actors
+		f := factsWithRulesets(rs)
+		f.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+		f.CollaboratorsKnown = true
+		return f
+	}
+	ownerBypass := func() *github.BypassActor {
+		return &github.BypassActor{
+			ActorID:    github.Ptr(ownerID),
+			ActorType:  github.Ptr(github.BypassActorType("User")),
+			BypassMode: github.Ptr(github.BypassModeExempt),
+		}
+	}
+
+	// Only the owner can bypass, which is required for the sole member to merge.
+	if got := rule.CheckRepo(newFacts(ownerBypass())).Status; got != StatusSkip {
+		t.Errorf("owner-only bypass: got %v, want skip", got)
+	}
+
+	// An integration can bypass unconditionally; that actor is unrelated to the
+	// owner exemption and must still be reported.
+	integrationBypass := &github.BypassActor{
+		ActorID:    github.Ptr(int64(99)),
+		ActorType:  github.Ptr(github.BypassActorTypeIntegration),
+		BypassMode: github.Ptr(github.BypassModeAlways),
+	}
+	if got := rule.CheckRepo(newFacts(integrationBypass)).Status; got != StatusFail {
+		t.Errorf("integration bypass: got %v, want fail", got)
+	}
+
+	// The owner exemption plus an unrelated bypass still leaves a real finding.
+	if got := rule.CheckRepo(newFacts(ownerBypass(), integrationBypass)).Status; got != StatusFail {
+		t.Errorf("owner plus integration bypass: got %v, want fail", got)
+	}
+
+	// A pull-request-only actor is not an unconditional bypass, so an owner-only
+	// full bypass alongside it stays exempt.
+	prOnly := &github.BypassActor{
+		ActorID:    github.Ptr(int64(7)),
+		ActorType:  github.Ptr(github.BypassActorTypeRepositoryRole),
+		BypassMode: github.Ptr(github.BypassModePullRequest),
+	}
+	if got := rule.CheckRepo(newFacts(ownerBypass(), prOnly)).Status; got != StatusSkip {
+		t.Errorf("owner plus pull-request-only actor: got %v, want skip", got)
+	}
+
+	// A separate ruleset that protects something other than the review (here a
+	// force-push block) and lets only the owner bypass it is a real weakening:
+	// the owner never needs that bypass to merge their own pull request, so it
+	// must be reported even while the review ruleset stays exempt.
+	otherRuleset := func() *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+		rs.Name = "force-push"
+		rs.Rules = &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}}
+		rs.BypassActors = []*github.BypassActor{ownerBypass()}
+		return rs
+	}
+	fWithOther := newFacts(ownerBypass())
+	fWithOther.Rulesets = append(fWithOther.Rulesets, otherRuleset())
+	if got := rule.CheckRepo(fWithOther).Status; got != StatusFail {
+		t.Errorf("owner bypass on unrelated ruleset: got %v, want fail", got)
+	}
+
+	// An owner bypass on a review ruleset that also bundles another rule is not
+	// the isolated shape the remediation produces, so it stays reportable.
+	bundled := func() *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+		rs.Rules.NonFastForward = &github.EmptyRuleParameters{}
+		rs.BypassActors = []*github.BypassActor{ownerBypass()}
+		return rs
+	}
+	fBundled := factsWithRulesets(bundled())
+	fBundled.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+	fBundled.CollaboratorsKnown = true
+	if got := rule.CheckRepo(fBundled).Status; got != StatusFail {
+		t.Errorf("owner bypass on bundled review ruleset: got %v, want fail", got)
+	}
+}
+
+func TestGSK131EnforceAdmins(t *testing.T) {
+	rule := gsk131(t)
+
+	f := factsWithRulesets()
+	f.Protection = &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: false}}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("enforce_admins off: got %v, want fail", got)
+	}
+
+	// Protection without an EnforceAdmins block must not panic and counts as off.
+	f = factsWithRulesets()
+	f.Protection = &github.Protection{}
+	if got := rule.CheckRepo(f).Status; got != StatusFail {
+		t.Errorf("nil EnforceAdmins: got %v, want fail", got)
+	}
+
+	f = factsWithRulesets()
+	f.Protection = &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: true}}
+	if got := rule.CheckRepo(f).Status; got != StatusPass {
+		t.Errorf("enforce_admins on: got %v, want pass", got)
+	}
+}
+
+func TestGSK131RulesetBypassActors(t *testing.T) {
+	rule := gsk131(t)
+
+	rulesetWithBypass := func(name string, mode github.BypassMode) *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Name = name
+		rs.BypassActors = []*github.BypassActor{{
+			ActorID:    github.Ptr(int64(5)),
+			ActorType:  github.Ptr(github.BypassActorTypeRepositoryRole),
+			BypassMode: github.Ptr(mode),
+		}}
+		return rs
+	}
+
+	if got := rule.CheckRepo(factsWithRulesets(rulesetWithBypass("rs", github.BypassModeAlways))).Status; got != StatusFail {
+		t.Errorf("always bypass: got %v, want fail", got)
+	}
+	if got := rule.CheckRepo(factsWithRulesets(rulesetWithBypass("rs", github.BypassModeExempt))).Status; got != StatusFail {
+		t.Errorf("exempt bypass: got %v, want fail", got)
+	}
+	// A pull-request-only bypass still forces the change through a pull request.
+	if got := rule.CheckRepo(factsWithRulesets(rulesetWithBypass("rs", github.BypassModePullRequest))).Status; got != StatusPass {
+		t.Errorf("pull request bypass: got %v, want pass", got)
+	}
+	// A ruleset is no longer trusted by name: an unconditional bypass on a
+	// ruleset using the managed review name is reported like any other because
+	// the single-member exception already covers the legitimate owner exemption.
+	managed := rulesetWithBypass(branchProtectionReviewRulesetName, github.BypassModeExempt)
+	if got := rule.CheckRepo(factsWithRulesets(managed)).Status; got != StatusFail {
+		t.Errorf("managed review ruleset with unconditional bypass: got %v, want fail", got)
+	}
+	if got := rule.CheckRepo(factsWithRulesets(branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false))).Status; got != StatusPass {
+		t.Errorf("no bypass actor: got %v, want pass", got)
+	}
+}

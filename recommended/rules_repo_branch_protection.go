@@ -453,6 +453,191 @@ func registerBranchProtectionRules() {
 				"a linear history is not required; merge commits are allowed")
 		},
 	})
+
+	register(Rule{
+		ID: "GSK131", GHQRID: "", Scope: ScopeRepository,
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed",
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !f.ProtectionKnown || !f.RulesetsKnown {
+				return Skip("could not determine branch protection or ruleset status for the default branch")
+			}
+			if f.Protection == nil && !activeRulesetProtectsDefaultBranch(f) {
+				// GSK110 already reports the missing protection; there is nothing to bypass.
+				return Skip("the default branch has no protection that could be bypassed")
+			}
+			// A sole member cannot approve their own pull request, so when the
+			// default branch requires an approving review the only way for that
+			// member to merge is a bypass usable by that owner, and removing it
+			// would lock the repository. That owner-only bypass is expected and is
+			// excluded by bypassFindings below; a bypass any other actor could use
+			// stays reportable even for a single-member repository.
+			ownerExempt := oneMemberRepository(f) && combinedReviewCount(f) >= 1
+			reasons := bypassFindings(f, ownerExempt)
+			if len(reasons) == 0 {
+				if ownerExempt {
+					return Skip("the repository has a single member who needs a bypass to merge their own pull requests")
+				}
+				return Pass("branch protection on the default branch cannot be bypassed")
+			}
+			return Fail(strings.Join(reasons, "; "))
+		},
+	})
+}
+
+// bypassFindings describes every way the default branch protection can be
+// bypassed unconditionally. When ownerExempt is true the repository has a single
+// member who must bypass an approving review to merge their own pull requests,
+// so a bypass usable only by that owner on the isolated review ruleset is
+// expected and omitted; a bypass any other actor could use is still reported. A
+// ruleset is therefore not trusted by name: only the owner-exempt review shape
+// the remediation produces is tolerated, so any surviving unconditional bypass
+// is a genuine finding even on a ruleset that uses the managed review name.
+func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
+	var reasons []string
+	// In a single-member user repository the owner is the only administrator, so a
+	// disabled admin enforcement can be the owner's own required review bypass.
+	// That exemption is tolerated only when the legacy protection is the review-only
+	// shape (legacyProtectionMatchesOwnerExemptShape); when the protection also
+	// enforces status checks or other requirements an administrator can skip, the
+	// disabled enforcement bypasses more than the required review and stays
+	// reportable, as does a disabled enforcement in any multi-member repository.
+	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() &&
+		!(ownerExempt && legacyProtectionMatchesOwnerExemptShape(f)) {
+		reasons = append(reasons, "branch protection is not enforced for administrators")
+	}
+	for _, rs := range activeDefaultBranchRulesets(f) {
+		if !gh.HasAnyRulesetRule(rs.Rules) {
+			continue
+		}
+		if !rulesetHasFullBypassActor(rs) {
+			continue
+		}
+		// A single-member repository's required exemption is a bypass scoped to the
+		// owner alone on the isolated review ruleset the remediation produces, so
+		// keep reporting a ruleset any other actor could bypass, and a ruleset that
+		// bundles other protections (status checks, force-push blocks, and so on):
+		// the owner never needs to bypass those to merge their own pull request, so
+		// an owner bypass there still weakens protection.
+		if ownerExempt && rulesetMatchesOwnerExemptShape(f, rs) {
+			continue
+		}
+		reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+	}
+	return reasons
+}
+
+// legacyProtectionMatchesOwnerExemptShape reports whether the legacy branch
+// protection is the review-only shape whose disabled admin enforcement serves
+// solely as the single owner's required bypass to merge their own pull request.
+// Because the owner is the only administrator, disabling admin enforcement
+// exempts them from every legacy protection, so it is tolerable only when the
+// required approving review is the single protection an administrator would skip.
+// A required status check, required linear history, required conversation
+// resolution, required signatures, or a locked branch is also bypassed by the
+// owner and keeps the finding. Force-push and deletion allowances are governed by
+// their own toggles rather than admin enforcement, and push restrictions and
+// creation blocks never apply to a repository administrator, so none of those
+// disqualify the review-only shape.
+func legacyProtectionMatchesOwnerExemptShape(f *RepositoryFacts) bool {
+	p := f.Protection
+	if p == nil {
+		return false
+	}
+	// The disabled admin enforcement is only the owner's review bypass when the
+	// legacy protection itself requires an approving review the sole owner cannot
+	// satisfy; a review contributed only by a ruleset does not need legacy admin
+	// enforcement disabled to be bypassed.
+	if p.GetRequiredPullRequestReviews().GetRequiredApprovingReviewCount() < 1 {
+		return false
+	}
+	if legacyProtectionHasRequiredStatusChecks(p) {
+		return false
+	}
+	if p.GetRequireLinearHistory().GetEnabled() {
+		return false
+	}
+	if p.GetRequiredConversationResolution().GetEnabled() {
+		return false
+	}
+	if p.GetRequiredSignatures().GetEnabled() {
+		return false
+	}
+	if p.GetLockBranch().GetEnabled() {
+		return false
+	}
+	return true
+}
+
+// legacyProtectionHasRequiredStatusChecks reports whether the legacy protection
+// enforces at least one required status check. An empty status-check block
+// imposes nothing, so it does not count.
+func legacyProtectionHasRequiredStatusChecks(p *github.Protection) bool {
+	checks := p.GetRequiredStatusChecks()
+	if checks == nil {
+		return false
+	}
+	if checks.Checks != nil && len(*checks.Checks) > 0 {
+		return true
+	}
+	return len(checks.GetContexts()) > 0
+}
+
+// rulesetMatchesOwnerExemptShape reports whether the ruleset is the exact
+// owner-exempt review ruleset the single-member remediation is allowed to
+// create: it targets only the default branch, carries just a pull-request rule
+// that requires at least one approving review and no other pull-request
+// protections, and grants an unconditional bypass only to the owner. Only that
+// shape justifies the owner bypass, because the sole owner cannot self-approve
+// the required review; any other rule the owner could bypass (status checks,
+// force-push blocks, and so on) is unnecessary for merging and stays reportable.
+func rulesetMatchesOwnerExemptShape(f *RepositoryFacts, rs *github.RepositoryRuleset) bool {
+	if !rulesetTargetsOnlyDefaultBranch(rs.Conditions, f.Repo.GetDefaultBranch()) {
+		return false
+	}
+	if rs.Rules == nil || rs.Rules.PullRequest == nil {
+		return false
+	}
+	if reviewRulesetHasUnexpectedRules(rs.Rules) {
+		return false
+	}
+	if reviewPullRequestHasUnexpectedParameters(rs.Rules.PullRequest) {
+		return false
+	}
+	if rs.Rules.PullRequest.RequiredApprovingReviewCount < 1 {
+		return false
+	}
+	return rulesetFullBypassActorsOnlyOwner(f, rs)
+}
+
+// rulesetFullBypassActorsOnlyOwner reports whether every unconditional bypass
+// actor (BypassModeAlways or BypassModeExempt) on the ruleset is the repository
+// owner acting as a user. The owner-exempt review ruleset created for a
+// single-member repository adds exactly such an actor, so this distinguishes
+// that required exemption from a bypass another actor (an integration, a
+// repository role, a team, or a different user) could also use. It fails closed:
+// an unknown actor type, a missing ID, or an owner that is not a user account
+// leaves the finding in place.
+func rulesetFullBypassActorsOnlyOwner(f *RepositoryFacts, rs *github.RepositoryRuleset) bool {
+	owner := f.Repo.GetOwner()
+	if owner == nil || owner.GetID() == 0 || owner.GetType() != "User" {
+		return false
+	}
+	const userActorType github.BypassActorType = "User"
+	found := false
+	for _, actor := range rs.BypassActors {
+		mode := actor.GetBypassMode()
+		if mode == nil {
+			continue
+		}
+		switch *mode {
+		case github.BypassModeAlways, github.BypassModeExempt:
+			if actor.GetActorType() == nil || *actor.GetActorType() != userActorType || actor.GetActorID() != owner.GetID() {
+				return false
+			}
+			found = true
+		}
+	}
+	return found
 }
 
 // checkMinimumRequiredReviews returns a CheckRepo function that fails when the
