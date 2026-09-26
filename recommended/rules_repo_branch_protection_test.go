@@ -906,6 +906,62 @@ func TestGSK131SkipsSingleMemberRepository(t *testing.T) {
 	}
 }
 
+func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
+	rule := gsk131(t)
+
+	ownerID := int64(1)
+	// A single-member user repository whose default branch requires an approving
+	// review, expressed through a review ruleset the owner must bypass to merge.
+	newFacts := func(actors ...*github.BypassActor) *RepositoryFacts {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+		rs.BypassActors = actors
+		f := factsWithRulesets(rs)
+		f.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+		f.CollaboratorsKnown = true
+		return f
+	}
+	ownerBypass := func() *github.BypassActor {
+		return &github.BypassActor{
+			ActorID:    github.Ptr(ownerID),
+			ActorType:  github.Ptr(github.BypassActorType("User")),
+			BypassMode: github.Ptr(github.BypassModeExempt),
+		}
+	}
+
+	// Only the owner can bypass, which is required for the sole member to merge.
+	if got := rule.CheckRepo(newFacts(ownerBypass())).Status; got != StatusSkip {
+		t.Errorf("owner-only bypass: got %v, want skip", got)
+	}
+
+	// An integration can bypass unconditionally; that actor is unrelated to the
+	// owner exemption and must still be reported.
+	integrationBypass := &github.BypassActor{
+		ActorID:    github.Ptr(int64(99)),
+		ActorType:  github.Ptr(github.BypassActorTypeIntegration),
+		BypassMode: github.Ptr(github.BypassModeAlways),
+	}
+	if got := rule.CheckRepo(newFacts(integrationBypass)).Status; got != StatusFail {
+		t.Errorf("integration bypass: got %v, want fail", got)
+	}
+
+	// The owner exemption plus an unrelated bypass still leaves a real finding.
+	if got := rule.CheckRepo(newFacts(ownerBypass(), integrationBypass)).Status; got != StatusFail {
+		t.Errorf("owner plus integration bypass: got %v, want fail", got)
+	}
+
+	// A pull-request-only actor is not an unconditional bypass, so an owner-only
+	// full bypass alongside it stays exempt.
+	prOnly := &github.BypassActor{
+		ActorID:    github.Ptr(int64(7)),
+		ActorType:  github.Ptr(github.BypassActorTypeRepositoryRole),
+		BypassMode: github.Ptr(github.BypassModePullRequest),
+	}
+	if got := rule.CheckRepo(newFacts(ownerBypass(), prOnly)).Status; got != StatusSkip {
+		t.Errorf("owner plus pull-request-only actor: got %v, want skip", got)
+	}
+}
+
 func TestGSK131EnforceAdmins(t *testing.T) {
 	rule := gsk131(t)
 
