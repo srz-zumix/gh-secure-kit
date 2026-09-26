@@ -906,6 +906,71 @@ func TestGSK131SkipsSingleMemberRepository(t *testing.T) {
 	}
 }
 
+func TestGSK131SingleMemberAdminBypassOnlyExemptsReviewOnlyLegacyShape(t *testing.T) {
+	rule := gsk131(t)
+
+	singleMember := func(p *github.Protection) *RepositoryFacts {
+		f := factsWithRulesets()
+		f.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+		f.CollaboratorsKnown = true
+		f.Protection = p
+		return f
+	}
+
+	// Review-only legacy protection with disabled admin enforcement is the sole
+	// owner's required review bypass and stays exempt.
+	reviewOnly := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+	}
+	if got := rule.CheckRepo(singleMember(reviewOnly)).Status; got != StatusSkip {
+		t.Errorf("review-only legacy shape: got %v, want skip", got)
+	}
+
+	// Disabled admin enforcement alongside a required status check lets the owner
+	// skip more than the required review, so the finding is retained.
+	withStatusChecks := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequiredStatusChecks:       &github.RequiredStatusChecks{Contexts: &[]string{"ci"}},
+	}
+	if got := rule.CheckRepo(singleMember(withStatusChecks)).Status; got != StatusFail {
+		t.Errorf("legacy status checks with disabled admin enforcement: got %v, want fail", got)
+	}
+
+	// An empty status-check block imposes nothing, so the review-only shape holds.
+	emptyStatusChecks := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequiredStatusChecks:       &github.RequiredStatusChecks{},
+	}
+	if got := rule.CheckRepo(singleMember(emptyStatusChecks)).Status; got != StatusSkip {
+		t.Errorf("empty legacy status checks: got %v, want skip", got)
+	}
+
+	// Other administrator-bypassable requirements keep the finding as well.
+	withLinearHistory := &github.Protection{
+		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
+		EnforceAdmins:              &github.AdminEnforcement{Enabled: false},
+		RequireLinearHistory:       &github.RequireLinearHistory{Enabled: true},
+	}
+	if got := rule.CheckRepo(singleMember(withLinearHistory)).Status; got != StatusFail {
+		t.Errorf("legacy linear history with disabled admin enforcement: got %v, want fail", got)
+	}
+
+	// The review requirement must come from the legacy protection itself: a
+	// ruleset-only review does not justify a disabled legacy admin enforcement.
+	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+	rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+	fRulesetReview := factsWithRulesets(rs)
+	fRulesetReview.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	fRulesetReview.CollaboratorsKnown = true
+	fRulesetReview.Protection = &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: false}}
+	if got := rule.CheckRepo(fRulesetReview).Status; got != StatusFail {
+		t.Errorf("ruleset-only review with disabled legacy admin enforcement: got %v, want fail", got)
+	}
+}
+
 func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 	rule := gsk131(t)
 

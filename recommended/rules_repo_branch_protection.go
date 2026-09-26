@@ -495,9 +495,14 @@ func registerBranchProtectionRules() {
 func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 	var reasons []string
 	// In a single-member user repository the owner is the only administrator, so a
-	// disabled admin enforcement is the owner's own required bypass; otherwise it
-	// lets any administrator bypass protection.
-	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() && !ownerExempt {
+	// disabled admin enforcement can be the owner's own required review bypass.
+	// That exemption is tolerated only when the legacy protection is the review-only
+	// shape (legacyProtectionMatchesOwnerExemptShape); when the protection also
+	// enforces status checks or other requirements an administrator can skip, the
+	// disabled enforcement bypasses more than the required review and stays
+	// reportable, as does a disabled enforcement in any multi-member repository.
+	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() &&
+		!(ownerExempt && legacyProtectionMatchesOwnerExemptShape(f)) {
 		reasons = append(reasons, "branch protection is not enforced for administrators")
 	}
 	for _, rs := range activeDefaultBranchRulesets(f) {
@@ -519,6 +524,62 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 		reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
 	}
 	return reasons
+}
+
+// legacyProtectionMatchesOwnerExemptShape reports whether the legacy branch
+// protection is the review-only shape whose disabled admin enforcement serves
+// solely as the single owner's required bypass to merge their own pull request.
+// Because the owner is the only administrator, disabling admin enforcement
+// exempts them from every legacy protection, so it is tolerable only when the
+// required approving review is the single protection an administrator would skip.
+// A required status check, required linear history, required conversation
+// resolution, required signatures, or a locked branch is also bypassed by the
+// owner and keeps the finding. Force-push and deletion allowances are governed by
+// their own toggles rather than admin enforcement, and push restrictions and
+// creation blocks never apply to a repository administrator, so none of those
+// disqualify the review-only shape.
+func legacyProtectionMatchesOwnerExemptShape(f *RepositoryFacts) bool {
+	p := f.Protection
+	if p == nil {
+		return false
+	}
+	// The disabled admin enforcement is only the owner's review bypass when the
+	// legacy protection itself requires an approving review the sole owner cannot
+	// satisfy; a review contributed only by a ruleset does not need legacy admin
+	// enforcement disabled to be bypassed.
+	if p.GetRequiredPullRequestReviews().GetRequiredApprovingReviewCount() < 1 {
+		return false
+	}
+	if legacyProtectionHasRequiredStatusChecks(p) {
+		return false
+	}
+	if p.GetRequireLinearHistory().GetEnabled() {
+		return false
+	}
+	if p.GetRequiredConversationResolution().GetEnabled() {
+		return false
+	}
+	if p.GetRequiredSignatures().GetEnabled() {
+		return false
+	}
+	if p.GetLockBranch().GetEnabled() {
+		return false
+	}
+	return true
+}
+
+// legacyProtectionHasRequiredStatusChecks reports whether the legacy protection
+// enforces at least one required status check. An empty status-check block
+// imposes nothing, so it does not count.
+func legacyProtectionHasRequiredStatusChecks(p *github.Protection) bool {
+	checks := p.GetRequiredStatusChecks()
+	if checks == nil {
+		return false
+	}
+	if checks.Checks != nil && len(*checks.Checks) > 0 {
+		return true
+	}
+	return len(checks.GetContexts()) > 0
 }
 
 // rulesetMatchesOwnerExemptShape reports whether the ruleset is the exact
