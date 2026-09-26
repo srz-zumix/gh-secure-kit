@@ -960,6 +960,39 @@ func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 	if got := rule.CheckRepo(newFacts(ownerBypass(), prOnly)).Status; got != StatusSkip {
 		t.Errorf("owner plus pull-request-only actor: got %v, want skip", got)
 	}
+
+	// A separate ruleset that protects something other than the review (here a
+	// force-push block) and lets only the owner bypass it is a real weakening:
+	// the owner never needs that bypass to merge their own pull request, so it
+	// must be reported even while the review ruleset stays exempt.
+	otherRuleset := func() *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, true)
+		rs.Name = "force-push"
+		rs.Rules = &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}}
+		rs.BypassActors = []*github.BypassActor{ownerBypass()}
+		return rs
+	}
+	fWithOther := newFacts(ownerBypass())
+	fWithOther.Rulesets = append(fWithOther.Rulesets, otherRuleset())
+	if got := rule.CheckRepo(fWithOther).Status; got != StatusFail {
+		t.Errorf("owner bypass on unrelated ruleset: got %v, want fail", got)
+	}
+
+	// An owner bypass on a review ruleset that also bundles another rule is not
+	// the isolated shape the remediation produces, so it stays reportable.
+	bundled := func() *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
+		rs.Rules.NonFastForward = &github.EmptyRuleParameters{}
+		rs.BypassActors = []*github.BypassActor{ownerBypass()}
+		return rs
+	}
+	fBundled := factsWithRulesets(bundled())
+	fBundled.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+	fBundled.CollaboratorsKnown = true
+	if got := rule.CheckRepo(fBundled).Status; got != StatusFail {
+		t.Errorf("owner bypass on bundled review ruleset: got %v, want fail", got)
+	}
 }
 
 func TestGSK131EnforceAdmins(t *testing.T) {

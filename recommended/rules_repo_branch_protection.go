@@ -487,10 +487,11 @@ func registerBranchProtectionRules() {
 // bypassFindings describes every way the default branch protection can be
 // bypassed unconditionally. When ownerExempt is true the repository has a single
 // member who must bypass an approving review to merge their own pull requests,
-// so a bypass usable only by that owner is expected and omitted; a bypass any
-// other actor could use is still reported. A ruleset is therefore not trusted by
-// name: only an owner-scoped bypass is tolerated, so any surviving unconditional
-// bypass is a genuine finding even on a ruleset that uses the managed review name.
+// so a bypass usable only by that owner on the isolated review ruleset is
+// expected and omitted; a bypass any other actor could use is still reported. A
+// ruleset is therefore not trusted by name: only the owner-exempt review shape
+// the remediation produces is tolerated, so any surviving unconditional bypass
+// is a genuine finding even on a ruleset that uses the managed review name.
 func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 	var reasons []string
 	// In a single-member user repository the owner is the only administrator, so a
@@ -507,13 +508,44 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 			continue
 		}
 		// A single-member repository's required exemption is a bypass scoped to the
-		// owner alone, so keep reporting a ruleset any other actor could bypass.
-		if ownerExempt && rulesetFullBypassActorsOnlyOwner(f, rs) {
+		// owner alone on the isolated review ruleset the remediation produces, so
+		// keep reporting a ruleset any other actor could bypass, and a ruleset that
+		// bundles other protections (status checks, force-push blocks, and so on):
+		// the owner never needs to bypass those to merge their own pull request, so
+		// an owner bypass there still weakens protection.
+		if ownerExempt && rulesetMatchesOwnerExemptShape(f, rs) {
 			continue
 		}
 		reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
 	}
 	return reasons
+}
+
+// rulesetMatchesOwnerExemptShape reports whether the ruleset is the exact
+// owner-exempt review ruleset the single-member remediation is allowed to
+// create: it targets only the default branch, carries just a pull-request rule
+// that requires at least one approving review and no other pull-request
+// protections, and grants an unconditional bypass only to the owner. Only that
+// shape justifies the owner bypass, because the sole owner cannot self-approve
+// the required review; any other rule the owner could bypass (status checks,
+// force-push blocks, and so on) is unnecessary for merging and stays reportable.
+func rulesetMatchesOwnerExemptShape(f *RepositoryFacts, rs *github.RepositoryRuleset) bool {
+	if !rulesetTargetsOnlyDefaultBranch(rs.Conditions, f.Repo.GetDefaultBranch()) {
+		return false
+	}
+	if rs.Rules == nil || rs.Rules.PullRequest == nil {
+		return false
+	}
+	if reviewRulesetHasUnexpectedRules(rs.Rules) {
+		return false
+	}
+	if reviewPullRequestHasUnexpectedParameters(rs.Rules.PullRequest) {
+		return false
+	}
+	if rs.Rules.PullRequest.RequiredApprovingReviewCount < 1 {
+		return false
+	}
+	return rulesetFullBypassActorsOnlyOwner(f, rs)
 }
 
 // rulesetFullBypassActorsOnlyOwner reports whether every unconditional bypass
