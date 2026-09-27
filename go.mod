@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v90 v90.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/srz-zumix/gh-diet-kit v0.5.0
-	github.com/srz-zumix/go-gh-extension v0.6.14
+	github.com/srz-zumix/go-gh-extension v0.6.15
 )
 
 require (
@@ -99,7 +99,7 @@ require (
 	github.com/thlib/go-timezone-local v0.0.6 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/crypto v0.55.0 // indirect
+	golang.org/x/crypto v0.56.0 // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
