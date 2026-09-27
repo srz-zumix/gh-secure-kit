@@ -414,7 +414,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK129", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Conversation resolution not required before merge", Fixable: true,
+		Category: "branch_protection", Severity: SeverityLow, Title: "Conversation resolution not required before merge", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -433,7 +433,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK130", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityLow, Title: "Linear history not required", Fixable: true,
+		Category: "branch_protection", Severity: SeverityInfo, Title: "Linear history not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
