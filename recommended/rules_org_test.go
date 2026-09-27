@@ -58,3 +58,39 @@ func TestGSK508ActionsEnabledRepositories(t *testing.T) {
 		t.Errorf("selected repositories: got %v, want pass", got)
 	}
 }
+
+func TestGSK509MembersCanForkPrivateRepos(t *testing.T) {
+	f := &OrganizationFacts{Org: &github.Organization{MembersCanForkPrivateRepos: github.Ptr(true)}}
+	if got := orgRuleOutcome(t, "GSK509", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{Org: &github.Organization{MembersCanForkPrivateRepos: github.Ptr(false)}}
+	if got := orgRuleOutcome(t, "GSK509", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK510MembersCanDeleteRepositories(t *testing.T) {
+	f := &OrganizationFacts{Org: &github.Organization{MembersCanDeleteRepositories: github.Ptr(true)}}
+	if got := orgRuleOutcome(t, "GSK510", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{Org: &github.Organization{MembersCanDeleteRepositories: github.Ptr(false)}}
+	if got := orgRuleOutcome(t, "GSK510", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK511MembersCanChangeRepoVisibility(t *testing.T) {
+	f := &OrganizationFacts{Org: &github.Organization{MembersCanChangeRepoVisibility: github.Ptr(true)}}
+	if got := orgRuleOutcome(t, "GSK511", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{Org: &github.Organization{MembersCanChangeRepoVisibility: github.Ptr(false)}}
+	if got := orgRuleOutcome(t, "GSK511", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}

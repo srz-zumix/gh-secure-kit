@@ -129,4 +129,49 @@ func registerOrganizationRules() {
 			return Pass(fmt.Sprintf("GitHub Actions is restricted to a subset of repositories (%q)", enabled))
 		},
 	})
+
+	register(Rule{
+		ID: "GSK509", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityHigh, Title: "Members can fork private repositories", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.Org.GetMembersCanForkPrivateRepos() {
+				return Fail("members are allowed to fork private repositories")
+			}
+			return Pass("members are not allowed to fork private repositories")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgMembersCanForkPrivateRepos(ctx, g, repo, false)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK510", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityHigh, Title: "Members can delete repositories", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.Org.GetMembersCanDeleteRepositories() {
+				return Fail("members with admin permissions are allowed to delete repositories")
+			}
+			return Pass("members with admin permissions are not allowed to delete repositories")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgMembersCanDeleteRepositories(ctx, g, repo, false)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK511", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityHigh, Title: "Members can change repository visibility", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.Org.GetMembersCanChangeRepoVisibility() {
+				return Fail("members with admin permissions are allowed to change a repository's visibility")
+			}
+			return Pass("members with admin permissions are not allowed to change a repository's visibility")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgMembersCanChangeRepoVisibility(ctx, g, repo, false)
+			return err
+		},
+	})
 }
