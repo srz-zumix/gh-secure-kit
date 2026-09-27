@@ -502,7 +502,7 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 	// disabled enforcement bypasses more than the required review and stays
 	// reportable, as does a disabled enforcement in any multi-member repository.
 	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() &&
-		!(ownerExempt && legacyProtectionMatchesOwnerExemptShape(f)) {
+		(!ownerExempt || !legacyProtectionMatchesOwnerExemptShape(f)) {
 		reasons = append(reasons, "branch protection is not enforced for administrators")
 	}
 	for _, rs := range activeDefaultBranchRulesets(f) {
