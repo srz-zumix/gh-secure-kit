@@ -131,6 +131,21 @@ func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) 
 	}
 }
 
+func TestBranchProtectionRulesetRemediationRejectsGSK130(t *testing.T) {
+	remediation, err := newBranchProtectionRulesetRemediation(remediationFacts(), nil)
+	if err != nil {
+		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
+	}
+	// GSK130 is no longer auto-remediated, so Apply must reject it instead of
+	// silently adding a required-linear-history rule.
+	if err := remediation.Apply("GSK130", remediationFacts()); err == nil {
+		t.Error("Apply(GSK130) error = nil, want error")
+	}
+	if remediation.Ruleset().Rules != nil && remediation.Ruleset().Rules.RequiredLinearHistory != nil {
+		t.Error("GSK130 must not add a RequiredLinearHistory rule")
+	}
+}
+
 func TestBranchProtectionRulesetRemediationRejectsUnsafeRuleset(t *testing.T) {
 	target := github.RulesetTargetTag
 	unsafe := &github.RepositoryRuleset{Name: branchProtectionRulesetName, Target: &target}
