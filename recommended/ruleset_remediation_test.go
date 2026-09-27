@@ -101,7 +101,7 @@ func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) 
 	if err != nil {
 		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
 	}
-	for _, id := range []string{"GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118", "GSK128", "GSK129", "GSK130"} {
+	for _, id := range []string{"GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118", "GSK128", "GSK129"} {
 		if err := remediation.Apply(id, remediationFacts()); err != nil {
 			t.Fatalf("Apply(%s) error = %v", id, err)
 		}
@@ -129,8 +129,20 @@ func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) 
 	if !got.Rules.PullRequest.RequiredReviewThreadResolution {
 		t.Error("RequiredReviewThreadResolution (GSK129) was not enabled")
 	}
-	if got.Rules.RequiredLinearHistory == nil {
-		t.Error("RequiredLinearHistory rule (GSK130) was not added")
+}
+
+func TestBranchProtectionRulesetRemediationRejectsGSK130(t *testing.T) {
+	remediation, err := newBranchProtectionRulesetRemediation(remediationFacts(), nil)
+	if err != nil {
+		t.Fatalf("newBranchProtectionRulesetRemediation() error = %v", err)
+	}
+	// GSK130 is no longer auto-remediated, so Apply must reject it instead of
+	// silently adding a required-linear-history rule.
+	if err := remediation.Apply("GSK130", remediationFacts()); err == nil {
+		t.Error("Apply(GSK130) error = nil, want error")
+	}
+	if remediation.Ruleset().Rules != nil && remediation.Ruleset().Rules.RequiredLinearHistory != nil {
+		t.Error("GSK130 must not add a RequiredLinearHistory rule")
 	}
 }
 

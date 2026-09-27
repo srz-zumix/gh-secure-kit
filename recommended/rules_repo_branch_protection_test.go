@@ -842,6 +842,26 @@ func TestGSK130LinearHistoryNilSafe(t *testing.T) {
 	}
 }
 
+func TestGSK130NotFixable(t *testing.T) {
+	rule, ok := RuleByID("GSK130")
+	if !ok {
+		t.Fatal("GSK130 not registered")
+	}
+
+	// GSK130 was demoted to an informational rule that is no longer
+	// auto-remediated. Guard the metadata so a future registry change cannot
+	// silently re-enable the fix.
+	if rule.Fixable {
+		t.Error("GSK130 must not be fixable")
+	}
+	if rule.Severity != SeverityInfo {
+		t.Errorf("GSK130 severity = %v, want %v", rule.Severity, SeverityInfo)
+	}
+	if isRulesetRemediationRule("GSK130") {
+		t.Error("GSK130 must not be a ruleset remediation rule")
+	}
+}
+
 func gsk131(t *testing.T) Rule {
 	t.Helper()
 	r, ok := RuleByID("GSK131")

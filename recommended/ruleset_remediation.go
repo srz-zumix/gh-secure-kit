@@ -100,8 +100,6 @@ func (r *branchProtectionRulesetRemediation) Apply(ruleID string, facts *Reposit
 		r.ruleset.Rules.Deletion = &github.EmptyRuleParameters{}
 	case "GSK129":
 		pullRequestRule(r.ruleset).RequiredReviewThreadResolution = true
-	case "GSK130":
-		r.ruleset.Rules.RequiredLinearHistory = &github.EmptyRuleParameters{}
 	default:
 		return fmt.Errorf("rule %s cannot be remediated with a ruleset", ruleID)
 	}
@@ -129,7 +127,7 @@ func (r *branchProtectionRulesetRemediation) UpdatePayload() *github.RepositoryR
 
 func isRulesetRemediationRule(id string) bool {
 	switch id {
-	case "GSK110", "GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118", "GSK128", "GSK129", "GSK130":
+	case "GSK110", "GSK111", "GSK112", "GSK113", "GSK114", "GSK115", "GSK117", "GSK118", "GSK128", "GSK129":
 		return true
 	default:
 		return false
