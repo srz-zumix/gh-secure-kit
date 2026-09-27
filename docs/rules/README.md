@@ -44,6 +44,7 @@ catalog with severity, scope, and fixability.
 | [GSK128](GSK128.md) | High | Yes | Branch deletion allowed on protected branch |
 | [GSK129](GSK129.md) | Medium | Yes | Conversation resolution not required before merge |
 | [GSK130](GSK130.md) | Low | Yes | Linear history not required |
+| [GSK131](GSK131.md) | Medium | No | Branch protection can be bypassed |
 
 ## Organization rules
 
