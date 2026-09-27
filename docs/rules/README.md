@@ -58,3 +58,6 @@ catalog with severity, scope, and fixability.
 | [GSK506](GSK506.md) | High | Yes | Actions allows all third-party actions and reusable workflows |
 | [GSK507](GSK507.md) | High | No | No default code security configuration for new repositories |
 | [GSK508](GSK508.md) | Medium | No | Actions enabled for all repositories |
+| [GSK509](GSK509.md) | High | Yes | Members can fork private repositories |
+| [GSK510](GSK510.md) | High | Yes | Members can delete repositories |
+| [GSK511](GSK511.md) | High | Yes | Members can change repository visibility |
