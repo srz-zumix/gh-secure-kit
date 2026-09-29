@@ -62,6 +62,33 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	}
 }
 
+func TestEnvironmentFactNeeds(t *testing.T) {
+	cases := []struct {
+		name           string
+		ruleIDs        []string
+		wantSecrets    bool
+		wantBranchPols bool
+	}{
+		{"none", []string{"GSK001"}, false, false},
+		{"secrets only", []string{"GSK135"}, true, false},
+		{"self-review", []string{"GSK136"}, true, false},
+		{"branch policies", []string{"GSK137"}, false, true},
+		{"all env rules", []string{"GSK135", "GSK137"}, true, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var rules []Rule
+			for _, id := range tc.ruleIDs {
+				rules = append(rules, Rule{ID: id, Scope: ScopeRepository})
+			}
+			secrets, branchPols := environmentFactNeeds(rules)
+			if secrets != tc.wantSecrets || branchPols != tc.wantBranchPols {
+				t.Errorf("environmentFactNeeds() = (%v, %v), want (%v, %v)", secrets, branchPols, tc.wantSecrets, tc.wantBranchPols)
+			}
+		})
+	}
+}
+
 func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	if got := ruleOutcome(t, "GSK136", &RepositoryFacts{}); got != StatusSkip {
 		t.Errorf("unknown environments: got %v, want skip", got)
@@ -162,12 +189,67 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		t.Errorf("protected branches with confirmed protection: got %v, want pass", got)
 	}
 
-	// An explicit allow-list of branch name patterns always restricts.
-	f = &RepositoryFacts{EnvironmentsKnown: true, Environments: []*github.Environment{
-		{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
-	}}
+	// An allow-list of branch name patterns restricts deployments only when the
+	// patterns are known and not catch-all.
+	f = &RepositoryFacts{
+		EnvironmentsKnown:              true,
+		EnvironmentBranchPoliciesKnown: true,
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+		},
+		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
+			"production": {{Name: github.Ptr("release/*"), Type: github.Ptr("branch")}},
+		},
+	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusPass {
-		t.Errorf("custom branch policies: got %v, want pass", got)
+		t.Errorf("custom branch policies with restrictive patterns: got %v, want pass", got)
+	}
+
+	// A catch-all pattern admits every branch, so custom policies do not
+	// actually restrict deployments.
+	f = &RepositoryFacts{
+		EnvironmentsKnown:              true,
+		EnvironmentBranchPoliciesKnown: true,
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+		},
+		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
+			"production": {{Name: github.Ptr("*"), Type: github.Ptr("branch")}},
+		},
+	}
+	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
+		t.Errorf("custom branch policies with catch-all pattern: got %v, want fail", got)
+	}
+
+	// A catch-all pattern that only applies to tags does not make branches
+	// deployable, so the environment is still restricted.
+	f = &RepositoryFacts{
+		EnvironmentsKnown:              true,
+		EnvironmentBranchPoliciesKnown: true,
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+		},
+		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
+			"production": {
+				{Name: github.Ptr("*"), Type: github.Ptr("tag")},
+				{Name: github.Ptr("release/*"), Type: github.Ptr("branch")},
+			},
+		},
+	}
+	if got := ruleOutcome(t, "GSK137", f); got != StatusPass {
+		t.Errorf("custom branch policies with tag-only catch-all: got %v, want pass", got)
+	}
+
+	// Custom branch policies whose patterns could not be read are indeterminate
+	// rather than a false pass.
+	f = &RepositoryFacts{
+		EnvironmentsKnown: true,
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+		},
+	}
+	if got := ruleOutcome(t, "GSK137", f); got != StatusSkip {
+		t.Errorf("custom branch policies with unreadable patterns: got %v, want skip", got)
 	}
 
 	// A definitely-unrestricted environment fails even when another environment

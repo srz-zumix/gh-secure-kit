@@ -14,6 +14,43 @@ func init() {
 	registerRepositoryEnvironmentRules()
 }
 
+// environmentFactNeeds reports which per-environment facts the selected rules
+// require, so CollectRepositoryFacts can skip the requests that scale with the
+// number of environments when no selected rule consumes them.
+func environmentFactNeeds(rules []Rule) (needSecrets, needBranchPolicies bool) {
+	for _, r := range rules {
+		if r.Scope != ScopeRepository {
+			continue
+		}
+		switch r.ID {
+		case "GSK135", "GSK136":
+			needSecrets = true
+		case "GSK137":
+			needBranchPolicies = true
+		}
+	}
+	return needSecrets, needBranchPolicies
+}
+
+// environmentHasCatchAllBranchPolicy reports whether any custom deployment
+// branch policy uses a catch-all pattern that admits every branch, leaving the
+// environment effectively unrestricted despite enabling custom policies. Tag
+// policies are ignored because they do not gate which branches can deploy.
+// GitHub wildcards do not cross "/", so only "*" (all top-level branches) and
+// "**" (all branches) are treated as catch-all.
+func environmentHasCatchAllBranchPolicy(policies []*github.DeploymentBranchPolicy) bool {
+	for _, p := range policies {
+		if t := p.GetType(); t != "" && t != "branch" {
+			continue
+		}
+		switch p.GetName() {
+		case "*", "**":
+			return true
+		}
+	}
+	return false
+}
+
 // environmentProtectionRule returns the environment's protection rule of the
 // given type, or nil if none is configured.
 func environmentProtectionRule(env *github.Environment, ruleType string) *github.ProtectionRule {
@@ -111,8 +148,20 @@ func registerRepositoryEnvironmentRules() {
 					continue
 				}
 				if policy.GetCustomBranchPolicies() {
-					// An explicit allow-list of branch name patterns always
-					// restricts which branches can deploy.
+					// An allow-list of branch name patterns only restricts
+					// deployments if the patterns themselves are not catch-all.
+					// The deployment-branch-policy booleans alone cannot prove
+					// this, so inspect the fetched patterns; when they could not
+					// be read, treat the environment as indeterminate instead of
+					// passing a possibly-unrestricted configuration.
+					if !f.EnvironmentBranchPoliciesKnown {
+						indeterminate = append(indeterminate, env.GetName())
+						continue
+					}
+					if environmentHasCatchAllBranchPolicy(f.EnvironmentBranchPolicies[env.GetName()]) {
+						unrestricted = append(unrestricted, env.GetName())
+						continue
+					}
 					continue
 				}
 				if policy.GetProtectedBranches() {
@@ -137,7 +186,7 @@ func registerRepositoryEnvironmentRules() {
 				return Fail(fmt.Sprintf("environments deployable from any branch: %s", strings.Join(unrestricted, ", ")))
 			}
 			if len(indeterminate) > 0 {
-				return Skip(fmt.Sprintf("environments restrict to protected branches but repository branch protection could not be confirmed: %s", strings.Join(indeterminate, ", ")))
+				return Skip(fmt.Sprintf("environments restrict deployments but the restriction could not be confirmed: %s", strings.Join(indeterminate, ", ")))
 			}
 			return Pass("all environments restrict which branches can deploy")
 		},

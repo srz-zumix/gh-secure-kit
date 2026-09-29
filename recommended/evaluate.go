@@ -11,7 +11,7 @@ import (
 // EvaluateRepository collects facts for a single repository and evaluates the
 // given rules against it. Only rules with Scope == ScopeRepository are evaluated.
 func EvaluateRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) ([]Result, *RepositoryFacts, error) {
-	facts, err := CollectRepositoryFacts(ctx, g, repo)
+	facts, err := CollectRepositoryFacts(ctx, g, repo, rules)
 	if err != nil {
 		return nil, nil, err
 	}
