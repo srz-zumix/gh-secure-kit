@@ -76,6 +76,12 @@ func registerRepositoryEnvironmentRules() {
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
 			for _, env := range f.Environments {
+				// Only secret-bearing environments are flagged by the check, so
+				// remediation must not touch environments without secrets even if
+				// they happen to allow self-review.
+				if len(f.EnvironmentSecrets[env.GetName()]) == 0 {
+					continue
+				}
 				rule := environmentProtectionRule(env, "required_reviewers")
 				if rule == nil || len(rule.GetReviewers()) == 0 || rule.GetPreventSelfReview() {
 					continue
@@ -97,14 +103,41 @@ func registerRepositoryEnvironmentRules() {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
 			}
-			var unrestricted []string
+			var unrestricted, indeterminate []string
 			for _, env := range f.Environments {
-				if env.GetDeploymentBranchPolicy() == nil {
+				policy := env.GetDeploymentBranchPolicy()
+				if policy == nil {
 					unrestricted = append(unrestricted, env.GetName())
+					continue
 				}
+				if policy.GetCustomBranchPolicies() {
+					// An explicit allow-list of branch name patterns always
+					// restricts which branches can deploy.
+					continue
+				}
+				if policy.GetProtectedBranches() {
+					// "Protected branches only" restricts deployments only when the
+					// repository actually has at least one protected branch. With no
+					// branch protection anywhere, GitHub allows every branch to
+					// deploy. Facts only reveal the default branch's protection, so
+					// treat confirmed default-branch protection as sufficient
+					// evidence and otherwise skip as indeterminate instead of
+					// passing a possibly-unrestricted configuration.
+					if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
+						continue
+					}
+					indeterminate = append(indeterminate, env.GetName())
+					continue
+				}
+				// Neither protected branches nor custom policies effectively
+				// restricts which branches can deploy.
+				unrestricted = append(unrestricted, env.GetName())
 			}
 			if len(unrestricted) > 0 {
 				return Fail(fmt.Sprintf("environments deployable from any branch: %s", strings.Join(unrestricted, ", ")))
+			}
+			if len(indeterminate) > 0 {
+				return Skip(fmt.Sprintf("environments restrict to protected branches but repository branch protection could not be confirmed: %s", strings.Join(indeterminate, ", ")))
 			}
 			return Pass("all environments restrict which branches can deploy")
 		},

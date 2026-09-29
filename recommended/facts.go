@@ -236,10 +236,27 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	if environments, err := gh.ListEnvironments(ctx, g, repo); err == nil {
 		f.Environments = environments
 		f.EnvironmentsKnown = true
-	}
-	if envSecrets, err := gh.CollectEnvSecrets(ctx, g, repoInfo); err == nil {
-		f.EnvironmentSecrets = envSecrets
-		f.EnvironmentSecretsKnown = true
+
+		// Reuse the environments already listed above instead of calling
+		// gh.CollectEnvSecrets, which would list them a second time. Only
+		// secret-bearing environments are recorded, matching the map contract
+		// documented on EnvironmentSecrets.
+		envSecrets := make(map[string][]*github.Secret)
+		secretsKnown := true
+		for _, env := range environments {
+			secrets, err := gh.ListEnvSecrets(ctx, g, repo, env.GetName())
+			if err != nil {
+				secretsKnown = false
+				break
+			}
+			if len(secrets) > 0 {
+				envSecrets[env.GetName()] = secrets
+			}
+		}
+		if secretsKnown {
+			f.EnvironmentSecrets = envSecrets
+			f.EnvironmentSecretsKnown = true
+		}
 	}
 
 	return f, nil
