@@ -55,10 +55,6 @@ type RepositoryFacts struct {
 	AutomatedSecurityFixes        *gh.RepositorySecurityFeatureStatus
 	PrivateVulnerabilityReporting *gh.RepositorySecurityFeatureStatus
 
-	// ActionsPermissions is nil when the repository's Actions permissions could
-	// not be fetched (for example, Actions is managed at the organization level
-	// and not exposed to this token).
-	ActionsPermissions *github.ActionsPermissionsRepository
 	// DefaultWorkflowPermissions is nil when the GITHUB_TOKEN default workflow
 	// permissions for the repository could not be fetched.
 	DefaultWorkflowPermissions *github.DefaultWorkflowPermissionRepository
@@ -217,9 +213,6 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	}
 	if status, err := gh.GetPrivateVulnerabilityReporting(ctx, g, repo); err == nil {
 		f.PrivateVulnerabilityReporting = status
-	}
-	if permissions, err := gh.GetRepoActionsPermissions(ctx, g, repo); err == nil {
-		f.ActionsPermissions = permissions
 	}
 	if permissions, err := gh.GetRepoDefaultWorkflowPermissions(ctx, g, repo); err == nil {
 		f.DefaultWorkflowPermissions = permissions
