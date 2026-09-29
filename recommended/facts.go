@@ -61,6 +61,19 @@ type RepositoryFacts struct {
 	// ForkPRContributorApproval is nil when the fork PR contributor approval
 	// policy for the repository could not be fetched.
 	ForkPRContributorApproval *github.ContributorApprovalPermissions
+
+	Environments []*github.Environment
+	// EnvironmentsKnown is false when the environment list could not be
+	// fetched, so environment rules skip instead of treating the repository
+	// as having no environments.
+	EnvironmentsKnown bool
+	// EnvironmentSecrets maps environment name to its secrets, for
+	// environments that have at least one secret configured.
+	EnvironmentSecrets map[string][]*github.Secret
+	// EnvironmentSecretsKnown is false when environment secrets could not be
+	// listed for one or more environments, so rules that scope their severity
+	// to secret-bearing environments skip instead of assuming no secrets.
+	EnvironmentSecretsKnown bool
 }
 
 // isNotFound reports whether err represents a GitHub 404 response. It relies on
@@ -219,6 +232,14 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	}
 	if permissions, err := gh.GetRepoForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
+	}
+	if environments, err := gh.ListEnvironments(ctx, g, repo); err == nil {
+		f.Environments = environments
+		f.EnvironmentsKnown = true
+	}
+	if envSecrets, err := gh.CollectEnvSecrets(ctx, g, repoInfo); err == nil {
+		f.EnvironmentSecrets = envSecrets
+		f.EnvironmentSecretsKnown = true
 	}
 
 	return f, nil
