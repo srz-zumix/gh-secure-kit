@@ -94,3 +94,63 @@ func TestGSK511MembersCanChangeRepoVisibility(t *testing.T) {
 		t.Errorf("disabled: got %v, want pass", got)
 	}
 }
+
+func TestGSK512DefaultWorkflowPermissionsWrite(t *testing.T) {
+	if got := orgRuleOutcome(t, "GSK512", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown permissions: got %v, want skip", got)
+	}
+
+	f := &OrganizationFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionOrganization{
+		DefaultWorkflowPermissions: github.Ptr("write"),
+	}}
+	if got := orgRuleOutcome(t, "GSK512", f); got != StatusFail {
+		t.Errorf("write: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionOrganization{
+		DefaultWorkflowPermissions: github.Ptr("read"),
+	}}
+	if got := orgRuleOutcome(t, "GSK512", f); got != StatusPass {
+		t.Errorf("read: got %v, want pass", got)
+	}
+}
+
+func TestGSK513ActionsCanApprovePullRequests(t *testing.T) {
+	if got := orgRuleOutcome(t, "GSK513", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown permissions: got %v, want skip", got)
+	}
+
+	f := &OrganizationFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionOrganization{
+		CanApprovePullRequestReviews: github.Ptr(true),
+	}}
+	if got := orgRuleOutcome(t, "GSK513", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionOrganization{
+		CanApprovePullRequestReviews: github.Ptr(false),
+	}}
+	if got := orgRuleOutcome(t, "GSK513", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK514ForkPRContributorApprovalPolicy(t *testing.T) {
+	if got := orgRuleOutcome(t, "GSK514", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown policy: got %v, want skip", got)
+	}
+
+	f := &OrganizationFacts{ForkPRContributorApproval: &github.ContributorApprovalPermissions{
+		ApprovalPolicy: "first_time_contributors_new_to_github",
+	}}
+	if got := orgRuleOutcome(t, "GSK514", f); got != StatusFail {
+		t.Errorf("loose policy: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{ForkPRContributorApproval: &github.ContributorApprovalPermissions{
+		ApprovalPolicy: "all_external_contributors",
+	}}
+	if got := orgRuleOutcome(t, "GSK514", f); got != StatusPass {
+		t.Errorf("strict policy: got %v, want pass", got)
+	}
+}

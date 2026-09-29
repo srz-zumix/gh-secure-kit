@@ -54,6 +54,13 @@ type RepositoryFacts struct {
 	VulnerabilityAlerts           *gh.RepositorySecurityFeatureStatus
 	AutomatedSecurityFixes        *gh.RepositorySecurityFeatureStatus
 	PrivateVulnerabilityReporting *gh.RepositorySecurityFeatureStatus
+
+	// DefaultWorkflowPermissions is nil when the GITHUB_TOKEN default workflow
+	// permissions for the repository could not be fetched.
+	DefaultWorkflowPermissions *github.DefaultWorkflowPermissionRepository
+	// ForkPRContributorApproval is nil when the fork PR contributor approval
+	// policy for the repository could not be fetched.
+	ForkPRContributorApproval *github.ContributorApprovalPermissions
 }
 
 // isNotFound reports whether err represents a GitHub 404 response. It relies on
@@ -207,6 +214,12 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	if status, err := gh.GetPrivateVulnerabilityReporting(ctx, g, repo); err == nil {
 		f.PrivateVulnerabilityReporting = status
 	}
+	if permissions, err := gh.GetRepoDefaultWorkflowPermissions(ctx, g, repo); err == nil {
+		f.DefaultWorkflowPermissions = permissions
+	}
+	if permissions, err := gh.GetRepoForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
+		f.ForkPRContributorApproval = permissions
+	}
 
 	return f, nil
 }
@@ -222,6 +235,12 @@ type OrganizationFacts struct {
 	// configurations were successfully fetched. It stays false when the API
 	// call fails so rules can distinguish "unknown" from "empty".
 	DefaultSecurityConfigsKnown bool
+	// DefaultWorkflowPermissions is nil when the GITHUB_TOKEN default workflow
+	// permissions for the organization could not be fetched.
+	DefaultWorkflowPermissions *github.DefaultWorkflowPermissionOrganization
+	// ForkPRContributorApproval is nil when the fork PR contributor approval
+	// policy for the organization could not be fetched.
+	ForkPRContributorApproval *github.ContributorApprovalPermissions
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
@@ -242,6 +261,12 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	if configs, err := gh.ListDefaultCodeSecurityConfigurations(ctx, g, repo); err == nil {
 		f.DefaultSecurityConfigs = configs
 		f.DefaultSecurityConfigsKnown = true
+	}
+	if permissions, err := gh.GetOrgDefaultWorkflowPermissions(ctx, g, repo); err == nil {
+		f.DefaultWorkflowPermissions = permissions
+	}
+	if permissions, err := gh.GetOrgForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
+		f.ForkPRContributorApproval = permissions
 	}
 
 	return f, nil

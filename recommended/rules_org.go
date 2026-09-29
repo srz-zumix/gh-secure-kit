@@ -174,4 +174,58 @@ func registerOrganizationRules() {
 			return err
 		},
 	})
+
+	register(Rule{
+		ID: "GSK512", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityHigh, Title: "GITHUB_TOKEN default permissions are read-write", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.DefaultWorkflowPermissions == nil {
+				return Skip("could not retrieve default workflow permissions for the organization")
+			}
+			if f.DefaultWorkflowPermissions.GetDefaultWorkflowPermissions() == gh.DefaultWorkflowPermissionsWrite {
+				return Fail("the GITHUB_TOKEN default permissions are read-write for all workflows")
+			}
+			return Pass("the GITHUB_TOKEN default permissions are read-only")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgDefaultWorkflowPermissions(ctx, g, repo, gh.DefaultWorkflowPermissionsRead)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK513", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityHigh, Title: "Actions can approve pull requests", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.DefaultWorkflowPermissions == nil {
+				return Skip("could not retrieve default workflow permissions for the organization")
+			}
+			if f.DefaultWorkflowPermissions.GetCanApprovePullRequestReviews() {
+				return Fail("GitHub Actions is allowed to approve pull requests, which can bypass required reviews")
+			}
+			return Pass("GitHub Actions is not allowed to approve pull requests")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgActionsCanApprovePullRequestReviews(ctx, g, repo, false)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK514", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityHigh, Title: "Fork pull request workflows run without maintainer approval", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.ForkPRContributorApproval == nil {
+				return Skip("could not retrieve the fork pull request contributor approval policy for the organization")
+			}
+			policy := f.ForkPRContributorApproval.GetApprovalPolicy()
+			if policy == gh.ForkPRApprovalAllExternalContributors {
+				return Pass("all external contributors require maintainer approval to run fork pull request workflows")
+			}
+			return Fail(fmt.Sprintf("fork pull request workflows only require maintainer approval for %q, allowing some external contributors to run workflows without review", policy))
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			return gh.SetOrgForkPRContributorApprovalPolicy(ctx, g, repo, gh.ForkPRApprovalAllExternalContributors)
+		},
+	})
 }

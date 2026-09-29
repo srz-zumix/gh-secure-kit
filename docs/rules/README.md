@@ -45,6 +45,9 @@ catalog with severity, scope, and fixability.
 | [GSK129](GSK129.md) | Low | Yes | Conversation resolution not required before merge |
 | [GSK130](GSK130.md) | Info | No | Linear history not required |
 | [GSK131](GSK131.md) | Medium | No | Branch protection can be bypassed |
+| [GSK132](GSK132.md) | High | Yes | GITHUB_TOKEN default permissions are read-write |
+| [GSK133](GSK133.md) | High | Yes | Actions can approve pull requests |
+| [GSK134](GSK134.md) | High | Yes | Fork pull request workflows run without maintainer approval |
 
 ## Organization rules
 
@@ -61,3 +64,6 @@ catalog with severity, scope, and fixability.
 | [GSK509](GSK509.md) | High | Yes | Members can fork private repositories |
 | [GSK510](GSK510.md) | High | Yes | Members can delete repositories |
 | [GSK511](GSK511.md) | High | Yes | Members can change repository visibility |
+| [GSK512](GSK512.md) | High | Yes | GITHUB_TOKEN default permissions are read-write |
+| [GSK513](GSK513.md) | High | Yes | Actions can approve pull requests |
+| [GSK514](GSK514.md) | High | Yes | Fork pull request workflows run without maintainer approval |
