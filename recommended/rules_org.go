@@ -228,4 +228,34 @@ func registerOrganizationRules() {
 			return gh.SetOrgForkPRContributorApprovalPolicy(ctx, g, repo, gh.ForkPRApprovalAllExternalContributors)
 		},
 	})
+
+	register(Rule{
+		ID: "GSK515", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityMedium, Title: "Members can create private repositories", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.Org.GetMembersCanCreatePrivateRepos() {
+				return Fail("members are allowed to create private repositories")
+			}
+			return Pass("members are not allowed to create private repositories")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgMembersCanCreatePrivateRepos(ctx, g, repo, false)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK516", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityMedium, Title: "Members can create internal repositories", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.Org.GetMembersCanCreateInternalRepos() {
+				return Fail("members are allowed to create internal repositories")
+			}
+			return Pass("members are not allowed to create internal repositories")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgMembersCanCreateInternalRepos(ctx, g, repo, false)
+			return err
+		},
+	})
 }

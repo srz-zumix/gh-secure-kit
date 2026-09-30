@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v90 v90.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/srz-zumix/gh-diet-kit v0.5.0
-	github.com/srz-zumix/go-gh-extension v0.6.20
+	github.com/srz-zumix/go-gh-extension v0.6.21
 )
 
 require (
@@ -25,7 +25,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.1.6 // indirect
-	github.com/Songmu/skillsmith v0.1.0 // indirect
+	github.com/Songmu/skillsmith v0.2.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bradleyfalzon/ghinstallation/v2 v2.19.0 // indirect
