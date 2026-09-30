@@ -63,8 +63,8 @@ func environmentProtectionRule(env *github.Environment, ruleType string) *github
 }
 
 // activeRulesetProtectsAllBranches reports whether an active branch ruleset with
-// at least one rule applies to every branch of the repository (a "~ALL" target
-// with no exclusions). When every branch is protected, an environment limited to
+// at least one rule applies to every branch of the repository (a "~ALL",
+// "refs/heads/**" or "**" target with no exclusions). When every branch is protected, an environment limited to
 // "protected branches only" can still deploy from any branch, so the setting
 // does not actually restrict deployments.
 func activeRulesetProtectsAllBranches(f *RepositoryFacts) bool {
@@ -86,7 +86,10 @@ func activeRulesetProtectsAllBranches(f *RepositoryFacts) bool {
 			continue
 		}
 		for _, pattern := range cond.RefName.Include {
-			if pattern == "~ALL" {
+			// "**" matches across "/", so these fnmatch patterns cover every
+			// branch just like "~ALL" (see matchRefPattern).
+			switch pattern {
+			case "~ALL", "refs/heads/**", "**":
 				return true
 			}
 		}

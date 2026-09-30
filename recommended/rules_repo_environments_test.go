@@ -238,6 +238,34 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		t.Errorf("protected branches with ~ALL ruleset protecting every branch: got %v, want fail", got)
 	}
 
+	// fnmatch patterns where "**" spans every branch (including names with "/")
+	// are equivalent to "~ALL".
+	for _, pattern := range []string{"refs/heads/**", "**"} {
+		f = &RepositoryFacts{
+			EnvironmentsKnown: true,
+			RulesetsKnown:     true,
+			Repo:              &github.Repository{DefaultBranch: github.Ptr("main")},
+			Rulesets: []*github.RepositoryRuleset{
+				{
+					Enforcement: "active",
+					Target:      github.Ptr(github.RulesetTargetBranch),
+					Conditions: &github.RepositoryRulesetConditions{
+						RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{pattern}},
+					},
+					Rules: &github.RepositoryRulesetRules{
+						Deletion: &github.EmptyRuleParameters{},
+					},
+				},
+			},
+			Environments: []*github.Environment{
+				{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+			},
+		}
+		if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
+			t.Errorf("protected branches with %q ruleset protecting every branch: got %v, want fail", pattern, got)
+		}
+	}
+
 	// An allow-list of branch name patterns restricts deployments only when the
 	// patterns are known and not catch-all.
 	f = &RepositoryFacts{
