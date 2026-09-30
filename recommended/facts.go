@@ -61,6 +61,31 @@ type RepositoryFacts struct {
 	// ForkPRContributorApproval is nil when the fork PR contributor approval
 	// policy for the repository could not be fetched.
 	ForkPRContributorApproval *github.ContributorApprovalPermissions
+
+	Environments []*github.Environment
+	// EnvironmentsKnown is false when the environment list could not be
+	// fetched, so environment rules skip instead of treating the repository
+	// as having no environments.
+	EnvironmentsKnown bool
+	// EnvironmentSecrets maps environment name to its secrets, for
+	// environments that have at least one secret configured.
+	EnvironmentSecrets map[string][]*github.Secret
+	// EnvironmentSecretsKnown maps environment name to whether that
+	// environment's secrets could be listed. Environments whose secrets could
+	// not be read are absent, so a failure for one environment does not discard
+	// the confirmed results of the others: rules can report violations for the
+	// environments that were read and skip only the ones that remain unknown.
+	EnvironmentSecretsKnown map[string]bool
+	// EnvironmentBranchPolicies maps environment name to its custom deployment
+	// branch policies, for environments that enable custom branch policies. It
+	// is only populated when a selected rule needs to inspect the actual
+	// branch-name patterns (rather than the deployment-branch-policy booleans).
+	EnvironmentBranchPolicies map[string][]*github.DeploymentBranchPolicy
+	// EnvironmentBranchPoliciesKnown maps environment name to whether that
+	// environment's custom branch policies could be listed. Environments whose
+	// policies could not be read are absent, so a failure for one environment
+	// does not discard the confirmed results of the others.
+	EnvironmentBranchPoliciesKnown map[string]bool
 }
 
 // isNotFound reports whether err represents a GitHub 404 response. It relies on
@@ -148,10 +173,13 @@ func anyFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repo
 	return github.Ptr(false)
 }
 
-// CollectRepositoryFacts gathers the data required to evaluate all repository-scoped rules.
+// CollectRepositoryFacts gathers the data required to evaluate the given repository-scoped
+// rules. Facts whose collection scales with the number of environments (environment secrets
+// and custom branch policies) are only collected when a selected rule actually needs them,
+// so unrelated checks do not pay their per-environment API cost.
 // Individual collectors are best-effort: a permission error or 404 degrades the related
 // facts to their zero value instead of aborting the whole collection.
-func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository) (*RepositoryFacts, error) {
+func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) (*RepositoryFacts, error) {
 	repoInfo, err := gh.GetRepository(ctx, g, repo)
 	if err != nil {
 		return nil, err
@@ -219,6 +247,61 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	}
 	if permissions, err := gh.GetRepoForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
+	}
+	needSecrets, needBranchPolicies := environmentFactNeeds(rules)
+	if needSecrets || needBranchPolicies {
+		if environments, err := gh.ListEnvironments(ctx, g, repo); err == nil {
+			f.Environments = environments
+			f.EnvironmentsKnown = true
+
+			if needSecrets {
+				// Reuse the environments already listed above instead of calling
+				// gh.CollectEnvSecrets, which would list them a second time. Only
+				// secret-bearing environments are recorded, matching the map contract
+				// documented on EnvironmentSecrets. A failure for one environment is
+				// isolated to that environment (left out of EnvironmentSecretsKnown)
+				// so the confirmed results of the others are preserved.
+				envSecrets := make(map[string][]*github.Secret)
+				secretsKnown := make(map[string]bool)
+				for _, env := range environments {
+					secrets, err := gh.ListEnvSecrets(ctx, g, repo, env.GetName())
+					if err != nil {
+						continue
+					}
+					secretsKnown[env.GetName()] = true
+					if len(secrets) > 0 {
+						envSecrets[env.GetName()] = secrets
+					}
+				}
+				f.EnvironmentSecrets = envSecrets
+				f.EnvironmentSecretsKnown = secretsKnown
+			}
+
+			if needBranchPolicies {
+				// Only environments that enable custom branch policies have patterns
+				// to inspect; the rest are classified from the deployment-branch-policy
+				// booleans alone, so no extra request is made for them. A failure for
+				// one environment is isolated to that environment (left out of
+				// EnvironmentBranchPoliciesKnown) so the confirmed results of the
+				// others are preserved.
+				branchPolicies := make(map[string][]*github.DeploymentBranchPolicy)
+				policiesKnown := make(map[string]bool)
+				for _, env := range environments {
+					policy := env.GetDeploymentBranchPolicy()
+					if policy == nil || !policy.GetCustomBranchPolicies() {
+						continue
+					}
+					policies, err := gh.ListDeploymentCustomBranchPolicies(ctx, g, repo, env)
+					if err != nil {
+						continue
+					}
+					branchPolicies[env.GetName()] = policies
+					policiesKnown[env.GetName()] = true
+				}
+				f.EnvironmentBranchPolicies = branchPolicies
+				f.EnvironmentBranchPoliciesKnown = policiesKnown
+			}
+		}
 	}
 
 	return f, nil

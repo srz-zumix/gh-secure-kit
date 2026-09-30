@@ -48,6 +48,9 @@ catalog with severity, scope, and fixability.
 | [GSK132](GSK132.md) | High | Yes | GITHUB_TOKEN default permissions are read-write |
 | [GSK133](GSK133.md) | High | Yes | Actions can approve pull requests |
 | [GSK134](GSK134.md) | High | Yes | Fork pull request workflows run without maintainer approval |
+| [GSK135](GSK135.md) | Medium | No | Environment with secrets has no required reviewers configured |
+| [GSK136](GSK136.md) | High | Yes | Environment with secrets allows self-review |
+| [GSK137](GSK137.md) | Medium | No | Environment deployment branch policy allows all branches |
 
 ## Organization rules
 
