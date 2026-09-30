@@ -71,6 +71,30 @@ func TestGSK509MembersCanForkPrivateRepos(t *testing.T) {
 	}
 }
 
+func TestGSK515MembersCanCreatePrivateRepos(t *testing.T) {
+	f := &OrganizationFacts{Org: &github.Organization{MembersCanCreatePrivateRepos: github.Ptr(true)}}
+	if got := orgRuleOutcome(t, "GSK515", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{Org: &github.Organization{MembersCanCreatePrivateRepos: github.Ptr(false)}}
+	if got := orgRuleOutcome(t, "GSK515", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK516MembersCanCreateInternalRepos(t *testing.T) {
+	f := &OrganizationFacts{Org: &github.Organization{MembersCanCreateInternalRepos: github.Ptr(true)}}
+	if got := orgRuleOutcome(t, "GSK516", f); got != StatusFail {
+		t.Errorf("enabled: got %v, want fail", got)
+	}
+
+	f = &OrganizationFacts{Org: &github.Organization{MembersCanCreateInternalRepos: github.Ptr(false)}}
+	if got := orgRuleOutcome(t, "GSK516", f); got != StatusPass {
+		t.Errorf("disabled: got %v, want pass", got)
+	}
+}
+
 func TestGSK510MembersCanDeleteRepositories(t *testing.T) {
 	f := &OrganizationFacts{Org: &github.Organization{MembersCanDeleteRepositories: github.Ptr(true)}}
 	if got := orgRuleOutcome(t, "GSK510", f); got != StatusFail {

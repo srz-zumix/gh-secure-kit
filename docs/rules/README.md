@@ -70,3 +70,5 @@ catalog with severity, scope, and fixability.
 | [GSK512](GSK512.md) | High | Yes | GITHUB_TOKEN default permissions are read-write |
 | [GSK513](GSK513.md) | High | Yes | Actions can approve pull requests |
 | [GSK514](GSK514.md) | High | Yes | Fork pull request workflows run without maintainer approval |
+| [GSK515](GSK515.md) | Medium | Yes | Members can create private repositories |
+| [GSK516](GSK516.md) | Medium | Yes | Members can create internal repositories |
