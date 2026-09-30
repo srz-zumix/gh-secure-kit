@@ -17,16 +17,19 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 		t.Errorf("unknown environments: got %v, want skip", got)
 	}
 
-	if got := ruleOutcome(t, "GSK135", &RepositoryFacts{EnvironmentsKnown: true}); got != StatusSkip {
+	if got := ruleOutcome(t, "GSK135", &RepositoryFacts{
+		EnvironmentsKnown: true,
+		Environments:      []*github.Environment{{Name: github.Ptr("production")}},
+	}); got != StatusSkip {
 		t.Errorf("unknown environment secrets: got %v, want skip", got)
 	}
 
-	f := &RepositoryFacts{EnvironmentsKnown: true, EnvironmentSecretsKnown: true}
+	f := &RepositoryFacts{EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{}}
 	if got := ruleOutcome(t, "GSK135", f); got != StatusPass {
 		t.Errorf("no environments: got %v, want pass", got)
 	}
 
-	f = &RepositoryFacts{EnvironmentsKnown: true, EnvironmentSecretsKnown: true, Environments: []*github.Environment{
+	f = &RepositoryFacts{EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true}, Environments: []*github.Environment{
 		{Name: github.Ptr("production")},
 	}}
 	if got := ruleOutcome(t, "GSK135", f); got != StatusPass {
@@ -34,7 +37,7 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	}
 
 	f = &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production")},
 		},
@@ -46,8 +49,24 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 		t.Errorf("environment with secrets but no protection rules: got %v, want fail", got)
 	}
 
+	// A confirmed missing-reviewer environment fails even when another
+	// environment's secrets could not be read.
 	f = &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production")},
+			{Name: github.Ptr("staging")},
+		},
+		EnvironmentSecrets: map[string][]*github.Secret{
+			"production": {{Name: "TOKEN"}},
+		},
+	}
+	if got := ruleOutcome(t, "GSK135", f); got != StatusFail {
+		t.Errorf("confirmed missing reviewer with another unreadable environment: got %v, want fail", got)
+	}
+
+	f = &RepositoryFacts{
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
 				{Type: github.Ptr("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: github.Ptr("User")}}},
@@ -94,12 +113,15 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 		t.Errorf("unknown environments: got %v, want skip", got)
 	}
 
-	if got := ruleOutcome(t, "GSK136", &RepositoryFacts{EnvironmentsKnown: true}); got != StatusSkip {
+	if got := ruleOutcome(t, "GSK136", &RepositoryFacts{
+		EnvironmentsKnown: true,
+		Environments:      []*github.Environment{{Name: github.Ptr("production")}},
+	}); got != StatusSkip {
 		t.Errorf("unknown environment secrets: got %v, want skip", got)
 	}
 
 	f := &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
 				{
@@ -115,7 +137,7 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	}
 
 	f = &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
 				{
@@ -134,7 +156,7 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	}
 
 	f = &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
 				{
@@ -189,11 +211,38 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		t.Errorf("protected branches with confirmed protection: got %v, want pass", got)
 	}
 
+	// A ruleset that targets every branch ("~ALL") protects all branches, so
+	// "protected branches only" still allows every branch to deploy and is
+	// therefore unrestricted despite the confirmed default-branch protection.
+	f = &RepositoryFacts{
+		EnvironmentsKnown: true,
+		RulesetsKnown:     true,
+		Repo:              &github.Repository{DefaultBranch: github.Ptr("main")},
+		Rulesets: []*github.RepositoryRuleset{
+			{
+				Enforcement: "active",
+				Target:      github.Ptr(github.RulesetTargetBranch),
+				Conditions: &github.RepositoryRulesetConditions{
+					RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~ALL"}},
+				},
+				Rules: &github.RepositoryRulesetRules{
+					Deletion: &github.EmptyRuleParameters{},
+				},
+			},
+		},
+		Environments: []*github.Environment{
+			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+		},
+	}
+	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
+		t.Errorf("protected branches with ~ALL ruleset protecting every branch: got %v, want fail", got)
+	}
+
 	// An allow-list of branch name patterns restricts deployments only when the
 	// patterns are known and not catch-all.
 	f = &RepositoryFacts{
 		EnvironmentsKnown:              true,
-		EnvironmentBranchPoliciesKnown: true,
+		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
 		},
@@ -209,7 +258,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	// actually restrict deployments.
 	f = &RepositoryFacts{
 		EnvironmentsKnown:              true,
-		EnvironmentBranchPoliciesKnown: true,
+		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
 		},
@@ -225,7 +274,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	// deployable, so the environment is still restricted.
 	f = &RepositoryFacts{
 		EnvironmentsKnown:              true,
-		EnvironmentBranchPoliciesKnown: true,
+		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
 		},
@@ -290,7 +339,7 @@ func TestGSK136ApplyRepoUpdatesOnlySecretBearingEnvironments(t *testing.T) {
 	// "staging" has no secrets, so remediation must leave it untouched even
 	// though its configuration also allows self-review.
 	f := &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
 			gsk136SecretEnvironment("production"),
 			gsk136SecretEnvironment("staging"),
@@ -346,7 +395,7 @@ func TestGSK136ApplyRepoPropagatesUpdateError(t *testing.T) {
 	}
 
 	f := &RepositoryFacts{
-		EnvironmentsKnown: true, EnvironmentSecretsKnown: true,
+		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{gsk136SecretEnvironment("production")},
 		EnvironmentSecrets: map[string][]*github.Secret{
 			"production": {{Name: "TOKEN"}},

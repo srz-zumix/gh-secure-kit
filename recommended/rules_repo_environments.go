@@ -62,28 +62,74 @@ func environmentProtectionRule(env *github.Environment, ruleType string) *github
 	return nil
 }
 
+// activeRulesetProtectsAllBranches reports whether an active branch ruleset with
+// at least one rule applies to every branch of the repository (a "~ALL" target
+// with no exclusions). When every branch is protected, an environment limited to
+// "protected branches only" can still deploy from any branch, so the setting
+// does not actually restrict deployments.
+func activeRulesetProtectsAllBranches(f *RepositoryFacts) bool {
+	if f == nil || !f.RulesetsKnown {
+		return false
+	}
+	for _, rs := range f.Rulesets {
+		if rs.GetEnforcement() != "active" {
+			continue
+		}
+		if t := rs.Target; t != nil && *t != github.RulesetTargetBranch {
+			continue
+		}
+		if !gh.HasAnyRulesetRule(rs.Rules) {
+			continue
+		}
+		cond := rs.Conditions
+		if cond == nil || cond.RefName == nil || len(cond.RefName.Exclude) > 0 {
+			continue
+		}
+		for _, pattern := range cond.RefName.Include {
+			if pattern == "~ALL" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func registerRepositoryEnvironmentRules() {
 	register(Rule{
 		ID: "GSK135", GHQRID: "", Scope: ScopeRepository,
 		Category: "environments", Severity: SeverityMedium, Title: "Environment with secrets has no required reviewers configured",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if !f.EnvironmentsKnown || !f.EnvironmentSecretsKnown {
-				return Skip("could not read environments or environment secrets")
+			if !f.EnvironmentsKnown {
+				return Skip("could not read environments")
 			}
-			var missing []string
+			var missing, unknown []string
 			for _, env := range f.Environments {
-				if len(f.EnvironmentSecrets[env.GetName()]) == 0 {
+				name := env.GetName()
+				if !f.EnvironmentSecretsKnown[name] {
+					// The secrets of this environment could not be read, so a
+					// missing reviewer here can neither be confirmed nor ruled
+					// out; it is reported as indeterminate below.
+					unknown = append(unknown, name)
+					continue
+				}
+				if len(f.EnvironmentSecrets[name]) == 0 {
 					// Environments without secrets have nothing sensitive for a
 					// reviewer to gate, so a missing reviewer isn't reported here.
 					continue
 				}
 				rule := environmentProtectionRule(env, "required_reviewers")
 				if rule == nil || len(rule.GetReviewers()) == 0 {
-					missing = append(missing, env.GetName())
+					missing = append(missing, name)
 				}
 			}
+			// Report confirmed violations before skipping, so a single
+			// unreadable environment does not mask an environment already
+			// known to lack required reviewers.
 			if len(missing) > 0 {
 				return Fail(fmt.Sprintf("environments with secrets but no required reviewers: %s", strings.Join(missing, ", ")))
+			}
+			if len(unknown) > 0 {
+				return Skip(fmt.Sprintf("could not read secrets for environments: %s", strings.Join(unknown, ", ")))
 			}
 			return Pass("all environments with secrets require reviewers before deployment")
 		},
@@ -93,30 +139,43 @@ func registerRepositoryEnvironmentRules() {
 		ID: "GSK136", GHQRID: "", Scope: ScopeRepository,
 		Category: "environments", Severity: SeverityHigh, Title: "Environment with secrets allows self-review", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
-			if !f.EnvironmentsKnown || !f.EnvironmentSecretsKnown {
-				return Skip("could not read environments or environment secrets")
+			if !f.EnvironmentsKnown {
+				return Skip("could not read environments")
 			}
-			var selfReview []string
+			var selfReview, unknown []string
 			for _, env := range f.Environments {
-				if len(f.EnvironmentSecrets[env.GetName()]) == 0 {
+				name := env.GetName()
+				if !f.EnvironmentSecretsKnown[name] {
+					unknown = append(unknown, name)
+					continue
+				}
+				if len(f.EnvironmentSecrets[name]) == 0 {
 					continue
 				}
 				rule := environmentProtectionRule(env, "required_reviewers")
 				if rule != nil && len(rule.GetReviewers()) > 0 && !rule.GetPreventSelfReview() {
-					selfReview = append(selfReview, env.GetName())
+					selfReview = append(selfReview, name)
 				}
 			}
+			// Report confirmed violations before skipping, so a single
+			// unreadable environment does not mask an environment already
+			// known to allow self-review.
 			if len(selfReview) > 0 {
 				return Fail(fmt.Sprintf("environments with secrets allowing self-review: %s", strings.Join(selfReview, ", ")))
+			}
+			if len(unknown) > 0 {
+				return Skip(fmt.Sprintf("could not read secrets for environments: %s", strings.Join(unknown, ", ")))
 			}
 			return Pass("no environment with secrets allows self-review")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
 			for _, env := range f.Environments {
+				name := env.GetName()
 				// Only secret-bearing environments are flagged by the check, so
 				// remediation must not touch environments without secrets even if
-				// they happen to allow self-review.
-				if len(f.EnvironmentSecrets[env.GetName()]) == 0 {
+				// they happen to allow self-review. Environments whose secrets
+				// could not be read are left untouched for the same reason.
+				if !f.EnvironmentSecretsKnown[name] || len(f.EnvironmentSecrets[name]) == 0 {
 					continue
 				}
 				rule := environmentProtectionRule(env, "required_reviewers")
@@ -125,8 +184,8 @@ func registerRepositoryEnvironmentRules() {
 				}
 				req := gh.EnvironmentToCreateUpdateRequest(env)
 				req.PreventSelfReview = github.Ptr(true)
-				if _, err := gh.CreateUpdateEnvironment(ctx, g, repo, env.GetName(), req); err != nil {
-					return fmt.Errorf("failed to enable prevent-self-review for environment %q: %w", env.GetName(), err)
+				if _, err := gh.CreateUpdateEnvironment(ctx, g, repo, name, req); err != nil {
+					return fmt.Errorf("failed to enable prevent-self-review for environment %q: %w", name, err)
 				}
 			}
 			return nil
@@ -142,9 +201,10 @@ func registerRepositoryEnvironmentRules() {
 			}
 			var unrestricted, indeterminate []string
 			for _, env := range f.Environments {
+				name := env.GetName()
 				policy := env.GetDeploymentBranchPolicy()
 				if policy == nil {
-					unrestricted = append(unrestricted, env.GetName())
+					unrestricted = append(unrestricted, name)
 					continue
 				}
 				if policy.GetCustomBranchPolicies() {
@@ -154,33 +214,40 @@ func registerRepositoryEnvironmentRules() {
 					// this, so inspect the fetched patterns; when they could not
 					// be read, treat the environment as indeterminate instead of
 					// passing a possibly-unrestricted configuration.
-					if !f.EnvironmentBranchPoliciesKnown {
-						indeterminate = append(indeterminate, env.GetName())
+					if !f.EnvironmentBranchPoliciesKnown[name] {
+						indeterminate = append(indeterminate, name)
 						continue
 					}
-					if environmentHasCatchAllBranchPolicy(f.EnvironmentBranchPolicies[env.GetName()]) {
-						unrestricted = append(unrestricted, env.GetName())
+					if environmentHasCatchAllBranchPolicy(f.EnvironmentBranchPolicies[name]) {
+						unrestricted = append(unrestricted, name)
 						continue
 					}
 					continue
 				}
 				if policy.GetProtectedBranches() {
-					// "Protected branches only" restricts deployments only when the
-					// repository actually has at least one protected branch. With no
-					// branch protection anywhere, GitHub allows every branch to
-					// deploy. Facts only reveal the default branch's protection, so
-					// treat confirmed default-branch protection as sufficient
-					// evidence and otherwise skip as indeterminate instead of
-					// passing a possibly-unrestricted configuration.
+					// "Protected branches only" restricts deployments only when
+					// some branches are protected and others are not. If a
+					// ruleset protects every branch, every branch is deployable,
+					// so the environment is unrestricted despite the setting.
+					if activeRulesetProtectsAllBranches(f) {
+						unrestricted = append(unrestricted, name)
+						continue
+					}
+					// With no branch protection anywhere, GitHub allows every
+					// branch to deploy. Facts only reveal the default branch's
+					// protection, so treat confirmed default-branch protection as
+					// sufficient evidence of a restriction and otherwise skip as
+					// indeterminate instead of passing a possibly-unrestricted
+					// configuration.
 					if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
 						continue
 					}
-					indeterminate = append(indeterminate, env.GetName())
+					indeterminate = append(indeterminate, name)
 					continue
 				}
 				// Neither protected branches nor custom policies effectively
 				// restricts which branches can deploy.
-				unrestricted = append(unrestricted, env.GetName())
+				unrestricted = append(unrestricted, name)
 			}
 			if len(unrestricted) > 0 {
 				return Fail(fmt.Sprintf("environments deployable from any branch: %s", strings.Join(unrestricted, ", ")))
