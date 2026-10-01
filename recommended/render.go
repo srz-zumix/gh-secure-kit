@@ -2,10 +2,35 @@ package recommended
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/srz-zumix/go-gh-extension/pkg/render"
 )
+
+// detailWrapWidth is the maximum width of a line in the Detail table column.
+const detailWrapWidth = 60
+
+// wrapText breaks s at word boundaries into lines of at most width characters.
+// A single word longer than width is kept on its own line.
+func wrapText(s string, width int) string {
+	var lines []string
+	var line strings.Builder
+	for _, word := range strings.Fields(s) {
+		if line.Len() > 0 && line.Len()+1+len(word) > width {
+			lines = append(lines, line.String())
+			line.Reset()
+		}
+		if line.Len() > 0 {
+			line.WriteByte(' ')
+		}
+		line.WriteString(word)
+	}
+	if line.Len() > 0 {
+		lines = append(lines, line.String())
+	}
+	return strings.Join(lines, "\n")
+}
 
 // resultJSON is the JSON-friendly representation of a Result, omitting the
 // Rule's non-serializable Check/Apply function fields.
@@ -63,7 +88,7 @@ func RenderResults(exporter cmdutil.Exporter, results []Result) error {
 			string(res.Status),
 			fmt.Sprintf("%t", res.Rule.Fixable),
 			res.Rule.Title,
-			res.Detail,
+			wrapText(res.Detail, detailWrapWidth),
 		})
 	}
 	return table.Render()
@@ -185,7 +210,7 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult, dryRun
 			string(res.Status),
 			applied,
 			res.Rule.Title,
-			res.Detail,
+			wrapText(res.Detail, detailWrapWidth),
 		})
 	}
 	return table.Render()
