@@ -20,21 +20,23 @@ func init() {
 }
 
 var (
-	fullSemverTag = regexp.MustCompile(`^(v?)\d+\.\d+\.\d+(?:[-+].*)?$`)
+	fullSemverTag = regexp.MustCompile(`^(v?)(\d+)\.(\d+)\.\d+(?:[-+].*)?$`)
 	majorOnlyTag  = regexp.MustCompile(`^(v?)\d+$`)
 	majorMinorTag = regexp.MustCompile(`^(v?)\d+\.\d+$`)
 )
 
 // abbreviatedTagExcludePatterns returns ruleset ref patterns for moving tags such
 // as "v1" or "v1.2". A tag is moving when it points at the same commit as a
-// full SemVer tag with the same prefix; protecting those would block the
-// routine re-pointing of major/minor tags on release.
+// full SemVer tag with the same prefix and version components (e.g. "v1" or
+// "v1.2" with "v1.2.3"); protecting those would block the routine re-pointing
+// of major/minor tags on release.
 func abbreviatedTagExcludePatterns(tags []*github.RepositoryTag) []string {
 	fullAt := make(map[string]bool)
 	for _, t := range tags {
 		sha := t.GetCommit().GetSHA()
 		if m := fullSemverTag.FindStringSubmatch(t.GetName()); m != nil && sha != "" {
-			fullAt[m[1]+"|"+sha] = true
+			fullAt[m[1]+m[2]+"|"+sha] = true
+			fullAt[m[1]+m[2]+"."+m[3]+"|"+sha] = true
 		}
 	}
 
@@ -46,13 +48,13 @@ func abbreviatedTagExcludePatterns(tags []*github.RepositoryTag) []string {
 	patterns := make(map[string]struct{})
 	for _, t := range tags {
 		name := t.GetName()
-		key := func(prefix string) string { return prefix + "|" + t.GetCommit().GetSHA() }
-		if m := majorOnlyTag.FindStringSubmatch(name); m != nil && fullAt[key(m[1])] {
+		key := name + "|" + t.GetCommit().GetSHA()
+		if m := majorOnlyTag.FindStringSubmatch(name); m != nil && fullAt[key] {
 			for d := 1; d <= maxDigits; d++ {
 				patterns["refs/tags/"+m[1]+digits(d)] = struct{}{}
 			}
 		}
-		if m := majorMinorTag.FindStringSubmatch(name); m != nil && fullAt[key(m[1])] {
+		if m := majorMinorTag.FindStringSubmatch(name); m != nil && fullAt[key] {
 			for major := 1; major <= maxDigits; major++ {
 				for minor := 1; minor <= maxDigits; minor++ {
 					patterns["refs/tags/"+m[1]+digits(major)+"."+digits(minor)] = struct{}{}

@@ -49,6 +49,16 @@ func TestAbbreviatedTagExcludePatterns(t *testing.T) {
 			want: []string{},
 		},
 		{
+			name: "major must match the full semver tag",
+			tags: []*github.RepositoryTag{tag("v2.0.0", "aaa"), tag("v1", "aaa")},
+			want: []string{},
+		},
+		{
+			name: "major.minor must match the full semver tag",
+			tags: []*github.RepositoryTag{tag("v1.3.0", "aaa"), tag("v1.2", "aaa"), tag("v2.2", "aaa")},
+			want: []string{},
+		},
+		{
 			name: "no full semver tag",
 			tags: []*github.RepositoryTag{tag("v1", "aaa"), tag("release", "aaa")},
 			want: []string{},
