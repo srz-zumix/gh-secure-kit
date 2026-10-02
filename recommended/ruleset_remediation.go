@@ -113,7 +113,13 @@ func (r *branchProtectionRulesetRemediation) Ruleset() *github.RepositoryRuleset
 // UpdatePayload removes server-managed fields before sending an existing
 // ruleset back to GitHub while retaining user-configurable fields and rules.
 func (r *branchProtectionRulesetRemediation) UpdatePayload() *github.RepositoryRuleset {
-	payload := *r.ruleset
+	return rulesetUpdatePayload(r.ruleset)
+}
+
+// rulesetUpdatePayload returns a copy of ruleset without the server-managed
+// fields that GitHub rejects on update.
+func rulesetUpdatePayload(ruleset *github.RepositoryRuleset) *github.RepositoryRuleset {
+	payload := *ruleset
 	payload.ID = nil
 	payload.Source = ""
 	payload.SourceType = nil

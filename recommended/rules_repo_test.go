@@ -64,6 +64,47 @@ func TestDeployKeyRulesSkipWhenDataUnknown(t *testing.T) {
 	}
 }
 
+func TestGSK139ImmutableReleases(t *testing.T) {
+	tests := []struct {
+		name  string
+		facts *RepositoryFacts
+		want  Status
+	}{
+		{"unknown tags", &RepositoryFacts{}, StatusSkip},
+		{"no tags", &RepositoryFacts{HasTags: github.Ptr(false)}, StatusSkip},
+		{"status unknown", &RepositoryFacts{HasTags: github.Ptr(true)}, StatusSkip},
+		{"disabled", &RepositoryFacts{HasTags: github.Ptr(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: github.Ptr(false)}}, StatusFail},
+		{"enabled", &RepositoryFacts{HasTags: github.Ptr(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: github.Ptr(true)}}, StatusPass},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ruleOutcome(t, "GSK139", tt.facts); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGSK142AllowForking(t *testing.T) {
+	tests := []struct {
+		name string
+		repo *github.Repository
+		want Status
+	}{
+		{"public repository", &github.Repository{Visibility: github.Ptr("public"), AllowForking: github.Ptr(true)}, StatusSkip},
+		{"setting unavailable", &github.Repository{Visibility: github.Ptr("private")}, StatusSkip},
+		{"forking allowed", &github.Repository{Visibility: github.Ptr("internal"), AllowForking: github.Ptr(true)}, StatusFail},
+		{"forking disabled", &github.Repository{Visibility: github.Ptr("private"), AllowForking: github.Ptr(false)}, StatusPass},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ruleOutcome(t, "GSK142", &RepositoryFacts{Repo: tt.repo}); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestGSK102SkipsWhenAlertsUnknownOrDisabled(t *testing.T) {
 	tests := []struct {
 		name string

@@ -178,3 +178,82 @@ func TestGSK514ForkPRContributorApprovalPolicy(t *testing.T) {
 		t.Errorf("strict policy: got %v, want pass", got)
 	}
 }
+
+func TestGSK517OrgSHAPinningRequired(t *testing.T) {
+	tests := []struct {
+		name string
+		perm *github.ActionsPermissions
+		want Status
+	}{
+		{"unknown permissions", nil, StatusSkip},
+		{"actions disabled", &github.ActionsPermissions{EnabledRepositories: github.Ptr("none")}, StatusSkip},
+		{"not required", &github.ActionsPermissions{EnabledRepositories: github.Ptr("all")}, StatusFail},
+		{"required", &github.ActionsPermissions{EnabledRepositories: github.Ptr("all"), SHAPinningRequired: github.Ptr(true)}, StatusPass},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := orgRuleOutcome(t, "GSK517", &OrganizationFacts{ActionsPermissions: tt.perm}); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGSK518OrgImmutableReleases(t *testing.T) {
+	tests := []struct {
+		name     string
+		settings *github.ImmutableReleaseSettings
+		want     Status
+	}{
+		{"unknown settings", nil, StatusSkip},
+		{"none", &github.ImmutableReleaseSettings{EnforcedRepositories: github.Ptr("none")}, StatusFail},
+		{"selected", &github.ImmutableReleaseSettings{EnforcedRepositories: github.Ptr("selected")}, StatusFail},
+		{"all", &github.ImmutableReleaseSettings{EnforcedRepositories: github.Ptr("all")}, StatusPass},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := orgRuleOutcome(t, "GSK518", &OrganizationFacts{ImmutableReleases: tt.settings}); got != tt.want {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGSK519OrgPrivateForkPRWorkflows(t *testing.T) {
+	if got := orgRuleOutcome(t, "GSK519", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown settings: got %v, want skip", got)
+	}
+	f := &OrganizationFacts{PrivateForkPRWorkflows: &github.WorkflowsPermissions{
+		RunWorkflowsFromForkPullRequests: github.Ptr(true),
+		SendWriteTokensToWorkflows:       github.Ptr(true),
+	}}
+	if got := orgRuleOutcome(t, "GSK519", f); got != StatusFail {
+		t.Errorf("write tokens sent: got %v, want fail", got)
+	}
+	f = &OrganizationFacts{PrivateForkPRWorkflows: &github.WorkflowsPermissions{
+		RunWorkflowsFromForkPullRequests: github.Ptr(false),
+		SendSecretsAndVariables:          github.Ptr(true),
+	}}
+	if got := orgRuleOutcome(t, "GSK519", f); got != StatusPass {
+		t.Errorf("fork workflows disabled: got %v, want pass", got)
+	}
+}
+
+func TestGSK520ExcessiveOrgOwners(t *testing.T) {
+	owners := func(n int) []*github.User {
+		users := make([]*github.User, n)
+		for i := range users {
+			users[i] = &github.User{Login: github.Ptr("owner")}
+		}
+		return users
+	}
+	if got := orgRuleOutcome(t, "GSK520", &OrganizationFacts{}); got != StatusSkip {
+		t.Errorf("unknown owners: got %v, want skip", got)
+	}
+	if got := orgRuleOutcome(t, "GSK520", &OrganizationFacts{OwnersKnown: true, Owners: owners(3)}); got != StatusPass {
+		t.Errorf("3 owners: got %v, want pass", got)
+	}
+	if got := orgRuleOutcome(t, "GSK520", &OrganizationFacts{OwnersKnown: true, Owners: owners(4)}); got != StatusFail {
+		t.Errorf("4 owners: got %v, want fail", got)
+	}
+}
