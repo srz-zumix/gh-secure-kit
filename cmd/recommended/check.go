@@ -20,6 +20,7 @@ func NewCheckCmd() *cobra.Command {
 	var status string
 	var ruleIDs []string
 	var ignoreIDs []string
+	var configFile string
 	var fixableOnly bool
 	var exitCode bool
 	var exporter cmdutil.Exporter
@@ -32,11 +33,18 @@ settings, inspired by microsoft/ghqr.
 
 Use --repo to check a single repository against repository-scoped rules.
 Use --owner to check an organization against organization-scoped rules.
---repo and --owner are mutually exclusive.`,
+--repo and --owner are mutually exclusive.
+Use --config to load ignored rule IDs from a YAML configuration. By default,
+.gh-secure-kit-recommended.yml is loaded from the current directory if present.
+Configured ignore IDs are combined with explicit --ignore flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if unknown := catalog.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
+			}
+			cfg, err := catalog.ResolveConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load recommended configuration: %w", err)
 			}
 
 			target, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
@@ -52,7 +60,7 @@ Use --owner to check an organization against organization-scoped rules.
 			filter := catalog.Filter{
 				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
-				IgnoreIDs:   ignoreIDs,
+				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.Ignore...),
 				OnlyFixable: fixableOnly,
 			}
 
@@ -108,6 +116,7 @@ Use --owner to check an organization against organization-scoped rules.
 	cmdutil.StringEnumFlag(cmd, &status, "status", "", "", catalog.Statuses, "Only show findings with this status")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only evaluate the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
+	f.StringVar(&configFile, "config", "", "Path to a recommended configuration file (default: auto-discover .gh-secure-kit-recommended.yml in the current directory)")
 	f.BoolVar(&fixableOnly, "fixable-only", false, "Only show rules that can be fixed with 'recommended apply'")
 	f.BoolVar(&exitCode, "exit-code", false, "Exit with status 1 if any rule fails; default: always exit 0")
 	cmdutil.AddFormatFlags(cmd, &exporter)

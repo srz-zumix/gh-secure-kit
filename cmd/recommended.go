@@ -19,5 +19,6 @@ func NewRecommendedCmd() *cobra.Command {
 	cmd.AddCommand(recommended.NewApplyCmd())
 	cmd.AddCommand(recommended.NewListCmd())
 	cmd.AddCommand(recommended.NewExplainCmd())
+	cmd.AddCommand(recommended.NewGoldenCmd())
 	return cmd
 }
