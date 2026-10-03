@@ -51,6 +51,12 @@ catalog with severity, scope, and fixability.
 | [GSK135](GSK135.md) | Medium | No | Environment with secrets has no required reviewers configured |
 | [GSK136](GSK136.md) | High | Yes | Environment with secrets allows self-review |
 | [GSK137](GSK137.md) | Medium | No | Environment deployment branch policy allows all branches |
+| [GSK138](GSK138.md) | High | Yes | Actions SHA pinning not required |
+| [GSK139](GSK139.md) | Medium | Yes | Immutable releases not enabled |
+| [GSK140](GSK140.md) | Medium | Yes | Tags are not protected by a tag ruleset |
+| [GSK141](GSK141.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
+| [GSK142](GSK142.md) | Medium | Yes | Forking allowed on private or internal repository |
+| [GSK143](GSK143.md) | Info | No | No push ruleset restricting pushed files |
 
 ## Organization rules
 
@@ -72,3 +78,7 @@ catalog with severity, scope, and fixability.
 | [GSK514](GSK514.md) | High | Yes | Fork pull request workflows run without maintainer approval |
 | [GSK515](GSK515.md) | Medium | Yes | Members can create private repositories |
 | [GSK516](GSK516.md) | Medium | Yes | Members can create internal repositories |
+| [GSK517](GSK517.md) | High | Yes | Actions SHA pinning not required |
+| [GSK518](GSK518.md) | Medium | No | Immutable releases not enforced for all repositories |
+| [GSK519](GSK519.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
+| [GSK520](GSK520.md) | Medium | No | Excessive organization owners |

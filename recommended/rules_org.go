@@ -258,4 +258,69 @@ func registerOrganizationRules() {
 			return err
 		},
 	})
+
+	register(Rule{
+		ID: "GSK517", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityHigh, Title: "Actions SHA pinning not required", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.ActionsPermissions == nil {
+				return Skip("could not retrieve Actions permissions for the organization")
+			}
+			if f.ActionsPermissions.GetEnabledRepositories() == "none" {
+				return Skip("GitHub Actions is disabled for all repositories in the organization")
+			}
+			if f.ActionsPermissions.GetSHAPinningRequired() {
+				return Pass("actions must be pinned to a full-length commit SHA")
+			}
+			return Fail("actions are not required to be pinned to a full-length commit SHA; a moved tag can run attacker-controlled code")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			_, err := gh.SetOrgSHAPinningRequired(ctx, g, repo, true)
+			return err
+		},
+	})
+
+	register(Rule{
+		ID: "GSK518", GHQRID: "", Scope: ScopeOrganization,
+		Category: "security", Severity: SeverityMedium, Title: "Immutable releases not enforced for all repositories",
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.ImmutableReleases == nil {
+				return Skip("could not retrieve immutable releases settings for the organization")
+			}
+			switch enforced := f.ImmutableReleases.GetEnforcedRepositories(); enforced {
+			case gh.ImmutableReleasesEnforcedAll:
+				return Pass("immutable releases are enforced for all repositories")
+			case gh.ImmutableReleasesEnforcedSelected:
+				return Fail("immutable releases are enforced only for selected repositories")
+			default:
+				return Fail(fmt.Sprintf("immutable releases are not enforced for repositories (%q)", enforced))
+			}
+		},
+	})
+
+	register(Rule{
+		ID: "GSK519", GHQRID: "", Scope: ScopeOrganization,
+		Category: "actions", Severity: SeverityHigh, Title: "Private fork pull request workflows receive write tokens or secrets", Fixable: true,
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			return checkForkPRWorkflowSettings(f.PrivateForkPRWorkflows, "organization")
+		},
+		ApplyOrg: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *OrganizationFacts) error {
+			return gh.UpdateOrgPrivateRepoForkPRWorkflowSettings(ctx, g, repo, restrictedForkPRWorkflowSettings(f.PrivateForkPRWorkflows))
+		},
+	})
+
+	register(Rule{
+		ID: "GSK520", GHQRID: "", Scope: ScopeOrganization,
+		Category: "access_control", Severity: SeverityMedium, Title: "Excessive organization owners",
+		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if !f.OwnersKnown {
+				return Skip("could not read organization owners")
+			}
+			const maxOwners = 3
+			if n := len(f.Owners); n > maxOwners {
+				return Fail(fmt.Sprintf("%d organization owners found (threshold: %d)", n, maxOwners))
+			}
+			return Pass(fmt.Sprintf("%d organization owners found", len(f.Owners)))
+		},
+	})
 }

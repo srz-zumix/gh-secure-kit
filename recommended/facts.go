@@ -62,6 +62,19 @@ type RepositoryFacts struct {
 	// policy for the repository could not be fetched.
 	ForkPRContributorApproval *github.ContributorApprovalPermissions
 
+	// ActionsPermissions is nil when the Actions permissions policy for the
+	// repository could not be fetched.
+	ActionsPermissions *github.ActionsPermissionsRepository
+	// PrivateForkPRWorkflows is nil for public repositories and when the fork
+	// pull request workflow settings could not be fetched.
+	PrivateForkPRWorkflows *github.WorkflowsPermissions
+	// HasTags is tri-state: nil means the existence of tags could not be
+	// determined, so tag-related rules skip instead of reporting a false result.
+	HasTags *bool
+	// ImmutableReleases is nil when the repository has no tags or the status
+	// could not be fetched.
+	ImmutableReleases *github.RepoImmutableReleasesStatus
+
 	Environments []*github.Environment
 	// EnvironmentsKnown is false when the environment list could not be
 	// fetched, so environment rules skip instead of treating the repository
@@ -86,6 +99,15 @@ type RepositoryFacts struct {
 	// policies could not be read are absent, so a failure for one environment
 	// does not discard the confirmed results of the others.
 	EnvironmentBranchPoliciesKnown map[string]bool
+}
+
+// isPrivateOrInternal reports whether the repository is not public. The
+// visibility field is preferred; Private is the fallback for hosts that omit it.
+func isPrivateOrInternal(r *github.Repository) bool {
+	if v := r.GetVisibility(); v != "" {
+		return v == "private" || v == "internal"
+	}
+	return r.GetPrivate()
 }
 
 // isNotFound reports whether err represents a GitHub 404 response. It relies on
@@ -248,6 +270,22 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	if permissions, err := gh.GetRepoForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
 	}
+	if permissions, err := gh.GetRepoActionsPermissions(ctx, g, repo); err == nil {
+		f.ActionsPermissions = permissions
+	}
+	if isPrivateOrInternal(repoInfo) {
+		if settings, err := gh.GetRepoPrivateRepoForkPRWorkflowSettings(ctx, g, repo); err == nil {
+			f.PrivateForkPRWorkflows = settings
+		}
+	}
+	if hasTags, err := gh.HasTags(ctx, g, repo); err == nil {
+		f.HasTags = github.Ptr(hasTags)
+		if hasTags {
+			if status, err := gh.GetRepoImmutableReleases(ctx, g, repo); err == nil {
+				f.ImmutableReleases = status
+			}
+		}
+	}
 	needSecrets, needBranchPolicies := environmentFactNeeds(rules)
 	if needSecrets || needBranchPolicies {
 		if environments, err := gh.ListEnvironments(ctx, g, repo); err == nil {
@@ -324,6 +362,17 @@ type OrganizationFacts struct {
 	// ForkPRContributorApproval is nil when the fork PR contributor approval
 	// policy for the organization could not be fetched.
 	ForkPRContributorApproval *github.ContributorApprovalPermissions
+	// ImmutableReleases is nil when the organization immutable releases
+	// enforcement settings could not be fetched.
+	ImmutableReleases *github.ImmutableReleaseSettings
+	// PrivateForkPRWorkflows is nil when the fork pull request workflow
+	// settings for private repositories could not be fetched.
+	PrivateForkPRWorkflows *github.WorkflowsPermissions
+	// Owners are the organization members with the owner (admin) role.
+	Owners []*github.User
+	// OwnersKnown is false when the owner list could not be fetched, so the
+	// owner-count rule skips instead of treating the organization as having none.
+	OwnersKnown bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
@@ -350,6 +399,16 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 	if permissions, err := gh.GetOrgForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
+	}
+	if settings, err := gh.GetOrgImmutableReleasesSettings(ctx, g, repo); err == nil {
+		f.ImmutableReleases = settings
+	}
+	if settings, err := gh.GetOrgPrivateRepoForkPRWorkflowSettings(ctx, g, repo); err == nil {
+		f.PrivateForkPRWorkflows = settings
+	}
+	if owners, err := gh.ListOrgMembers(ctx, g, repo, []string{"admin"}, false); err == nil {
+		f.Owners = owners
+		f.OwnersKnown = true
 	}
 
 	return f, nil
