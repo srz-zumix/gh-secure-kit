@@ -161,6 +161,29 @@ func registerRepositorySecurityRules() {
 			return gh.EnableAutomatedSecurityFixes(ctx, g, repo)
 		},
 	})
+
+	register(Rule{
+		ID: "GSK139", GHQRID: "", Scope: ScopeRepository,
+		Category: "security", Severity: SeverityMedium, Title: "Immutable releases not enabled", Fixable: true,
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if f.HasTags == nil {
+				return Skip("could not determine whether the repository has tags")
+			}
+			if !*f.HasTags {
+				return Skip("repository has no tags")
+			}
+			if f.ImmutableReleases == nil {
+				return Skip("could not read immutable releases status")
+			}
+			if f.ImmutableReleases.GetEnabled() {
+				return Pass("immutable releases are enabled")
+			}
+			return Fail("immutable releases are disabled; release assets and tags can be replaced after publishing")
+		},
+		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
+			return gh.EnableRepoImmutableReleases(ctx, g, repo)
+		},
+	})
 }
 
 func registerRepositoryAccessRules() {
@@ -250,6 +273,27 @@ func registerRepositoryAccessRules() {
 				}
 			}
 			return Pass("all deploy keys are verified")
+		},
+	})
+
+	register(Rule{
+		ID: "GSK142", GHQRID: "", Scope: ScopeRepository,
+		Category: "access_control", Severity: SeverityMedium, Title: "Forking allowed on private or internal repository", Fixable: true,
+		CheckRepo: func(f *RepositoryFacts) Outcome {
+			if !isPrivateOrInternal(f.Repo) {
+				return Skip("forking restrictions only apply to private and internal repositories")
+			}
+			if f.Repo.AllowForking == nil {
+				return Skip("could not read the forking setting of the repository")
+			}
+			if f.Repo.GetAllowForking() {
+				return Fail("forking is allowed; private code can be copied outside the repository")
+			}
+			return Pass("forking is not allowed")
+		},
+		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
+			_, err := gh.SetRepoAllowForking(ctx, g, repo, false)
+			return err
 		},
 	})
 }
