@@ -26,20 +26,19 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 	}
 
 	branch := branchName
-	if _, err := gh.CreateRepositoryFile(ctx, g, repo, path, &gh.RepositoryContentFileOptions{
-		Message: commitMessage,
-		Content: content,
-		Branch:  &branch,
-	}); err != nil {
-		// The create-file endpoint returns 422 when the file already exists on
-		// the branch (it needs the current blob SHA to update). Treat that as a
-		// successful reuse only if the file is really present on the branch;
-		// otherwise the 422 signals a genuine failure and must be surfaced.
-		if !gh.IsHTTPUnprocessableEntity(err) {
-			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
+	// A previous run may already have committed the file to this branch; reuse it.
+	_, err = gh.GetRepositoryFileContent(ctx, g, repo, path, &branch)
+	if err != nil {
+		if !gh.IsHTTPNotFound(err) {
+			return fmt.Errorf("failed to check whether %s exists on branch %q: %w", path, branchName, err)
 		}
-		if _, getErr := gh.GetRepositoryFileContent(ctx, g, repo, path, &branch); getErr != nil {
-			return fmt.Errorf("creating %s on branch %q returned %v; verifying whether the file already exists failed: %w", path, branchName, err, getErr)
+		head, err := gh.GetBranch(ctx, g, repo, branchName)
+		if err != nil {
+			return fmt.Errorf("failed to get branch %q: %w", branchName, err)
+		}
+		// The Contents API leaves commits unsigned; createCommitOnBranch makes GitHub sign them (verified).
+		if _, err := gh.CreateCommitOnBranch(ctx, g, repo, branchName, head.GetCommit().GetSHA(), commitMessage, map[string][]byte{path: content}); err != nil {
+			return fmt.Errorf("failed to commit %s to branch %q: %w", path, branchName, err)
 		}
 	}
 
