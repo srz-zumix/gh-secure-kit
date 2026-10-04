@@ -50,7 +50,9 @@ func ResolveConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	path = filepath.Join(dir, ConfigFileName)
-	if _, err := os.Stat(path); err != nil {
+	// Lstat so that a dangling symlink is surfaced as a load error instead of
+	// being treated as a missing file.
+	if _, err := os.Lstat(path); err != nil {
 		if os.IsNotExist(err) {
 			return &Config{Ignore: []string{}}, nil
 		}

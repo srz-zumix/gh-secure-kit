@@ -2332,9 +2332,10 @@ after evaluation succeeds. No GitHub settings are changed.
 
 Existing configured ignore IDs are retained by default. With `--prune`, existing
 ignored rules are re-evaluated and only IDs confirmed to pass are removed.
-Failing, skipped, unevaluated, and other-scope IDs remain ignored, including IDs
-excluded by filters or explicit `--ignore` flags. New skip results are not added.
-IDs passed via `--ignore` are not added unless already present in the configuration.
+Existing IDs that are failing, skipped, unevaluated, out of scope, or excluded
+from evaluation by filters or `--ignore` remain in the configuration. New skip
+results are not added. `--ignore` only skips evaluation; it does not add IDs that
+are not already in the configuration.
 Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
 
 ```sh

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -73,6 +74,29 @@ func TestResolveConfig(t *testing.T) {
 	}
 	if _, err := ResolveConfig(""); err == nil {
 		t.Fatal("invalid discovered config must fail")
+	}
+}
+
+func TestResolveConfigSymlink(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("target.yml", []byte("ignore: [GSK101]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target.yml", ConfigFileName); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("symlink not supported: %v", err)
+		}
+		t.Fatal(err)
+	}
+	cfg, err := ResolveConfig("")
+	if err != nil || !reflect.DeepEqual(cfg.Ignore, []string{"GSK101"}) {
+		t.Fatalf("symlink discovery: cfg = %v, err = %v", cfg, err)
+	}
+	if err := os.Remove("target.yml"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveConfig(""); err == nil {
+		t.Fatal("dangling discovered symlink must fail")
 	}
 }
 
