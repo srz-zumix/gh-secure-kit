@@ -165,3 +165,92 @@ func TestWriteConfig(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteConfigFile(t *testing.T) {
+	cfg := &Config{Ignore: []string{"GSK101"}}
+	want := "ignore:\n- GSK101\n"
+
+	t.Run("create", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), ConfigFileName)
+		if err := WriteConfigFile(path, cfg); err != nil {
+			t.Fatalf("WriteConfigFile() error = %v", err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != want {
+			t.Errorf("content = %q, want %q", data, want)
+		}
+	})
+
+	t.Run("replace preserves permissions", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), ConfigFileName)
+		if err := os.WriteFile(path, []byte("ignore: []\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(path, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := WriteConfigFile(path, cfg); err != nil {
+			t.Fatalf("WriteConfigFile() error = %v", err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("mode = %v, want %v", got, os.FileMode(0o600))
+		}
+	})
+
+	t.Run("does not follow symlink", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(t.TempDir(), "outside.yml")
+		if err := os.WriteFile(target, []byte("original\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, ConfigFileName)
+		if err := os.Symlink(target, path); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+		if err := WriteConfigFile(path, cfg); err != nil {
+			t.Fatalf("WriteConfigFile() error = %v", err)
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.Mode().IsRegular() {
+			t.Errorf("destination mode = %v, want regular file", info.Mode())
+		}
+		data, err := os.ReadFile(target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != "original\n" {
+			t.Errorf("symlink target was modified: %q", data)
+		}
+	})
+
+	t.Run("failure keeps destination", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ConfigFileName)
+		if err := os.MkdirAll(filepath.Join(path, "child"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := WriteConfigFile(path, cfg); err == nil {
+			t.Fatal("WriteConfigFile() error = nil, want error")
+		}
+		if _, err := os.Stat(filepath.Join(path, "child")); err != nil {
+			t.Errorf("destination was modified: %v", err)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			t.Errorf("temporary file left behind: %v", entries)
+		}
+	})
+}

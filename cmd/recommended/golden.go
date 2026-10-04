@@ -2,7 +2,6 @@ package recommended
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
 	"github.com/spf13/cobra"
@@ -11,6 +10,7 @@ import (
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
+// NewGoldenCmd returns the recommended golden command
 func NewGoldenCmd() *cobra.Command {
 	var owner string
 	var repo string
@@ -83,17 +83,8 @@ Output goes to stdout unless --output is specified. No GitHub settings are chang
 				}
 				return nil
 			}
-			file, err := os.Create(output)
-			if err != nil {
-				return fmt.Errorf("failed to create recommended configuration %q: %w", output, err)
-			}
-			writeErr := catalog.WriteConfig(file, golden)
-			closeErr := file.Close()
-			if writeErr != nil {
-				return fmt.Errorf("failed to write recommended configuration %q: %w", output, writeErr)
-			}
-			if closeErr != nil {
-				return fmt.Errorf("failed to close recommended configuration %q: %w", output, closeErr)
+			if err := catalog.WriteConfigFile(output, golden); err != nil {
+				return fmt.Errorf("failed to write recommended configuration %q: %w", output, err)
 			}
 			return nil
 		},
