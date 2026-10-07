@@ -1928,8 +1928,8 @@ Rule IDs are case-insensitive. The configuration currently supports `ignore`:
 
 ```yaml
 ignore:
-  - GSK101 # Dependabot alerts not enabled
-  - GSK102 # Dependabot enabled but no dependabot.yml found
+- GSK101 # Dependabot alerts not enabled
+- GSK102 # Dependabot enabled but no dependabot.yml found
 ```
 
 ### Check a repository or organization against recommended settings
