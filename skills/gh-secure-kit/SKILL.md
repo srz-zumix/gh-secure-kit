@@ -137,6 +137,7 @@ gh secure-kit                      # Root command
 ├── recommended                    # Recommended security settings subcommands
 │   ├── check                      # Check a repository or organization against recommended settings
 │   ├── apply                      # Apply fixes for failing recommendations
+│   ├── golden                     # Generate an ignore configuration from current recommendations
 │   ├── list                       # List the catalog of recommended rules
 │   └── explain                    # Show detailed documentation for a rule
 └── security-advisories            # Repository security advisories subcommands
@@ -2215,6 +2216,19 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 
 Checks and applies a catalog of GitHub security best-practice recommendations, inspired by [microsoft/ghqr](https://github.com/microsoft/ghqr). Each rule has detailed documentation (similar to ShellCheck's wiki) embedded in the extension and viewable with `recommended explain <ID>`; see [docs/rules](../../docs/rules/README.md) for the full catalog.
 
+`check`, `apply`, and `golden` accept an optional `--config <path>` YAML file.
+When omitted, they load `.gh-secure-kit-recommended.yml` from the current directory
+if present; otherwise, no configured rules are ignored. Explicitly specified
+missing files, invalid YAML, and unknown rule IDs cause an error.
+Configured ignore IDs are combined with repeated `--ignore` flags for evaluation.
+Rule IDs are case-insensitive. The configuration currently supports `ignore`:
+
+```yaml
+ignore:
+  - GSK101 # Dependabot alerts not enabled
+  - GSK102 # Dependabot enabled but no dependabot.yml found
+```
+
 ### Check a repository or organization against recommended settings (gh secure-kit recommended check)
 
 ```sh
@@ -2249,6 +2263,7 @@ gh secure-kit recommended check --status fail
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
 | `--exit-code` | | `false` | Exit with status 1 if any rule fails; default: always exit 0 |
 | `--fixable-only` | | `false` | Only show rules that can be fixed with `recommended apply` |
 | `--format` | | | Output format: {json} |
@@ -2291,6 +2306,7 @@ gh secure-kit recommended apply --dryrun
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
 | `--dryrun` | `-n` | `false` | Report the fixes that would be applied, without changing anything |
 | `--format` | | | Output format: {json} |
 | `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
@@ -2300,6 +2316,59 @@ gh secure-kit recommended apply --dryrun
 | `--rule` | | | Only include the given rule ID (can be specified multiple times); default: all rules |
 | `--severity` | | `""` | Only include findings at or above this severity {critical\|high\|medium\|low\|info} |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Generate an ignore configuration from current recommendations (gh secure-kit recommended golden)
+
+```sh
+gh secure-kit recommended golden [flags]
+```
+
+Evaluate recommended GitHub security settings and output a YAML configuration
+that ignores currently failing rules, accepting the current state as a baseline.
+Use optional `--repo` for a repository or `--owner` for an organization; these
+flags are mutually exclusive. If neither is given, the current repository is used.
+Output defaults to the `--config` path, or `.gh-secure-kit-recommended.yml` in the
+current directory when `--config` is omitted. Optional `--output <path>` selects
+another file; `--output -` writes to stdout. Existing output paths require
+`--overwrite` (default: `false`); otherwise, the command fails before evaluation.
+Files are written only after evaluation succeeds. No GitHub settings are changed.
+
+Existing configured ignore IDs are retained by default. With `--prune`, existing
+ignored rules are re-evaluated and only IDs confirmed to pass are removed.
+Existing IDs that are failing, skipped, unevaluated, out of scope, or excluded
+from evaluation by filters or `--ignore` remain in the configuration. New skip
+results are not added. `--ignore` only skips evaluation; it does not add IDs that
+are not already in the configuration.
+Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
+Each ignored ID includes the rule's title as an inline YAML comment.
+
+```sh
+gh secure-kit recommended golden
+gh secure-kit recommended check --status fail --exit-code
+gh secure-kit recommended golden --prune --overwrite
+gh secure-kit recommended golden --output -
+gh secure-kit recommended golden --owner octo-org --output org-recommended.yml
+gh secure-kit recommended check --owner octo-org --config org-recommended.yml
+gh secure-kit recommended golden --owner octo-org --config org-recommended.yml --overwrite
+```
+
+Use `--overwrite`, not shell redirection, when updating the input configuration:
+redirecting stdout to that same file would truncate it before it is read.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
+| `--fixable-only` | | `false` | Only evaluate rules that can be fixed with `recommended apply` |
+| `--ignore` | | | Skip the given rule ID without adding it to the configuration (repeatable) |
+| `--output` | | `""` | Optional output path; default: `--config` path or `.gh-secure-kit-recommended.yml`; `-` writes to stdout |
+| `--overwrite` | | `false` | Allow replacing an existing output file |
+| `--owner` | `-o` | `""` | Optional organization name (evaluates organization-scoped rules) |
+| `--prune` | | `false` | Re-evaluate existing ignored rules and remove only those that pass |
+| `--repo` | `-R` | `""` | Optional repository in 'owner/repo' format; default: current repository |
+| `--rule` | | | Only evaluate the given rule ID (repeatable); default: all rules |
+| `--severity` | | `""` | Optional minimum severity {critical\|high\|medium\|low\|info}; default: all severities |
 
 ### List the catalog of recommended rules (gh secure-kit recommended list)
 

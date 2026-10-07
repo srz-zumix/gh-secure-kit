@@ -1,0 +1,6 @@
+ignore:
+- GSK105 # Code scanning default setup not configured
+- GSK120 # Direct collaborators instead of teams
+- GSK130 # Linear history not required
+- GSK137 # Environment deployment branch policy allows all branches
+- GSK138 # Actions SHA pinning not required

@@ -19,6 +19,7 @@ func NewApplyCmd() *cobra.Command {
 	var severity string
 	var ruleIDs []string
 	var ignoreIDs []string
+	var configFile string
 	var dryRun bool
 	var exporter cmdutil.Exporter
 
@@ -33,7 +34,10 @@ Use --repo to fix a single repository. Use --owner to fix an organization.
 Output includes only fixes that were applied, fixes that would be applied
 with --dryrun, and failed fix attempts. Run 'recommended check' to see the
 full list of findings.
-Use --dryrun to report the fixes that would be applied, without changing anything.`,
+Use --dryrun to report the fixes that would be applied, without changing anything.
+Use --config to load ignored rule IDs from a YAML configuration. By default,
+.gh-secure-kit-recommended.yml is loaded from the current directory if present.
+Configured ignore IDs are combined with explicit --ignore flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !dryRun && guardrails.IsReadonly() {
@@ -42,6 +46,10 @@ Use --dryrun to report the fixes that would be applied, without changing anythin
 
 			if unknown := catalog.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
+			}
+			cfg, err := catalog.ResolveConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load recommended configuration: %w", err)
 			}
 
 			target, err := parser.Repository(parser.RepositoryInput(repo), parser.RepositoryOwner(owner))
@@ -57,7 +65,7 @@ Use --dryrun to report the fixes that would be applied, without changing anythin
 			filter := catalog.Filter{
 				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
-				IgnoreIDs:   ignoreIDs,
+				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.Ignore...),
 			}
 
 			ctx := cmd.Context()
@@ -90,6 +98,7 @@ Use --dryrun to report the fixes that would be applied, without changing anythin
 	cmdutil.StringEnumFlag(cmd, &severity, "severity", "", "", catalog.Severities, "Only include findings at or above this severity")
 	f.StringArrayVar(&ruleIDs, "rule", nil, "Only include the given rule ID (can be specified multiple times); default: all rules")
 	f.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID (can be specified multiple times)")
+	f.StringVar(&configFile, "config", "", "Path to a recommended configuration file (default: auto-discover .gh-secure-kit-recommended.yml in the current directory)")
 	f.BoolVarP(&dryRun, "dryrun", "n", false, "Report the fixes that would be applied, without changing anything")
 	cmdutil.AddFormatFlags(cmd, &exporter)
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
