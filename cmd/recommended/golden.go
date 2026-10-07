@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	catalog "github.com/srz-zumix/gh-secure-kit/recommended"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 	"github.com/srz-zumix/go-gh-extension/pkg/parser"
 )
 
@@ -20,6 +21,7 @@ func NewGoldenCmd() *cobra.Command {
 	var fixableOnly bool
 	var configFile string
 	var output string
+	var overwrite bool
 	var prune bool
 
 	cmd := &cobra.Command{
@@ -35,9 +37,15 @@ Use --repo for a repository or --owner for an organization; they are mutually ex
 If neither is given, the current repository is used.
 Use --config to read an existing configuration; by default, the current directory's
 .gh-secure-kit-recommended.yml is used if present.
-Output goes to stdout unless --output is specified. No GitHub settings are changed.`,
+Output defaults to the --config path, or .gh-secure-kit-recommended.yml when
+--config is omitted. Use --output to select another file, or --output - for stdout.
+Existing output files require --overwrite. No GitHub settings are changed.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			outputPath, err := catalog.ResolveGoldenOutput(configFile, output, overwrite)
+			if err != nil {
+				return fmt.Errorf("failed to resolve recommended configuration output: %w", err)
+			}
 			cfg, err := catalog.ResolveConfig(configFile)
 			if err != nil {
 				return fmt.Errorf("failed to load recommended configuration: %w", err)
@@ -77,15 +85,16 @@ Output goes to stdout unless --output is specified. No GitHub settings are chang
 				}
 			}
 			golden := catalog.GoldenConfig(cfg, results, prune)
-			if output == "" {
+			if outputPath == "-" {
 				if err := catalog.WriteConfig(cmd.OutOrStdout(), golden); err != nil {
 					return fmt.Errorf("failed to write recommended configuration: %w", err)
 				}
 				return nil
 			}
-			if err := catalog.WriteConfigFile(output, golden); err != nil {
-				return fmt.Errorf("failed to write recommended configuration %q: %w", output, err)
+			if err := catalog.WriteConfigFile(outputPath, golden, overwrite); err != nil {
+				return fmt.Errorf("failed to write recommended configuration %q: %w", outputPath, err)
 			}
+			logger.Info("Wrote recommended configuration", "path", outputPath)
 			return nil
 		},
 	}
@@ -97,7 +106,8 @@ Output goes to stdout unless --output is specified. No GitHub settings are chang
 	flags.StringArrayVar(&ignoreIDs, "ignore", nil, "Skip the given rule ID without adding it to the configuration (can be specified multiple times)")
 	flags.BoolVar(&fixableOnly, "fixable-only", false, "Only evaluate rules that can be fixed with 'recommended apply'")
 	flags.StringVar(&configFile, "config", "", "Path to a recommended configuration file (default: auto-discover .gh-secure-kit-recommended.yml in the current directory)")
-	flags.StringVar(&output, "output", "", "Write the YAML configuration to this file, overwriting it (default: stdout)")
+	flags.StringVar(&output, "output", "", "Write the YAML configuration to this file; use '-' for stdout (default: --config path or .gh-secure-kit-recommended.yml)")
+	flags.BoolVar(&overwrite, "overwrite", false, "Allow replacing an existing output file")
 	flags.BoolVar(&prune, "prune", false, "Re-evaluate existing ignored rules and remove only those that pass")
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	return cmd

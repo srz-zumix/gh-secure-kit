@@ -179,6 +179,12 @@ func TestWriteConfig(t *testing.T) {
 		if len(cfg.Ignore) == 0 && buf.String() != "ignore: []\n" {
 			t.Fatalf("empty output = %q", buf.String())
 		}
+		if len(cfg.Ignore) > 0 {
+			want := "ignore:\n- GSK101 # Dependabot alerts not enabled\n- GSK102 # Dependabot enabled but no dependabot.yml found\n"
+			if buf.String() != want {
+				t.Fatalf("commented output = %q, want %q", buf.String(), want)
+			}
+		}
 		path := filepath.Join(t.TempDir(), "config.yml")
 		if err := os.WriteFile(path, buf.Bytes(), 0600); err != nil {
 			t.Fatal(err)
@@ -192,11 +198,11 @@ func TestWriteConfig(t *testing.T) {
 
 func TestWriteConfigFile(t *testing.T) {
 	cfg := &Config{Ignore: []string{"GSK101"}}
-	want := "ignore:\n- GSK101\n"
+	want := "ignore:\n- GSK101 # Dependabot alerts not enabled\n"
 
 	t.Run("create", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), ConfigFileName)
-		if err := WriteConfigFile(path, cfg); err != nil {
+		if err := WriteConfigFile(path, cfg, false); err != nil {
 			t.Fatalf("WriteConfigFile() error = %v", err)
 		}
 		data, err := os.ReadFile(path)
@@ -216,7 +222,7 @@ func TestWriteConfigFile(t *testing.T) {
 		if err := os.Chmod(path, 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if err := WriteConfigFile(path, cfg); err != nil {
+		if err := WriteConfigFile(path, cfg, true); err != nil {
 			t.Fatalf("WriteConfigFile() error = %v", err)
 		}
 		info, err := os.Stat(path)
@@ -225,6 +231,37 @@ func TestWriteConfigFile(t *testing.T) {
 		}
 		if got := info.Mode().Perm(); got != 0o600 {
 			t.Errorf("mode = %v, want %v", got, os.FileMode(0o600))
+		}
+	})
+
+	t.Run("concurrent creation", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, ConfigFileName)
+		start := make(chan struct{})
+		results := make(chan error, 8)
+		for range 8 {
+			go func() {
+				<-start
+				results <- WriteConfigFile(path, cfg, false)
+			}()
+		}
+		close(start)
+		created := 0
+		for range 8 {
+			if err := <-results; err == nil {
+				created++
+			}
+		}
+		if created != 1 {
+			t.Fatalf("successful writes = %d, want 1", created)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != want {
+			t.Fatalf("content = %q, err = %v, want %q", data, err, want)
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) != 1 {
+			t.Fatalf("temporary files left behind: entries = %v, err = %v", entries, err)
 		}
 	})
 
@@ -238,7 +275,7 @@ func TestWriteConfigFile(t *testing.T) {
 		if err := os.Symlink(target, path); err != nil {
 			t.Skipf("symlink not supported: %v", err)
 		}
-		if err := WriteConfigFile(path, cfg); err != nil {
+		if err := WriteConfigFile(path, cfg, true); err != nil {
 			t.Fatalf("WriteConfigFile() error = %v", err)
 		}
 		info, err := os.Lstat(path)
@@ -263,7 +300,7 @@ func TestWriteConfigFile(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(path, "child"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := WriteConfigFile(path, cfg); err == nil {
+		if err := WriteConfigFile(path, cfg, true); err == nil {
 			t.Fatal("WriteConfigFile() error = nil, want error")
 		}
 		if _, err := os.Stat(filepath.Join(path, "child")); err != nil {
@@ -277,4 +314,78 @@ func TestWriteConfigFile(t *testing.T) {
 			t.Errorf("temporary file left behind: %v", entries)
 		}
 	})
+}
+
+func TestResolveGoldenOutput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, tc := range []struct {
+		name   string
+		config string
+		output string
+		want   string
+	}{
+		{"default", "", "", ConfigFileName},
+		{"config path", "custom.yml", "", "custom.yml"},
+		{"explicit output", "custom.yml", "output.yml", "output.yml"},
+		{"stdout", "custom.yml", "-", "-"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ResolveGoldenOutput(tc.config, tc.output, false)
+			if err != nil || got != tc.want {
+				t.Fatalf("output = %q, err = %v, want %q", got, err, tc.want)
+			}
+		})
+	}
+	if err := os.WriteFile(ConfigFileName, []byte("ignore: []\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveGoldenOutput("", "", false); err == nil || !strings.Contains(err.Error(), "--overwrite") {
+		t.Fatalf("existing default: error = %v", err)
+	}
+	if got, err := ResolveGoldenOutput("", "", true); err != nil || got != ConfigFileName {
+		t.Fatalf("overwrite default: output = %q, err = %v", got, err)
+	}
+	if got, err := ResolveGoldenOutput("", "-", false); err != nil || got != "-" {
+		t.Fatalf("stdout with existing config: output = %q, err = %v", got, err)
+	}
+}
+
+func TestWriteConfigFileRefusesOverwrite(t *testing.T) {
+	for _, kind := range []string{"regular", "symlink", "dangling symlink"} {
+		t.Run(kind, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, ConfigFileName)
+			target := filepath.Join(dir, "original.yml")
+			if kind == "regular" {
+				target = path
+			}
+			if kind != "dangling symlink" {
+				if err := os.WriteFile(target, []byte("original\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if kind != "regular" {
+				if err := os.Symlink(target, path); err != nil {
+					t.Skipf("symlink not supported: %v", err)
+				}
+			}
+			if _, err := ResolveGoldenOutput("", path, false); err == nil {
+				t.Fatal("output preflight must reject existing paths")
+			}
+			if err := WriteConfigFile(path, &Config{Ignore: []string{"GSK101"}}, false); err == nil {
+				t.Fatal("writing must reject existing paths")
+			}
+			if kind != "regular" {
+				if got, err := os.Readlink(path); err != nil || got != target {
+					t.Fatalf("symlink changed: target = %q, err = %v", got, err)
+				}
+			}
+			if kind != "dangling symlink" {
+				data, err := os.ReadFile(target)
+				if err != nil || string(data) != "original\n" {
+					t.Fatalf("existing file changed: data = %q, err = %v", data, err)
+				}
+			}
+		})
+	}
 }

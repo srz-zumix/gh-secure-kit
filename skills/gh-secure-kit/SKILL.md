@@ -2225,8 +2225,8 @@ Rule IDs are case-insensitive. The configuration currently supports `ignore`:
 
 ```yaml
 ignore:
-  - GSK101
-  - GSK205
+  - GSK101 # Dependabot alerts not enabled
+  - GSK102 # Dependabot enabled but no dependabot.yml found
 ```
 
 ### Check a repository or organization against recommended settings (gh secure-kit recommended check)
@@ -2327,8 +2327,11 @@ Evaluate recommended GitHub security settings and output a YAML configuration
 that ignores currently failing rules, accepting the current state as a baseline.
 Use optional `--repo` for a repository or `--owner` for an organization; these
 flags are mutually exclusive. If neither is given, the current repository is used.
-Output goes to stdout by default; optional `--output <path>` overwrites that file
-after evaluation succeeds. No GitHub settings are changed.
+Output defaults to the `--config` path, or `.gh-secure-kit-recommended.yml` in the
+current directory when `--config` is omitted. Optional `--output <path>` selects
+another file; `--output -` writes to stdout. Existing output paths require
+`--overwrite` (default: `false`); otherwise, the command fails before evaluation.
+Files are written only after evaluation succeeds. No GitHub settings are changed.
 
 Existing configured ignore IDs are retained by default. With `--prune`, existing
 ignored rules are re-evaluated and only IDs confirmed to pass are removed.
@@ -2337,16 +2340,19 @@ from evaluation by filters or `--ignore` remain in the configuration. New skip
 results are not added. `--ignore` only skips evaluation; it does not add IDs that
 are not already in the configuration.
 Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
+Each ignored ID includes the rule's title as an inline YAML comment.
 
 ```sh
-gh secure-kit recommended golden --output .gh-secure-kit-recommended.yml
+gh secure-kit recommended golden
 gh secure-kit recommended check --status fail --exit-code
-gh secure-kit recommended golden --prune --output .gh-secure-kit-recommended.yml
+gh secure-kit recommended golden --prune --overwrite
+gh secure-kit recommended golden --output -
 gh secure-kit recommended golden --owner octo-org --output org-recommended.yml
 gh secure-kit recommended check --owner octo-org --config org-recommended.yml
+gh secure-kit recommended golden --owner octo-org --config org-recommended.yml --overwrite
 ```
 
-Use `--output`, not shell redirection, when updating the input configuration:
+Use `--overwrite`, not shell redirection, when updating the input configuration:
 redirecting stdout to that same file would truncate it before it is read.
 
 **Flags:**
@@ -2356,7 +2362,8 @@ redirecting stdout to that same file would truncate it before it is read.
 | `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
 | `--fixable-only` | | `false` | Only evaluate rules that can be fixed with `recommended apply` |
 | `--ignore` | | | Skip the given rule ID without adding it to the configuration (repeatable) |
-| `--output` | | `""` | Optional output file to overwrite; default: stdout |
+| `--output` | | `""` | Optional output path; default: `--config` path or `.gh-secure-kit-recommended.yml`; `-` writes to stdout |
+| `--overwrite` | | `false` | Allow replacing an existing output file |
 | `--owner` | `-o` | `""` | Optional organization name (evaluates organization-scoped rules) |
 | `--prune` | | `false` | Re-evaluate existing ignored rules and remove only those that pass |
 | `--repo` | `-R` | `""` | Optional repository in 'owner/repo' format; default: current repository |
