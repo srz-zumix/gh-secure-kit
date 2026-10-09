@@ -15,19 +15,17 @@ import (
 func TestSuspendedUserRules(t *testing.T) {
 	for _, id := range []string{"GSK521", "GSK522"} {
 		for _, tc := range []struct {
-			name                        string
-			supported, known, suspended bool
-			want                        Status
+			name             string
+			known, suspended bool
+			want             Status
 		}{
-			{"cloud", false, true, true, StatusSkip},
-			{"unknown", true, false, false, StatusSkip},
-			{"empty", true, true, false, StatusPass},
-			{"suspended", true, true, true, StatusFail},
-			{"partial violation", true, false, true, StatusFail},
+			{"unknown", false, false, StatusSkip},
+			{"empty", true, false, StatusPass},
+			{"suspended", true, true, StatusFail},
+			{"partial violation", false, true, StatusFail},
 		} {
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
-				facts := &OrganizationFacts{SuspensionStatusSupported: tc.supported,
-					SuspendedOwnersKnown: tc.known, SuspendedMembersKnown: tc.known}
+				facts := &OrganizationFacts{SuspendedOwnersKnown: tc.known, SuspendedMembersKnown: tc.known}
 				if tc.suspended {
 					users := []*github.User{{Login: github.Ptr("suspended")}}
 					facts.SuspendedOwners, facts.SuspendedMembers = users, users
@@ -52,14 +50,47 @@ func TestCollectSuspendedUsers(t *testing.T) {
 		}
 	}))
 	users := []*github.User{{Login: github.Ptr("suspended")}, {Login: github.Ptr("active")}}
-	got, known := collectSuspendedUsers(context.Background(), client, users)
+	got, known := collectSuspendedUsers(context.Background(), client, "github.example.com", users)
 	if !known || len(got) != 1 || got[0].GetLogin() != "suspended" {
 		t.Fatalf("got %v, known %v", got, known)
 	}
 	users = append(users, &github.User{Login: github.Ptr("unknown")}, nil)
-	got, known = collectSuspendedUsers(context.Background(), client, users)
+	got, known = collectSuspendedUsers(context.Background(), client, "github.example.com", users)
 	if known || len(got) != 1 {
 		t.Fatalf("partial results: got %v, known %v", got, known)
+	}
+}
+
+func TestCollectSuspendedUsersFromList(t *testing.T) {
+	const obfuscatedLogin = "0123456789abcdef0123456789abcdef_acme"
+	for _, host := range []string{"github.com", "example.ghe.com", "github.example.com"} {
+		t.Run(host, func(t *testing.T) {
+			requests := 0
+			client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				requests++
+				return rulesetResponse(request, 200, `{"login":"alice_acme","suspended_at":null}`), nil
+			}))
+			users := []*github.User{
+				{Login: github.Ptr(obfuscatedLogin)},
+				{Login: github.Ptr("alice_acme")},
+				{Login: github.Ptr("timestamp"), SuspendedAt: &github.Timestamp{}},
+			}
+			got, known := collectSuspendedUsers(context.Background(), client, host, users)
+			if !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "timestamp" {
+				t.Fatalf("got %v, known %v", got, known)
+			}
+			wantRequests := 0
+			if host == "github.example.com" {
+				wantRequests = 1
+			}
+			if requests != wantRequests {
+				t.Fatalf("requests = %d, want %d", requests, wantRequests)
+			}
+			got, known = collectSuspendedUsers(context.Background(), client, host, append(users, nil))
+			if known || len(got) != 2 {
+				t.Fatalf("partial results: got %v, known %v", got, known)
+			}
+		})
 	}
 }
 
@@ -188,6 +219,9 @@ func TestIntegrationFactSelection(t *testing.T) {
 						return rulesetResponse(request, 200, `{"login":"example"}`), nil
 					}
 					if request.URL.Path == "/orgs/example/members" {
+						if host != "github.example.com" {
+							return rulesetResponse(request, 200, `[{"login":"0123456789abcdef0123456789abcdef_acme"}]`), nil
+						}
 						return rulesetResponse(request, 200, `[{"login":"user"}]`), nil
 					}
 					if request.URL.Path == "/users/user" {
@@ -201,24 +235,29 @@ func TestIntegrationFactSelection(t *testing.T) {
 					t.Fatal(err)
 				}
 				ghes := host == "github.example.com"
-				if facts.SuspensionStatusSupported != ghes {
-					t.Fatalf("GHES detection: got %v", facts.SuspensionStatusSupported)
-				}
 				counts := map[string]int{}
 				for _, path := range paths {
 					counts[path]++
 				}
 				wantUser := 0
-				if ghes && (id == "GSK521" || id == "GSK522") {
-					wantUser = 1
+				if id == "GSK521" || id == "GSK522" {
+					if ghes {
+						wantUser = 1
+					}
 					var suspended []*github.User
 					if id == "GSK521" {
 						suspended = facts.SuspendedOwners
 					} else {
 						suspended = facts.SuspendedMembers
 					}
-					if len(suspended) != 1 || suspended[0].GetSuspendedAt().Before(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)) {
+					if len(suspended) != 1 {
 						t.Fatalf("missing suspended user: %v", suspended)
+					}
+					if ghes && suspended[0].GetSuspendedAt().Before(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)) {
+						t.Fatalf("missing suspended timestamp: %v", suspended[0])
+					}
+					if got := rule.CheckOrg(facts).Status; got != StatusFail {
+						t.Fatalf("suspended user: got %s, want fail", got)
 					}
 				}
 				if counts["/users/user"] != wantUser {

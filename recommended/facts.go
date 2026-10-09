@@ -380,16 +380,15 @@ type OrganizationFacts struct {
 	Owners []*github.User
 	// OwnersKnown is false when the owner list could not be fetched, so the
 	// owner-count rule skips instead of treating the organization as having none.
-	OwnersKnown               bool
-	SuspensionStatusSupported bool
-	SuspendedOwners           []*github.User
-	SuspendedOwnersKnown      bool
-	SuspendedMembers          []*github.User
-	SuspendedMembersKnown     bool
-	RunnerGroups              []*github.RunnerGroup
-	RunnerGroupsKnown         bool
-	Hooks                     []*github.Hook
-	HooksKnown                bool
+	OwnersKnown           bool
+	SuspendedOwners       []*github.User
+	SuspendedOwnersKnown  bool
+	SuspendedMembers      []*github.User
+	SuspendedMembersKnown bool
+	RunnerGroups          []*github.RunnerGroup
+	RunnerGroupsKnown     bool
+	Hooks                 []*github.Hook
+	HooksKnown            bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
@@ -399,7 +398,7 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		return nil, err
 	}
 
-	f := &OrganizationFacts{Org: org, SuspensionStatusSupported: auth.IsEnterprise(repo.Host) && !auth.IsTenancy(repo.Host)}
+	f := &OrganizationFacts{Org: org}
 	rules := AllRules()
 	if len(selected) > 0 {
 		rules = selected[0]
@@ -431,14 +430,12 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		f.Owners = owners
 		f.OwnersKnown = true
 	}
-	if f.SuspensionStatusSupported {
-		if selectedRule(rules, "GSK521") && f.OwnersKnown {
-			f.SuspendedOwners, f.SuspendedOwnersKnown = collectSuspendedUsers(ctx, g, f.Owners)
-		}
-		if selectedRule(rules, "GSK522") {
-			if members, err := gh.ListOrgMembers(ctx, g, repo, []string{"member"}, false); err == nil {
-				f.SuspendedMembers, f.SuspendedMembersKnown = collectSuspendedUsers(ctx, g, members)
-			}
+	if selectedRule(rules, "GSK521") && f.OwnersKnown {
+		f.SuspendedOwners, f.SuspendedOwnersKnown = collectSuspendedUsers(ctx, g, repo.Host, f.Owners)
+	}
+	if selectedRule(rules, "GSK522") {
+		if members, err := gh.ListOrgMembers(ctx, g, repo, []string{"member"}, false); err == nil {
+			f.SuspendedMembers, f.SuspendedMembersKnown = collectSuspendedUsers(ctx, g, repo.Host, members)
 		}
 	}
 	if selectedRule(rules, "GSK523") {
@@ -466,7 +463,7 @@ func selectedRule(rules []Rule, ids ...string) bool {
 	return false
 }
 
-func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, users []*github.User) ([]*github.User, bool) {
+func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, host string, users []*github.User) ([]*github.User, bool) {
 	var suspended []*github.User
 	known := true
 	for _, user := range users {
@@ -474,12 +471,19 @@ func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, users []*git
 			known = false
 			continue
 		}
+		if gh.IsSuspendedUser(user) {
+			suspended = append(suspended, user)
+			continue
+		}
+		if !auth.IsEnterprise(host) {
+			continue
+		}
 		details, err := gh.FindUser(ctx, g, user.GetLogin())
 		if err != nil || details == nil {
 			known = false
 			continue
 		}
-		if !details.GetSuspendedAt().IsZero() {
+		if gh.IsSuspendedUser(details) {
 			suspended = append(suspended, details)
 		}
 	}

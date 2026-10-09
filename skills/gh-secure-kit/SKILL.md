@@ -2216,8 +2216,9 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 
 Checks and applies a catalog of GitHub security best-practice recommendations, inspired by [microsoft/ghqr](https://github.com/microsoft/ghqr). Each rule has detailed documentation (similar to ShellCheck's wiki) embedded in the extension and viewable with `recommended explain <ID>`; see [docs/rules](../../docs/rules/README.md) for the full catalog.
 
-The catalog includes suspended owners and members on GitHub Enterprise Server
-(GSK521/GSK522), runner groups allowing public repositories (GSK523), and active
+The catalog includes suspended owners and members using Enterprise Server
+timestamps or Enterprise Cloud EMU login patterns (GSK521/GSK522),
+runner groups allowing public repositories (GSK523), and active
 webhook transport and signing checks (GSK144/GSK145 for repositories,
 GSK524/GSK525 for organizations). Unavailable metadata is skipped rather than
 treated as safe. GSK523 can disable public repository access; inherited groups

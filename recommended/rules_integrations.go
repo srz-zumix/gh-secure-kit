@@ -17,14 +17,14 @@ func init() {
 		ID: "GSK521", Scope: ScopeOrganization, Category: "access_control", Severity: SeverityHigh,
 		Title: "Suspended users remain organization owners",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
-			return checkSuspendedUsers(f.SuspensionStatusSupported, f.SuspendedOwnersKnown, f.SuspendedOwners, "owners")
+			return checkSuspendedUsers(f.SuspendedOwnersKnown, f.SuspendedOwners, "owners")
 		},
 	})
 	register(Rule{
 		ID: "GSK522", Scope: ScopeOrganization, Category: "access_control", Severity: SeverityMedium,
 		Title: "Suspended users remain organization members",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
-			return checkSuspendedUsers(f.SuspensionStatusSupported, f.SuspendedMembersKnown, f.SuspendedMembers, "members")
+			return checkSuspendedUsers(f.SuspendedMembersKnown, f.SuspendedMembers, "members")
 		},
 	})
 	register(Rule{
@@ -95,10 +95,7 @@ func init() {
 	}
 }
 
-func checkSuspendedUsers(supported, known bool, users []*github.User, role string) Outcome {
-	if !supported {
-		return Skip("suspended status is only available on GitHub Enterprise Server")
-	}
+func checkSuspendedUsers(known bool, users []*github.User, role string) Outcome {
 	if len(users) > 0 {
 		var logins []string
 		for _, user := range users {
