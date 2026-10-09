@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -18,7 +19,9 @@ var branchErrorHTTPStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
 // RepositoryFacts holds the raw data collected from GitHub for a single
 // repository, used as input to every repository-scoped Rule.Check function.
 type RepositoryFacts struct {
-	Repo *github.Repository
+	Repo       *github.Repository
+	Hooks      []*github.Hook
+	HooksKnown bool
 
 	// Protection is nil when the default branch has no legacy branch protection rule.
 	Protection *github.Protection
@@ -342,6 +345,11 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		}
 	}
 
+	if selectedRule(rules, "GSK144", "GSK145") {
+		if hooks, err := gh.ListRepoHooks(ctx, g, repo); err == nil {
+			f.Hooks, f.HooksKnown = hooks, true
+		}
+	}
 	return f, nil
 }
 
@@ -372,17 +380,30 @@ type OrganizationFacts struct {
 	Owners []*github.User
 	// OwnersKnown is false when the owner list could not be fetched, so the
 	// owner-count rule skips instead of treating the organization as having none.
-	OwnersKnown bool
+	OwnersKnown               bool
+	SuspensionStatusSupported bool
+	SuspendedOwners           []*github.User
+	SuspendedOwnersKnown      bool
+	SuspendedMembers          []*github.User
+	SuspendedMembersKnown     bool
+	RunnerGroups              []*github.RunnerGroup
+	RunnerGroupsKnown         bool
+	Hooks                     []*github.Hook
+	HooksKnown                bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
-func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository) (*OrganizationFacts, error) {
+func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, selected ...[]Rule) (*OrganizationFacts, error) {
 	org, err := gh.GetOrg(ctx, g, repo)
 	if err != nil {
 		return nil, err
 	}
 
-	f := &OrganizationFacts{Org: org}
+	f := &OrganizationFacts{Org: org, SuspensionStatusSupported: auth.IsEnterprise(repo.Host) && !auth.IsTenancy(repo.Host)}
+	rules := AllRules()
+	if len(selected) > 0 {
+		rules = selected[0]
+	}
 
 	if teams, err := gh.ListTeamsAssignedToRole(ctx, g, repo, "security_manager"); err == nil {
 		f.SecurityManagerTeams = teams
@@ -410,6 +431,57 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		f.Owners = owners
 		f.OwnersKnown = true
 	}
+	if f.SuspensionStatusSupported {
+		if selectedRule(rules, "GSK521") && f.OwnersKnown {
+			f.SuspendedOwners, f.SuspendedOwnersKnown = collectSuspendedUsers(ctx, g, f.Owners)
+		}
+		if selectedRule(rules, "GSK522") {
+			if members, err := gh.ListOrgMembers(ctx, g, repo, []string{"member"}, false); err == nil {
+				f.SuspendedMembers, f.SuspendedMembersKnown = collectSuspendedUsers(ctx, g, members)
+			}
+		}
+	}
+	if selectedRule(rules, "GSK523") {
+		if groups, err := gh.ListOrgRunnerGroups(ctx, g, repo); err == nil {
+			f.RunnerGroups, f.RunnerGroupsKnown = groups, true
+		}
+	}
+	if selectedRule(rules, "GSK524", "GSK525") {
+		if hooks, err := gh.ListOrgHooks(ctx, g, repo); err == nil {
+			f.Hooks, f.HooksKnown = hooks, true
+		}
+	}
 
 	return f, nil
+}
+
+func selectedRule(rules []Rule, ids ...string) bool {
+	for _, rule := range rules {
+		for _, id := range ids {
+			if rule.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, users []*github.User) ([]*github.User, bool) {
+	var suspended []*github.User
+	known := true
+	for _, user := range users {
+		if user.GetLogin() == "" {
+			known = false
+			continue
+		}
+		details, err := gh.FindUser(ctx, g, user.GetLogin())
+		if err != nil || details == nil {
+			known = false
+			continue
+		}
+		if !details.GetSuspendedAt().IsZero() {
+			suspended = append(suspended, details)
+		}
+	}
+	return suspended, known
 }

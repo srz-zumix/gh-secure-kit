@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v90 v90.0.0
 	github.com/spf13/cobra v1.10.2
 	github.com/srz-zumix/gh-diet-kit v0.5.0
-	github.com/srz-zumix/go-gh-extension v0.6.24
+	github.com/srz-zumix/go-gh-extension v0.6.25
 )
 
 require (
