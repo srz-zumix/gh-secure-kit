@@ -347,6 +347,10 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 
 	if selectedRule(rules, "GSK144", "GSK145") {
 		if hooks, err := gh.ListRepoHooks(ctx, g, repo); err == nil {
+			fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+				config, _, err := g.GetClient().Repositories.GetHookConfiguration(ctx, repo.Owner, repo.Name, id)
+				return config, err
+			})
 			f.Hooks, f.HooksKnown = hooks, true
 		}
 	}
@@ -444,6 +448,10 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 	if selectedRule(rules, "GSK524", "GSK525") {
 		if hooks, err := gh.ListOrgHooks(ctx, g, repo); err == nil {
+			fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+				config, _, err := g.GetClient().Organizations.GetHookConfiguration(ctx, repo.Owner, id)
+				return config, err
+			})
 			f.Hooks, f.HooksKnown = hooks, true
 		}
 	}
@@ -460,6 +468,30 @@ func selectedRule(rules []Rule, ids ...string) bool {
 		}
 	}
 	return false
+}
+
+// fillHookConfigs replaces the configuration of every active webhook with the
+// one returned by the per-hook configuration endpoint. Webhook list responses
+// omit the secret field entirely, while the configuration endpoint reports it
+// masked when one is configured. A hook whose configuration cannot be fetched
+// keeps no configuration at all so the rules treat it as indeterminate instead
+// of reporting a missing secret.
+func fillHookConfigs(ctx context.Context, hooks []*github.Hook, get func(ctx context.Context, id int64) (*github.HookConfig, error)) {
+	for _, hook := range hooks {
+		if hook == nil || hook.Active == nil || !hook.GetActive() {
+			continue
+		}
+		if hook.GetID() == 0 {
+			hook.Config = nil
+			continue
+		}
+		config, err := get(ctx, hook.GetID())
+		if err != nil || config == nil {
+			hook.Config = nil
+			continue
+		}
+		hook.Config = config
+	}
 }
 
 func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, host string, users []*github.User) ([]*github.User, bool) {

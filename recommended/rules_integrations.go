@@ -59,7 +59,13 @@ func init() {
 				return fmt.Errorf("could not read organization runner groups")
 			}
 			for _, group := range f.RunnerGroups {
-				if group.GetAllowsPublicRepositories() && group.GetInherited() {
+				if !group.GetAllowsPublicRepositories() {
+					continue
+				}
+				if group.ID == nil {
+					return fmt.Errorf("runner group %q has no ID; cannot restrict public repository access", group.GetName())
+				}
+				if group.GetInherited() {
 					return fmt.Errorf("runner group %d is inherited; restrict public repository access at the enterprise level", group.GetID())
 				}
 			}
@@ -130,9 +136,9 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 			continue
 		}
 		if secret {
-			// GitHub returns the secret obfuscated when one is configured and
-			// omits the field entirely when it is not, so a missing or empty
-			// value means the webhook payload is unsigned.
+			// The configuration fetched per hook returns the secret obfuscated
+			// when one is configured and omits the field entirely when it is
+			// not, so a missing or empty value means payloads are unsigned.
 			if config.GetSecret() == "" {
 				unsafe = append(unsafe, fmt.Sprintf("%d", hook.GetID()))
 			}
