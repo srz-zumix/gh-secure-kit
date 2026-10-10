@@ -27,7 +27,7 @@ func TestSuspendedUserRules(t *testing.T) {
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				facts := &OrganizationFacts{SuspendedOwnersKnown: tc.known, SuspendedMembersKnown: tc.known}
 				if tc.suspended {
-					users := []*github.User{{Login: github.Ptr("suspended")}}
+					users := []*github.User{{Login: github.Ptr("fixture_suspended")}}
 					facts.SuspendedOwners, facts.SuspendedMembers = users, users
 				}
 				if got := orgRuleOutcome(t, id, facts); got != tc.want {
@@ -41,46 +41,46 @@ func TestSuspendedUserRules(t *testing.T) {
 func TestCollectSuspendedUsers(t *testing.T) {
 	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
-		case "/users/suspended":
-			return rulesetResponse(request, 200, `{"login":"suspended","suspended_at":"2026-01-01T00:00:00Z"}`), nil
-		case "/users/active":
-			return rulesetResponse(request, 200, `{"login":"active","suspended_at":null}`), nil
+		case "/users/fixture_suspended":
+			return rulesetResponse(request, 200, `{"login":"fixture_suspended","suspended_at":"2026-01-01T00:00:00Z"}`), nil
+		case "/users/fixture_active":
+			return rulesetResponse(request, 200, `{"login":"fixture_active","suspended_at":null}`), nil
 		default:
 			return rulesetResponse(request, 403, `{"message":"forbidden"}`), nil
 		}
 	}))
-	users := []*github.User{{Login: github.Ptr("suspended")}, {Login: github.Ptr("active")}}
-	got, known := collectSuspendedUsers(context.Background(), client, "github.example.com", users)
-	if !known || len(got) != 1 || got[0].GetLogin() != "suspended" {
+	users := []*github.User{{Login: github.Ptr("fixture_suspended")}, {Login: github.Ptr("fixture_active")}}
+	got, known := collectSuspendedUsers(context.Background(), client, "github.example.test", users)
+	if !known || len(got) != 1 || got[0].GetLogin() != "fixture_suspended" {
 		t.Fatalf("got %v, known %v", got, known)
 	}
-	users = append(users, &github.User{Login: github.Ptr("unknown")}, nil)
-	got, known = collectSuspendedUsers(context.Background(), client, "github.example.com", users)
+	users = append(users, &github.User{Login: github.Ptr("fixture_unknown")}, nil)
+	got, known = collectSuspendedUsers(context.Background(), client, "github.example.test", users)
 	if known || len(got) != 1 {
 		t.Fatalf("partial results: got %v, known %v", got, known)
 	}
 }
 
 func TestCollectSuspendedUsersFromList(t *testing.T) {
-	const obfuscatedLogin = "0123456789abcdef0123456789abcdef_acme"
-	for _, host := range []string{"github.com", "example.ghe.com", "github.example.com"} {
+	const obfuscatedLogin = "0123456789abcdef0123456789abcdef_fixture"
+	for _, host := range []string{"github.com", "fixture.ghe.com", "github.example.test"} {
 		t.Run(host, func(t *testing.T) {
 			requests := 0
 			client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 				requests++
-				return rulesetResponse(request, 200, `{"login":"alice_acme","suspended_at":null}`), nil
+				return rulesetResponse(request, 200, `{"login":"fixture_active","suspended_at":null}`), nil
 			}))
 			users := []*github.User{
 				{Login: github.Ptr(obfuscatedLogin)},
-				{Login: github.Ptr("alice_acme")},
-				{Login: github.Ptr("timestamp"), SuspendedAt: &github.Timestamp{}},
+				{Login: github.Ptr("fixture_active")},
+				{Login: github.Ptr("fixture_timestamp"), SuspendedAt: &github.Timestamp{}},
 			}
 			got, known := collectSuspendedUsers(context.Background(), client, host, users)
-			if !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "timestamp" {
+			if !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "fixture_timestamp" {
 				t.Fatalf("got %v, known %v", got, known)
 			}
 			wantRequests := 0
-			if host == "github.example.com" {
+			if host == "github.example.test" {
 				wantRequests = 1
 			}
 			if requests != wantRequests {
@@ -121,7 +121,7 @@ func TestRunnerGroupApply(t *testing.T) {
 	requests := 0
 	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		requests++
-		if request.Method != "PATCH" || request.URL.Path != "/orgs/example/actions/runner-groups/1" {
+		if request.Method != "PATCH" || request.URL.Path != "/orgs/fixture_org/actions/runner-groups/1" {
 			t.Fatalf("unexpected request: %s %s", request.Method, request.URL.Path)
 		}
 		var body map[string]any
@@ -137,7 +137,7 @@ func TestRunnerGroupApply(t *testing.T) {
 		{ID: github.Ptr(int64(1)), AllowsPublicRepositories: github.Ptr(true)},
 		{ID: github.Ptr(int64(2)), AllowsPublicRepositories: github.Ptr(false)},
 	}}
-	repo := repository.Repository{Owner: "example"}
+	repo := repository.Repository{Owner: "fixture_org"}
 	if err := rule.ApplyOrg(context.Background(), client, repo, facts); err != nil || requests != 1 {
 		t.Fatalf("requests %d, error %v", requests, err)
 	}
@@ -210,31 +210,31 @@ func TestWebhookRules(t *testing.T) {
 
 func TestIntegrationFactSelection(t *testing.T) {
 	for _, id := range []string{"GSK521", "GSK522", "GSK523", "GSK524", "GSK525"} {
-		for _, host := range []string{"github.com", "example.ghe.com", "github.example.com"} {
+		for _, host := range []string{"github.com", "fixture.ghe.com", "github.example.test"} {
 			t.Run(id+"/"+host, func(t *testing.T) {
 				var paths []string
 				client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 					paths = append(paths, request.URL.Path)
-					if request.URL.Path == "/orgs/example" {
-						return rulesetResponse(request, 200, `{"login":"example"}`), nil
+					if request.URL.Path == "/orgs/fixture_org" {
+						return rulesetResponse(request, 200, `{"login":"fixture_org"}`), nil
 					}
-					if request.URL.Path == "/orgs/example/members" {
-						if host != "github.example.com" {
-							return rulesetResponse(request, 200, `[{"login":"0123456789abcdef0123456789abcdef_acme"}]`), nil
+					if request.URL.Path == "/orgs/fixture_org/members" {
+						if host != "github.example.test" {
+							return rulesetResponse(request, 200, `[{"login":"0123456789abcdef0123456789abcdef_fixture"}]`), nil
 						}
-						return rulesetResponse(request, 200, `[{"login":"user"}]`), nil
+						return rulesetResponse(request, 200, `[{"login":"fixture_user"}]`), nil
 					}
-					if request.URL.Path == "/users/user" {
-						return rulesetResponse(request, 200, `{"login":"user","suspended_at":"2026-01-01T00:00:00Z"}`), nil
+					if request.URL.Path == "/users/fixture_user" {
+						return rulesetResponse(request, 200, `{"login":"fixture_user","suspended_at":"2026-01-01T00:00:00Z"}`), nil
 					}
 					return rulesetResponse(request, 404, `{"message":"Not Found"}`), nil
 				}))
 				rule, _ := RuleByID(id)
-				facts, err := CollectOrganizationFacts(context.Background(), client, repository.Repository{Host: host, Owner: "example"}, []Rule{rule})
+				facts, err := CollectOrganizationFacts(context.Background(), client, repository.Repository{Host: host, Owner: "fixture_org"}, []Rule{rule})
 				if err != nil {
 					t.Fatal(err)
 				}
-				ghes := host == "github.example.com"
+				ghes := host == "github.example.test"
 				counts := map[string]int{}
 				for _, path := range paths {
 					counts[path]++
@@ -260,12 +260,12 @@ func TestIntegrationFactSelection(t *testing.T) {
 						t.Fatalf("suspended user: got %s, want fail", got)
 					}
 				}
-				if counts["/users/user"] != wantUser {
-					t.Errorf("user requests: got %d, want %d", counts["/users/user"], wantUser)
+				if counts["/users/fixture_user"] != wantUser {
+					t.Errorf("user requests: got %d, want %d", counts["/users/fixture_user"], wantUser)
 				}
 				for path, selected := range map[string]bool{
-					"/orgs/example/hooks":                 id == "GSK524" || id == "GSK525",
-					"/orgs/example/actions/runner-groups": id == "GSK523",
+					"/orgs/fixture_org/hooks":                 id == "GSK524" || id == "GSK525",
+					"/orgs/fixture_org/actions/runner-groups": id == "GSK523",
 				} {
 					if (counts[path] > 0) != selected {
 						t.Errorf("unexpected selection of %s: %d", path, counts[path])

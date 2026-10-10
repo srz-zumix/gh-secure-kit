@@ -392,16 +392,15 @@ type OrganizationFacts struct {
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
-func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, selected ...[]Rule) (*OrganizationFacts, error) {
+func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) (*OrganizationFacts, error) {
 	org, err := gh.GetOrg(ctx, g, repo)
 	if err != nil {
 		return nil, err
 	}
 
 	f := &OrganizationFacts{Org: org}
-	rules := AllRules()
-	if len(selected) > 0 {
-		rules = selected[0]
+	if len(rules) == 0 {
+		rules = AllRules()
 	}
 
 	if teams, err := gh.ListTeamsAssignedToRole(ctx, g, repo, "security_manager"); err == nil {
