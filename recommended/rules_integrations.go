@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
@@ -120,7 +121,7 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 	if !known {
 		return Skip("could not read webhooks")
 	}
-	var unsafe []string
+	var unsafe []int64
 	unknown := false
 	for _, hook := range hooks {
 		if hook == nil || hook.Active == nil {
@@ -140,14 +141,14 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 			// when one is configured and omits the field entirely when it is
 			// not, so a missing or empty value means payloads are unsigned.
 			if config.GetSecret() == "" {
-				unsafe = append(unsafe, fmt.Sprintf("%d", hook.GetID()))
+				unsafe = append(unsafe, hook.GetID())
 			}
 			continue
 		}
 		endpoint, err := url.Parse(config.GetURL())
 		validURL := err == nil && endpoint.Hostname() != "" && (endpoint.Scheme == "http" || endpoint.Scheme == "https")
 		if config.GetInsecureSSL() == "1" || (validURL && endpoint.Scheme == "http") {
-			unsafe = append(unsafe, fmt.Sprintf("%d", hook.GetID()))
+			unsafe = append(unsafe, hook.GetID())
 		} else if !validURL || config.InsecureSSL == nil || config.GetInsecureSSL() != "0" {
 			unknown = true
 		}
@@ -157,8 +158,12 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 		issue = "no secret"
 	}
 	if len(unsafe) > 0 {
-		sort.Strings(unsafe)
-		return Fail("active webhook IDs with " + issue + ": " + strings.Join(unsafe, ", "))
+		sort.Slice(unsafe, func(i, j int) bool { return unsafe[i] < unsafe[j] })
+		ids := make([]string, len(unsafe))
+		for i, id := range unsafe {
+			ids[i] = strconv.FormatInt(id, 10)
+		}
+		return Fail("active webhook IDs with " + issue + ": " + strings.Join(ids, ", "))
 	}
 	if unknown {
 		return Skip("could not determine webhook " + issue + " status for some webhooks")
