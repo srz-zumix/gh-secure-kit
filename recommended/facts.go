@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -18,7 +19,9 @@ var branchErrorHTTPStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
 // RepositoryFacts holds the raw data collected from GitHub for a single
 // repository, used as input to every repository-scoped Rule.Check function.
 type RepositoryFacts struct {
-	Repo *github.Repository
+	Repo       *github.Repository
+	Hooks      []*github.Hook
+	HooksKnown bool
 
 	// Protection is nil when the default branch has no legacy branch protection rule.
 	Protection *github.Protection
@@ -342,6 +345,19 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		}
 	}
 
+	if selectedRule(rules, "GSK144", "GSK145") {
+		if hooks, err := gh.ListRepoHooks(ctx, g, repo); err == nil {
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK145") {
+				fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Repositories.GetHookConfiguration(ctx, repo.Owner, repo.Name, id)
+					return config, err
+				})
+			}
+			f.Hooks, f.HooksKnown = hooks, true
+		}
+	}
 	return f, nil
 }
 
@@ -372,17 +388,28 @@ type OrganizationFacts struct {
 	Owners []*github.User
 	// OwnersKnown is false when the owner list could not be fetched, so the
 	// owner-count rule skips instead of treating the organization as having none.
-	OwnersKnown bool
+	OwnersKnown           bool
+	SuspendedOwners       []*github.User
+	SuspendedOwnersKnown  bool
+	SuspendedMembers      []*github.User
+	SuspendedMembersKnown bool
+	RunnerGroups          []*github.RunnerGroup
+	RunnerGroupsKnown     bool
+	Hooks                 []*github.Hook
+	HooksKnown            bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
-func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository) (*OrganizationFacts, error) {
+func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) (*OrganizationFacts, error) {
 	org, err := gh.GetOrg(ctx, g, repo)
 	if err != nil {
 		return nil, err
 	}
 
 	f := &OrganizationFacts{Org: org}
+	if len(rules) == 0 {
+		rules = AllRules()
+	}
 
 	if teams, err := gh.ListTeamsAssignedToRole(ctx, g, repo, "security_manager"); err == nil {
 		f.SecurityManagerTeams = teams
@@ -410,6 +437,94 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		f.Owners = owners
 		f.OwnersKnown = true
 	}
+	if selectedRule(rules, "GSK521") && f.OwnersKnown {
+		f.SuspendedOwners, f.SuspendedOwnersKnown = collectSuspendedUsers(ctx, g, repo.Host, f.Owners)
+	}
+	if selectedRule(rules, "GSK522") {
+		if members, err := gh.ListOrgMembers(ctx, g, repo, []string{"member"}, false); err == nil {
+			f.SuspendedMembers, f.SuspendedMembersKnown = collectSuspendedUsers(ctx, g, repo.Host, members)
+		}
+	}
+	if selectedRule(rules, "GSK523") {
+		if groups, err := gh.ListOrgRunnerGroups(ctx, g, repo); err == nil {
+			f.RunnerGroups, f.RunnerGroupsKnown = groups, true
+		}
+	}
+	if selectedRule(rules, "GSK524", "GSK525") {
+		if hooks, err := gh.ListOrgHooks(ctx, g, repo); err == nil {
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK525") {
+				fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Organizations.GetHookConfiguration(ctx, repo.Owner, id)
+					return config, err
+				})
+			}
+			f.Hooks, f.HooksKnown = hooks, true
+		}
+	}
 
 	return f, nil
+}
+
+func selectedRule(rules []Rule, ids ...string) bool {
+	for _, rule := range rules {
+		for _, id := range ids {
+			if rule.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// fillHookConfigs replaces the configuration of every active webhook with the
+// one returned by the per-hook configuration endpoint. Webhook list responses
+// omit the secret field entirely, while the configuration endpoint reports it
+// masked when one is configured. A hook whose configuration cannot be fetched
+// keeps no configuration at all so the rules treat it as indeterminate instead
+// of reporting a missing secret.
+func fillHookConfigs(ctx context.Context, hooks []*github.Hook, get func(ctx context.Context, id int64) (*github.HookConfig, error)) {
+	for _, hook := range hooks {
+		if hook == nil || hook.Active == nil || !hook.GetActive() {
+			continue
+		}
+		if hook.GetID() == 0 {
+			hook.Config = nil
+			continue
+		}
+		config, err := get(ctx, hook.GetID())
+		if err != nil || config == nil {
+			hook.Config = nil
+			continue
+		}
+		hook.Config = config
+	}
+}
+
+func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, host string, users []*github.User) ([]*github.User, bool) {
+	var suspended []*github.User
+	known := true
+	for _, user := range users {
+		if user.GetLogin() == "" {
+			known = false
+			continue
+		}
+		if gh.IsSuspendedUser(user) {
+			suspended = append(suspended, user)
+			continue
+		}
+		if !auth.IsEnterprise(host) {
+			continue
+		}
+		details, err := gh.FindUser(ctx, g, user.GetLogin())
+		if err != nil || details == nil {
+			known = false
+			continue
+		}
+		if gh.IsSuspendedUser(details) {
+			suspended = append(suspended, details)
+		}
+	}
+	return suspended, known
 }
