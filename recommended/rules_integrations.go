@@ -130,9 +130,10 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 			continue
 		}
 		if secret {
-			if config.Secret == nil {
-				unknown = true
-			} else if config.GetSecret() == "" {
+			// GitHub returns the secret obfuscated when one is configured and
+			// omits the field entirely when it is not, so a missing or empty
+			// value means the webhook payload is unsigned.
+			if config.GetSecret() == "" {
 				unsafe = append(unsafe, fmt.Sprintf("%d", hook.GetID()))
 			}
 			continue

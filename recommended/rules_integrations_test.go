@@ -158,7 +158,7 @@ func TestWebhookRules(t *testing.T) {
 		{"http", "http://example.com/hook?token=hidden", "0", github.Ptr("********"), true, StatusFail, StatusPass},
 		{"insecure ssl", "https://example.com", "1", github.Ptr("********"), true, StatusFail, StatusPass},
 		{"no secret", "https://example.com", "0", github.Ptr(""), true, StatusPass, StatusFail},
-		{"omitted secret", "https://example.com", "0", nil, true, StatusPass, StatusSkip},
+		{"omitted secret", "https://example.com", "0", nil, true, StatusPass, StatusFail},
 		{"invalid url", "%%%hidden", "0", github.Ptr("********"), true, StatusSkip, StatusPass},
 		{"inactive", "http://example.com", "1", github.Ptr(""), false, StatusPass, StatusPass},
 		{"unknown ssl", "https://example.com", "unknown", github.Ptr("********"), true, StatusSkip, StatusPass},
