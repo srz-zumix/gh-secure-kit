@@ -347,10 +347,14 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 
 	if selectedRule(rules, "GSK144", "GSK145") {
 		if hooks, err := gh.ListRepoHooks(ctx, g, repo); err == nil {
-			fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
-				config, _, err := g.GetClient().Repositories.GetHookConfiguration(ctx, repo.Owner, repo.Name, id)
-				return config, err
-			})
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK145") {
+				fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Repositories.GetHookConfiguration(ctx, repo.Owner, repo.Name, id)
+					return config, err
+				})
+			}
 			f.Hooks, f.HooksKnown = hooks, true
 		}
 	}
@@ -448,10 +452,14 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 	if selectedRule(rules, "GSK524", "GSK525") {
 		if hooks, err := gh.ListOrgHooks(ctx, g, repo); err == nil {
-			fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
-				config, _, err := g.GetClient().Organizations.GetHookConfiguration(ctx, repo.Owner, id)
-				return config, err
-			})
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK525") {
+				fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Organizations.GetHookConfiguration(ctx, repo.Owner, id)
+					return config, err
+				})
+			}
 			f.Hooks, f.HooksKnown = hooks, true
 		}
 	}
