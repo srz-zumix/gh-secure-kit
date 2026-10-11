@@ -57,6 +57,8 @@ catalog with severity, scope, and fixability.
 | [GSK141](GSK141.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
 | [GSK142](GSK142.md) | Medium | Yes | Forking allowed on private or internal repository |
 | [GSK143](GSK143.md) | Info | No | No push ruleset restricting pushed files |
+| [GSK144](GSK144.md) | High | No | Webhook uses insecure transport |
+| [GSK145](GSK145.md) | Medium | No | Webhook has no secret |
 
 ## Organization rules
 
@@ -82,3 +84,8 @@ catalog with severity, scope, and fixability.
 | [GSK518](GSK518.md) | Medium | No | Immutable releases not enforced for all repositories |
 | [GSK519](GSK519.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
 | [GSK520](GSK520.md) | Medium | No | Excessive organization owners |
+| [GSK521](GSK521.md) | High | No | Suspended users remain organization owners |
+| [GSK522](GSK522.md) | Medium | No | Suspended users remain organization members |
+| [GSK523](GSK523.md) | High | Yes | Self-hosted runner group allows public repositories |
+| [GSK524](GSK524.md) | High | No | Webhook uses insecure transport |
+| [GSK525](GSK525.md) | Medium | No | Webhook has no secret |

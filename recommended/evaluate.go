@@ -31,7 +31,7 @@ func EvaluateRepository(ctx context.Context, g *gh.GitHubClient, repo repository
 // EvaluateOrganization collects facts for a single organization and evaluates
 // the given rules against it. Only rules with Scope == ScopeOrganization are evaluated.
 func EvaluateOrganization(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) ([]Result, *OrganizationFacts, error) {
-	facts, err := CollectOrganizationFacts(ctx, g, repo)
+	facts, err := CollectOrganizationFacts(ctx, g, repo, rules)
 	if err != nil {
 		return nil, nil, err
 	}
