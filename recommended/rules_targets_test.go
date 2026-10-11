@@ -1,10 +1,14 @@
 package recommended
 
 import (
+	"context"
+	"net/http"
+	"path"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
 )
 
@@ -223,5 +227,72 @@ func TestTargetKindRulesAcceptTargetsInConfig(t *testing.T) {
 		if !ok || rule.TargetKind == "" {
 			t.Errorf("%s: missing TargetKind", id)
 		}
+	}
+}
+
+func TestGSK523ApplyOrgSkipsIgnoredRunnerGroups(t *testing.T) {
+	rule, ok := RuleByID("GSK523")
+	if !ok || rule.ApplyOrg == nil {
+		t.Fatal("GSK523 rule with ApplyOrg not found")
+	}
+
+	var patched []string
+	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		if request.Method != http.MethodPatch {
+			t.Errorf("unexpected method %s", request.Method)
+		}
+		patched = append(patched, path.Base(request.URL.Path))
+		return rulesetResponse(request, http.StatusOK, `{"id":1,"allows_public_repositories":false}`), nil
+	}))
+
+	// "legacy" is both ignored and inherited: the preflight must not reject it
+	// and remediation must not touch it, while "other" is still fixed.
+	facts := &OrganizationFacts{RunnerGroupsKnown: true, RunnerGroups: []*github.RunnerGroup{
+		{ID: github.Ptr(int64(1)), Name: github.Ptr("legacy"), Inherited: github.Ptr(true), AllowsPublicRepositories: github.Ptr(true)},
+		{ID: github.Ptr(int64(2)), Name: github.Ptr("other"), AllowsPublicRepositories: github.Ptr(true)},
+	}}
+	facts.ignores = mustIgnores(t, IgnoreEntry{ID: "GSK523", Targets: []string{"legacy"}})
+
+	repo := repository.Repository{Owner: "fixture_org"}
+	if err := rule.ApplyOrg(context.Background(), client, repo, facts); err != nil {
+		t.Fatalf("ApplyOrg() error = %v", err)
+	}
+	if !reflect.DeepEqual(patched, []string{"2"}) {
+		t.Fatalf("patched runner groups = %v, want [2]", patched)
+	}
+}
+
+func TestGSK136ApplyRepoSkipsIgnoredEnvironments(t *testing.T) {
+	rule, ok := RuleByID("GSK136")
+	if !ok || rule.ApplyRepo == nil {
+		t.Fatal("GSK136 rule with ApplyRepo not found")
+	}
+
+	f := &RepositoryFacts{
+		EnvironmentsKnown:       true,
+		EnvironmentSecretsKnown: map[string]bool{"production": true, "staging": true},
+		Environments: []*github.Environment{
+			gsk136SecretEnvironment("production"),
+			gsk136SecretEnvironment("staging"),
+		},
+		EnvironmentSecrets: map[string][]*github.Secret{
+			"production": {{Name: "TOKEN"}},
+			"staging":    {{Name: "TOKEN"}},
+		},
+	}
+	f.ignores = mustIgnores(t, IgnoreEntry{ID: "GSK136", Targets: []string{"production"}})
+
+	var updated []string
+	transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		updated = append(updated, path.Base(req.URL.Path))
+		return rulesetResponse(req, http.StatusOK, "{}"), nil
+	})
+
+	repo := repository.Repository{Owner: "OWNER", Name: "REPO"}
+	if err := rule.ApplyRepo(context.Background(), newRulesetTestClient(t, transport), repo, f); err != nil {
+		t.Fatalf("ApplyRepo() error = %v", err)
+	}
+	if !reflect.DeepEqual(updated, []string{"staging"}) {
+		t.Fatalf("updated environments = %v, want [staging]", updated)
 	}
 }
