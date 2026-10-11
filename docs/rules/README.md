@@ -10,6 +10,34 @@ Run `gh secure-kit recommended explain <ID>` to view a rule's documentation
 from the command line, or `gh secure-kit recommended list` to see the full
 catalog with severity, scope, and fixability.
 
+## Ignoring individual targets
+
+Rules that report individual items can be ignored per item in
+`.gh-secure-kit-recommended.yml`. Give a rule ID a list of regular expressions
+(each must match the whole target name):
+
+```yaml
+ignore:
+- GSK131: # Branch protection can be bypassed
+  - release-bot-.*
+- GSK135: # Environment with secrets has no required reviewers configured
+  - staging
+```
+
+| Rule | Target |
+|---|---|
+| GSK119, GSK120 | Collaborator login |
+| GSK121, GSK122 | Deploy key ID |
+| GSK131 | Ruleset name |
+| GSK135, GSK136, GSK137 | Environment name |
+| GSK144, GSK145, GSK524, GSK525 | Webhook ID |
+| GSK521, GSK522 | User login |
+| GSK523 | Runner group name |
+
+A rule whose findings are all ignored is reported as `skip`. The classic
+"not enforced for administrators" finding of GSK131 cannot be ignored per
+target; ignore the whole rule instead.
+
 ## Repository rules
 
 | Rule | Severity | Fixable | Title |

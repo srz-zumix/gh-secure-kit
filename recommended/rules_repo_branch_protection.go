@@ -456,7 +456,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK131", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed", TargetKind: "ruleset",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.ProtectionKnown || !f.RulesetsKnown {
 				return Skip("could not determine branch protection or ruleset status for the default branch")
@@ -472,16 +472,36 @@ func registerBranchProtectionRules() {
 			// excluded by bypassFindings below; a bypass any other actor could use
 			// stays reportable even for a single-member repository.
 			ownerExempt := oneMemberRepository(f) && combinedReviewCount(f) >= 1
-			reasons := bypassFindings(f, ownerExempt)
-			if len(reasons) == 0 {
+			findings := bypassFindings(f, ownerExempt)
+			if len(findings.reasons) == 0 {
+				if len(findings.ignored) > 0 {
+					return skipIgnored("ruleset", findings.ignored)
+				}
 				if ownerExempt {
 					return Skip("the repository has a single member who needs a bypass to merge their own pull requests")
 				}
 				return Pass("branch protection on the default branch cannot be bypassed")
 			}
-			return Fail(strings.Join(reasons, "; "))
+			detail := strings.Join(findings.reasons, "; ")
+			if findings.legacy {
+				return Fail(detail)
+			}
+			return failTargets(detail, findings.rulesets)
 		},
 	})
+}
+
+// bypassResult is the outcome of bypassFindings.
+type bypassResult struct {
+	// reasons describes every finding that is not ignored.
+	reasons []string
+	// legacy reports a finding that is not attributable to a ruleset, so it
+	// cannot be ignored per target.
+	legacy bool
+	// rulesets are the names of the rulesets in reasons.
+	rulesets []string
+	// ignored are the names of the rulesets excluded by the configuration.
+	ignored []string
 }
 
 // bypassFindings describes every way the default branch protection can be
@@ -492,8 +512,8 @@ func registerBranchProtectionRules() {
 // ruleset is therefore not trusted by name: only the owner-exempt review shape
 // the remediation produces is tolerated, so any surviving unconditional bypass
 // is a genuine finding even on a ruleset that uses the managed review name.
-func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
-	var reasons []string
+func bypassFindings(f *RepositoryFacts, ownerExempt bool) bypassResult {
+	var res bypassResult
 	// In a single-member user repository the owner is the only administrator, so a
 	// disabled admin enforcement can be the owner's own required review bypass.
 	// That exemption is tolerated only when the legacy protection is the review-only
@@ -503,7 +523,8 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 	// reportable, as does a disabled enforcement in any multi-member repository.
 	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() &&
 		(!ownerExempt || !legacyProtectionMatchesOwnerExemptShape(f)) {
-		reasons = append(reasons, "branch protection is not enforced for administrators")
+		res.reasons = append(res.reasons, "branch protection is not enforced for administrators")
+		res.legacy = true
 	}
 	for _, rs := range activeDefaultBranchRulesets(f) {
 		if !gh.HasAnyRulesetRule(rs.Rules) {
@@ -521,9 +542,14 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 		if ownerExempt && rulesetMatchesOwnerExemptShape(f, rs) {
 			continue
 		}
-		reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+		if f.ignores.Match("GSK131", rs.Name) {
+			res.ignored = append(res.ignored, rs.Name)
+			continue
+		}
+		res.reasons = append(res.reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+		res.rulesets = append(res.rulesets, rs.Name)
 	}
-	return reasons
+	return res
 }
 
 // legacyProtectionMatchesOwnerExemptShape reports whether the legacy branch

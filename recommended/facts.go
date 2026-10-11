@@ -19,6 +19,9 @@ var branchErrorHTTPStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
 // RepositoryFacts holds the raw data collected from GitHub for a single
 // repository, used as input to every repository-scoped Rule.Check function.
 type RepositoryFacts struct {
+	// ignores holds the per-target ignores of the configuration.
+	ignores TargetIgnores
+
 	Repo       *github.Repository
 	Hooks      []*github.Hook
 	HooksKnown bool
@@ -364,6 +367,8 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 // OrganizationFacts holds the raw data collected from GitHub for a single
 // organization, used as input to every organization-scoped Rule.Check function.
 type OrganizationFacts struct {
+	// ignores holds the per-target ignores of the configuration.
+	ignores                TargetIgnores
 	Org                    *github.Organization
 	SecurityManagerTeams   []*github.Team
 	ActionsPermissions     *github.ActionsPermissions

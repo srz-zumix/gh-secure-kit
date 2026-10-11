@@ -72,14 +72,18 @@ Existing output files require --overwrite. No GitHub settings are changed.`,
 			if err != nil {
 				return fmt.Errorf("failed to create GitHub client: %w", err)
 			}
+			targetIgnores, err := catalog.GoldenTargetIgnores(cfg, prune)
+			if err != nil {
+				return fmt.Errorf("failed to load recommended configuration: %w", err)
+			}
 			var results []catalog.Result
 			if target.Name != "" {
-				results, _, err = catalog.EvaluateRepository(cmd.Context(), client, target, rules)
+				results, _, err = catalog.EvaluateRepository(cmd.Context(), client, target, rules, targetIgnores)
 				if err != nil {
 					return fmt.Errorf("failed to evaluate repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
-				results, _, err = catalog.EvaluateOrganization(cmd.Context(), client, target, rules)
+				results, _, err = catalog.EvaluateOrganization(cmd.Context(), client, target, rules, targetIgnores)
 				if err != nil {
 					return fmt.Errorf("failed to evaluate organization '%s': %w", target.Owner, err)
 				}

@@ -10,17 +10,33 @@ import (
 	"testing"
 )
 
+func ignoreIDs(ids ...string) []IgnoreEntry {
+	entries := make([]IgnoreEntry, 0, len(ids))
+	for _, id := range ids {
+		entries = append(entries, IgnoreEntry{ID: id})
+	}
+	return entries
+}
+
 func TestLoadConfig(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		data string
-		want []string
+		want []IgnoreEntry
 		err  string
 	}{
-		{"normalize", "ignore: [gsk101, GSK102, GSK101]\n", []string{"GSK101", "GSK102"}, ""},
-		{"empty", "ignore: []\n", []string{}, ""},
-		{"missing key", "{}\n", []string{}, ""},
+		{"normalize", "ignore: [gsk101, GSK102, GSK101]\n", ignoreIDs("GSK101", "GSK102"), ""},
+		{"empty", "ignore: []\n", []IgnoreEntry{}, ""},
+		{"missing key", "{}\n", []IgnoreEntry{}, ""},
+		{"targets", "ignore:\n- gsk131: [b, a, b]\n- GSK101\n", []IgnoreEntry{{ID: "GSK101"}, {ID: "GSK131", Targets: []string{"a", "b"}}}, ""},
+		{"targets merged", "ignore:\n- GSK131: [a]\n- GSK131: [b]\n", []IgnoreEntry{{ID: "GSK131", Targets: []string{"a", "b"}}}, ""},
+		{"whole rule wins", "ignore:\n- GSK131: [a]\n- GSK131\n", ignoreIDs("GSK131"), ""},
 		{"unknown", "ignore: [GSK99999]\n", nil, "unknown rule ID"},
+		{"unknown with targets", "ignore:\n- GSK99999: [a]\n", nil, "unknown rule ID"},
+		{"targets unsupported", "ignore:\n- GSK101: [a]\n", nil, "does not support ignoring individual targets"},
+		{"empty targets", "ignore:\n- GSK131: []\n", nil, "no target patterns"},
+		{"two rules in one entry", "ignore:\n- {GSK131: [a], GSK135: [b]}\n", nil, "exactly one rule ID"},
+		{"invalid pattern", "ignore:\n- GSK131: ['(']\n", nil, "invalid target pattern"},
 		{"malformed", "ignore: [\n", nil, "failed to parse"},
 		{"wrong type", "ignore: invalid\n", nil, "failed to parse"},
 	} {
@@ -59,14 +75,14 @@ func TestResolveConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, err = ResolveConfig("")
-	if err != nil || !reflect.DeepEqual(cfg.Ignore, []string{"GSK101"}) {
+	if err != nil || !reflect.DeepEqual(cfg.Ignore, ignoreIDs("GSK101")) {
 		t.Fatalf("discovery: cfg = %v, err = %v", cfg, err)
 	}
 	if err := os.WriteFile("explicit.yml", []byte("ignore: [GSK102]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = ResolveConfig("explicit.yml")
-	if err != nil || !reflect.DeepEqual(cfg.Ignore, []string{"GSK102"}) {
+	if err != nil || !reflect.DeepEqual(cfg.Ignore, ignoreIDs("GSK102")) {
 		t.Fatalf("explicit override: cfg = %v, err = %v", cfg, err)
 	}
 	if err := os.WriteFile(ConfigFileName, []byte("ignore: [\n"), 0600); err != nil {
@@ -89,7 +105,7 @@ func TestResolveConfigSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg, err := ResolveConfig("")
-	if err != nil || !reflect.DeepEqual(cfg.Ignore, []string{"GSK101"}) {
+	if err != nil || !reflect.DeepEqual(cfg.Ignore, ignoreIDs("GSK101")) {
 		t.Fatalf("symlink discovery: cfg = %v, err = %v", cfg, err)
 	}
 	if err := os.Remove("target.yml"); err != nil {
@@ -101,7 +117,7 @@ func TestResolveConfigSymlink(t *testing.T) {
 }
 
 func TestGoldenConfig(t *testing.T) {
-	base := &Config{Ignore: []string{"gsk101", "GSK102", "GSK103", "GSK104", "GSK501", "GSK101"}}
+	base := &Config{Ignore: ignoreIDs("gsk101", "GSK102", "GSK103", "GSK104", "GSK501", "GSK101")}
 	results := []Result{
 		{Rule: Rule{ID: "GSK101"}, Status: StatusPass},
 		{Rule: Rule{ID: "GSK102"}, Status: StatusFail},
@@ -110,7 +126,7 @@ func TestGoldenConfig(t *testing.T) {
 		{Rule: Rule{ID: "GSK106"}, Status: StatusSkip},
 	}
 	for _, prune := range []bool{false, true} {
-		want := []string{"GSK101", "GSK102", "GSK103", "GSK104", "GSK105", "GSK501"}
+		want := ignoreIDs("GSK101", "GSK102", "GSK103", "GSK104", "GSK105", "GSK501")
 		if prune {
 			want = want[1:]
 		}
@@ -122,8 +138,82 @@ func TestGoldenConfig(t *testing.T) {
 			t.Fatal("regeneration must be idempotent")
 		}
 	}
-	if base.Ignore[0] != "gsk101" || len(base.Ignore) != 6 {
+	if base.Ignore[0].ID != "gsk101" || len(base.Ignore) != 6 {
 		t.Fatal("input config was mutated")
+	}
+}
+
+func TestGoldenConfigTargets(t *testing.T) {
+	failing := func(id string, targets ...string) Result {
+		return Result{Rule: Rule{ID: id}, Status: StatusFail, Targets: targets}
+	}
+	base := &Config{Ignore: []IgnoreEntry{
+		{ID: "GSK131", Targets: []string{"old-.*", "gone"}},
+		{ID: "GSK135", Targets: []string{"prod"}},
+		{ID: "GSK136", Targets: []string{"prod"}},
+	}}
+	results := []Result{
+		failing("GSK131", "old-1", "a.b"),
+		{Rule: Rule{ID: "GSK135"}, Status: StatusPass},
+		{Rule: Rule{ID: "GSK136"}, Status: StatusSkip},
+		failing("GSK137", "stage"),
+		failing("GSK119"),
+	}
+
+	t.Run("keep", func(t *testing.T) {
+		want := []IgnoreEntry{
+			{ID: "GSK119"},
+			{ID: "GSK131", Targets: []string{"a\\.b", "gone", "old-.*"}},
+			{ID: "GSK135", Targets: []string{"prod"}},
+			{ID: "GSK136", Targets: []string{"prod"}},
+			{ID: "GSK137", Targets: []string{"stage"}},
+		}
+		if got := GoldenConfig(base, results, false); !reflect.DeepEqual(got.Ignore, want) {
+			t.Fatalf("ignore = %v, want %v", got.Ignore, want)
+		}
+	})
+
+	t.Run("prune", func(t *testing.T) {
+		want := []IgnoreEntry{
+			{ID: "GSK119"},
+			{ID: "GSK131", Targets: []string{"a\\.b", "old-.*"}},
+			{ID: "GSK136", Targets: []string{"prod"}},
+			{ID: "GSK137", Targets: []string{"stage"}},
+		}
+		got := GoldenConfig(base, results, true)
+		if !reflect.DeepEqual(got.Ignore, want) {
+			t.Fatalf("ignore = %v, want %v", got.Ignore, want)
+		}
+		if !reflect.DeepEqual(GoldenConfig(got, results, true), got) {
+			t.Fatal("regeneration must be idempotent")
+		}
+	})
+
+	t.Run("whole rule supersedes targets", func(t *testing.T) {
+		base := &Config{Ignore: []IgnoreEntry{{ID: "GSK131", Targets: []string{"a"}}}}
+		got := GoldenConfig(base, []Result{failing("GSK131")}, false)
+		if want := ignoreIDs("GSK131"); !reflect.DeepEqual(got.Ignore, want) {
+			t.Fatalf("ignore = %v, want %v", got.Ignore, want)
+		}
+	})
+
+	t.Run("whole ignore is kept", func(t *testing.T) {
+		base := &Config{Ignore: ignoreIDs("GSK131")}
+		got := GoldenConfig(base, []Result{failing("GSK131", "a")}, true)
+		if want := ignoreIDs("GSK131"); !reflect.DeepEqual(got.Ignore, want) {
+			t.Fatalf("ignore = %v, want %v", got.Ignore, want)
+		}
+	})
+}
+
+func TestGoldenTargetIgnores(t *testing.T) {
+	cfg := &Config{Ignore: []IgnoreEntry{{ID: "GSK131", Targets: []string{"a"}}, {ID: "GSK101"}}}
+	if ignores, err := GoldenTargetIgnores(cfg, true); err != nil || len(ignores) != 0 {
+		t.Fatalf("prune: ignores = %v, err = %v", ignores, err)
+	}
+	ignores, err := GoldenTargetIgnores(cfg, false)
+	if err != nil || !ignores.Match("gsk131", "a") || ignores.Match("GSK131", "ab") || ignores.Match("GSK135", "a") {
+		t.Fatalf("ignores = %v, err = %v", ignores, err)
 	}
 }
 
@@ -132,7 +222,7 @@ func TestGoldenRules(t *testing.T) {
 	if !ok {
 		t.Fatal("missing GSK101")
 	}
-	cfg := &Config{Ignore: []string{rule.ID}}
+	cfg := &Config{Ignore: ignoreIDs(rule.ID)}
 	for _, tc := range []struct {
 		name   string
 		filter Filter
@@ -171,7 +261,7 @@ func TestGoldenRules(t *testing.T) {
 }
 
 func TestWriteConfig(t *testing.T) {
-	for _, cfg := range []*Config{{Ignore: []string{}}, {Ignore: []string{"GSK101", "GSK102"}}} {
+	for _, cfg := range []*Config{{Ignore: []IgnoreEntry{}}, {Ignore: ignoreIDs("GSK101", "GSK102")}} {
 		var buf bytes.Buffer
 		if err := WriteConfig(&buf, cfg); err != nil {
 			t.Fatal(err)
@@ -197,7 +287,7 @@ func TestWriteConfig(t *testing.T) {
 }
 
 func TestWriteConfigFile(t *testing.T) {
-	cfg := &Config{Ignore: []string{"GSK101"}}
+	cfg := &Config{Ignore: ignoreIDs("GSK101")}
 	want := "ignore:\n- GSK101 # Dependabot alerts not enabled\n"
 
 	t.Run("create", func(t *testing.T) {
@@ -372,7 +462,7 @@ func TestWriteConfigFileRefusesOverwrite(t *testing.T) {
 			if _, err := ResolveGoldenOutput("", path, false); err == nil {
 				t.Fatal("output preflight must reject existing paths")
 			}
-			if err := WriteConfigFile(path, &Config{Ignore: []string{"GSK101"}}, false); err == nil {
+			if err := WriteConfigFile(path, &Config{Ignore: ignoreIDs("GSK101")}, false); err == nil {
 				t.Fatal("writing must reject existing paths")
 			}
 			if kind != "regular" {
