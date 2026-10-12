@@ -5787,7 +5787,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 Package: gopkg.in/warnings.v0
 License: BSD-2-Clause
-URL: https://github.com/go-warnings/warnings/blob/v0.1.2/LICENSE
+URL: Unknown
 ================================================================================
 Copyright (c) 2016 Péter Surányi.
 
@@ -5817,7 +5817,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ================================================================================
 Package: gopkg.in/yaml.v3
 License: MIT
-URL: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
+URL: Unknown
 ================================================================================
 
 This project is covered by two different licenses: MIT and Apache.
