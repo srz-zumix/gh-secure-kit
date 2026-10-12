@@ -35,30 +35,32 @@ func wrapText(s string, width int) string {
 // resultJSON is the JSON-friendly representation of a Result, omitting the
 // Rule's non-serializable Check/Apply function fields.
 type resultJSON struct {
-	Rule     string   `json:"rule"`
-	GHQRID   string   `json:"ghqr_id,omitempty"`
-	Severity Severity `json:"severity"`
-	Scope    Scope    `json:"scope"`
-	Category string   `json:"category"`
-	Fixable  bool     `json:"fixable"`
-	Title    string   `json:"title"`
-	Target   string   `json:"target"`
-	Status   Status   `json:"status"`
-	Detail   string   `json:"detail"`
+	Rule        string   `json:"rule"`
+	GHQRID      string   `json:"ghqr_id,omitempty"`
+	Severity    Severity `json:"severity"`
+	Scope       Scope    `json:"scope"`
+	Category    string   `json:"category"`
+	Fixable     bool     `json:"fixable"`
+	Title       string   `json:"title"`
+	Target      string   `json:"target"`
+	Status      Status   `json:"status"`
+	Detail      string   `json:"detail"`
+	SettingsURL string   `json:"settings_url,omitempty"`
 }
 
 func newResultJSON(res Result) resultJSON {
 	return resultJSON{
-		Rule:     res.Rule.ID,
-		GHQRID:   res.Rule.GHQRID,
-		Severity: res.Rule.Severity,
-		Scope:    res.Rule.Scope,
-		Category: res.Rule.Category,
-		Fixable:  res.Rule.Fixable,
-		Title:    res.Rule.Title,
-		Target:   res.Target,
-		Status:   res.Status,
-		Detail:   res.Detail,
+		Rule:        res.Rule.ID,
+		GHQRID:      res.Rule.GHQRID,
+		Severity:    res.Rule.Severity,
+		Scope:       res.Rule.Scope,
+		Category:    res.Rule.Category,
+		Fixable:     res.Rule.Fixable,
+		Title:       res.Rule.Title,
+		Target:      res.Target,
+		Status:      res.Status,
+		Detail:      res.Detail,
+		SettingsURL: res.SettingsURL,
 	}
 }
 
@@ -77,7 +79,7 @@ func RenderResults(exporter cmdutil.Exporter, results []Result) error {
 		r.WriteLine("No rules evaluated.")
 		return nil
 	}
-	headers := []string{"Rule", "Severity", "Scope", "Target", "Status", "Fixable", "Title", "Detail"}
+	headers := []string{"Rule", "Severity", "Scope", "Target", "Status", "Fixable", "Title", "Detail", "Settings URL"}
 	table := r.NewTableWriter(headers)
 	for _, res := range results {
 		table.Append([]string{
@@ -89,6 +91,7 @@ func RenderResults(exporter cmdutil.Exporter, results []Result) error {
 			fmt.Sprintf("%t", res.Rule.Fixable),
 			res.Rule.Title,
 			wrapText(res.Detail, detailWrapWidth),
+			res.SettingsURL,
 		})
 	}
 	return table.Render()
@@ -188,7 +191,7 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult, dryRun
 		r.WriteLine("No fixes applied.")
 		return nil
 	}
-	headers := []string{"Rule", "Severity", "Target", "Status", "Applied", "Title", "Detail"}
+	headers := []string{"Rule", "Severity", "Target", "Status", "Applied", "Title", "Detail", "Settings URL"}
 	table := r.NewTableWriter(headers)
 	for _, res := range results {
 		applied := ""
@@ -211,6 +214,7 @@ func RenderApplyResults(exporter cmdutil.Exporter, results []ApplyResult, dryRun
 			applied,
 			res.Rule.Title,
 			wrapText(res.Detail, detailWrapWidth),
+			res.SettingsURL,
 		})
 	}
 	return table.Render()

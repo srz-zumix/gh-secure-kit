@@ -100,7 +100,8 @@ func activeRulesetProtectsAllBranches(f *RepositoryFacts) bool {
 func registerRepositoryEnvironmentRules() {
 	register(Rule{
 		ID: "GSK135", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityMedium, Title: "Environment with secrets has no required reviewers configured", TargetKind: "environment",
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityMedium, Title: "Environment with secrets has no required reviewers configured", TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
@@ -144,7 +145,8 @@ func registerRepositoryEnvironmentRules() {
 
 	register(Rule{
 		ID: "GSK136", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityHigh, Title: "Environment with secrets allows self-review", Fixable: true, TargetKind: "environment",
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityHigh, Title: "Environment with secrets allows self-review", Fixable: true, TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
@@ -208,7 +210,8 @@ func registerRepositoryEnvironmentRules() {
 
 	register(Rule{
 		ID: "GSK137", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityMedium, Title: "Environment deployment branch policy allows all branches", TargetKind: "environment",
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityMedium, Title: "Environment deployment branch policy allows all branches", TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")

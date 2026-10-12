@@ -1958,6 +1958,10 @@ gh secure-kit recommended check --owner <org> [flags]
 
 Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
 
+Results include a `Settings URL` column when a rule has a known GitHub settings
+page. Links use the target's GitHub host, including GitHub Enterprise Server.
+JSON output includes `settings_url` for these rules and omits it otherwise.
+
 **Flags:**
 
 | Flag | Short | Default | Description |
@@ -1983,6 +1987,9 @@ gh secure-kit recommended apply --owner <org> [flags]
 ```
 
 Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Output includes only fixes that were applied, fixes that would be applied with `--dryrun`, and failed fix attempts; run `recommended check` to see the full list of findings. Use `--dryrun` to report the fixes that would be applied, without changing anything. Branch-protection fixes create or update the repository-owned `gh-secure-kit/branch-protection` ruleset. GSK110 requires pull requests before merging; each additional selected rule adds only its own requirement. If only one repository member exists, the one-approval rule uses a separate review Ruleset with the owner exempted as a bypass actor. GSK116 remains manual because required check names cannot be inferred. Refuses to run when `--read-only` is set, unless `--dryrun` is also given.
+
+Results include the same settings links as `recommended check` in the
+`Settings URL` column and the optional JSON `settings_url` field.
 
 **Flags:**
 

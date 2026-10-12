@@ -59,7 +59,8 @@ func restrictedForkPRWorkflowSettings(s *github.WorkflowsPermissions) github.Wor
 func registerRepositoryActionsRules() {
 	register(Rule{
 		ID: "GSK138", GHQRID: "", Scope: ScopeRepository,
-		Category: "actions", Severity: SeverityHigh, Title: "Actions SHA pinning not required", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Actions SHA pinning not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.ActionsPermissions == nil {
 				return Skip("could not retrieve Actions permissions for the repository")
@@ -80,7 +81,8 @@ func registerRepositoryActionsRules() {
 
 	register(Rule{
 		ID: "GSK141", GHQRID: "", Scope: ScopeRepository,
-		Category: "actions", Severity: SeverityHigh, Title: "Private fork pull request workflows receive write tokens or secrets", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Private fork pull request workflows receive write tokens or secrets", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !isPrivateOrInternal(f.Repo) {
 				return Skip("fork pull request workflow settings only apply to private and internal repositories")
@@ -94,7 +96,8 @@ func registerRepositoryActionsRules() {
 
 	register(Rule{
 		ID: "GSK132", GHQRID: "", Scope: ScopeRepository,
-		Category: "actions", Severity: SeverityHigh, Title: "GITHUB_TOKEN default permissions are read-write", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "GITHUB_TOKEN default permissions are read-write", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.DefaultWorkflowPermissions == nil {
 				return Skip("could not retrieve default workflow permissions for the repository")
@@ -112,7 +115,8 @@ func registerRepositoryActionsRules() {
 
 	register(Rule{
 		ID: "GSK133", GHQRID: "", Scope: ScopeRepository,
-		Category: "actions", Severity: SeverityHigh, Title: "Actions can approve pull requests", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Actions can approve pull requests", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.DefaultWorkflowPermissions == nil {
 				return Skip("could not retrieve default workflow permissions for the repository")
@@ -130,7 +134,8 @@ func registerRepositoryActionsRules() {
 
 	register(Rule{
 		ID: "GSK134", GHQRID: "", Scope: ScopeRepository,
-		Category: "actions", Severity: SeverityHigh, Title: "Fork pull request workflows run without maintainer approval", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Fork pull request workflows run without maintainer approval", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.ForkPRContributorApproval == nil {
 				return Skip("could not retrieve the fork pull request contributor approval policy for the repository")

@@ -101,7 +101,8 @@ func activeRulesetsWithTarget(f *RepositoryFacts, target github.RulesetTarget) [
 func registerRepositoryRulesetRules() {
 	register(Rule{
 		ID: "GSK140", GHQRID: "", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Tags are not protected by a tag ruleset", Fixable: true,
+		SettingsPath: "rules",
+		Category:     "security", Severity: SeverityMedium, Title: "Tags are not protected by a tag ruleset", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.HasTags == nil {
 				return Skip("could not determine whether the repository has tags")
@@ -139,7 +140,8 @@ func registerRepositoryRulesetRules() {
 
 	register(Rule{
 		ID: "GSK143", GHQRID: "", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityInfo, Title: "No push ruleset restricting pushed files",
+		SettingsPath: "rules",
+		Category:     "security", Severity: SeverityInfo, Title: "No push ruleset restricting pushed files",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !isPrivateOrInternal(f.Repo) {
 				return Skip("push rulesets only apply to private and internal repositories")

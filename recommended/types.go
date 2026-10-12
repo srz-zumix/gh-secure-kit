@@ -5,6 +5,8 @@ package recommended
 
 import (
 	"context"
+	"net/url"
+	"path"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -107,11 +109,12 @@ type Rule struct {
 	// ID is the stable gh-secure-kit identifier, e.g. "GSK101".
 	ID string
 	// GHQRID references the equivalent microsoft/ghqr rule ID, if any.
-	GHQRID   string
-	Scope    Scope
-	Category string
-	Severity Severity
-	Title    string
+	GHQRID       string
+	Scope        Scope
+	Category     string
+	Severity     Severity
+	Title        string
+	SettingsPath string
 	// Fixable indicates whether ApplyRepo/ApplyOrg can remediate a failing result.
 	Fixable bool
 	// TargetKind names what a failing result enumerates (e.g. "ruleset"). Only
@@ -126,10 +129,28 @@ type Rule struct {
 
 // Result is the outcome of evaluating a Rule against a specific target.
 type Result struct {
-	Rule   Rule
-	Target string
-	Status Status
-	Detail string
+	Rule        Rule
+	Target      string
+	Status      Status
+	Detail      string
+	SettingsURL string
 	// Targets is Outcome.Targets of the evaluation.
 	Targets []string
+}
+
+func (r Rule) settingsURL(repo repository.Repository) string {
+	if r.SettingsPath == "" {
+		return ""
+	}
+	host := repo.Host
+	if host == "" {
+		host = "github.com"
+	}
+	var settingsPath string
+	if r.Scope == ScopeOrganization {
+		settingsPath = path.Join("/organizations", repo.Owner, "settings", r.SettingsPath)
+	} else {
+		settingsPath = path.Join("/", repo.Owner, repo.Name, "settings", r.SettingsPath)
+	}
+	return (&url.URL{Scheme: "https", Host: host, Path: settingsPath}).String()
 }
