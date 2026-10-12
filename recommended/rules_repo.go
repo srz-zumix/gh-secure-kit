@@ -3,11 +3,38 @@ package recommended
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 )
+
+// checkDeployKeys lists the deploy keys matching bad, identified by key ID.
+func checkDeployKeys(f *RepositoryFacts, ruleID, failLabel, passDetail string, bad func(*github.Key) bool) Outcome {
+	var ids, described, ignored []string
+	for _, k := range f.DeployKeys {
+		if !bad(k) {
+			continue
+		}
+		id := strconv.FormatInt(k.GetID(), 10)
+		if f.ignores.Match(ruleID, id) {
+			ignored = append(ignored, id)
+			continue
+		}
+		ids = append(ids, id)
+		described = append(described, fmt.Sprintf("%s (%s)", id, k.GetTitle()))
+	}
+	if len(ids) > 0 {
+		return failTargets(failLabel+": "+strings.Join(described, ", "), ids)
+	}
+	if len(ignored) > 0 {
+		return skipIgnored("deploy key ID", ignored)
+	}
+	return Pass(passDetail)
+}
 
 func init() {
 	registerRepositorySecurityRules()
@@ -211,34 +238,50 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK119", GHQRID: "repo-acc-001", Scope: ScopeRepository,
-		Category: "access_control", Severity: SeverityHigh, Title: "Excessive admin collaborators",
+		Category: "access_control", Severity: SeverityHigh, Title: "Excessive admin collaborators", TargetKind: "collaborator login",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.CollaboratorsKnown {
 				return Skip("could not read direct collaborators")
 			}
-			admins := 0
+			admins, ignoredAdmins := 0, 0
 			for _, c := range f.Collaborators {
-				if c.GetPermissions().GetAdmin() {
-					admins++
+				if !c.GetPermissions().GetAdmin() {
+					continue
 				}
+				if f.ignores.Match("GSK119", c.GetLogin()) {
+					ignoredAdmins++
+					continue
+				}
+				admins++
 			}
 			const maxAdmins = 3
 			if admins > maxAdmins {
 				return Fail(fmt.Sprintf("%d direct collaborators have admin access (threshold: %d)", admins, maxAdmins))
 			}
-			return Pass(fmt.Sprintf("%d direct collaborators have admin access", admins))
+			if admins+ignoredAdmins > maxAdmins {
+				return Skip(fmt.Sprintf("%d direct collaborators have admin access, but %d are ignored by the configuration (threshold: %d)", admins+ignoredAdmins, ignoredAdmins, maxAdmins))
+			}
+			return Pass(fmt.Sprintf("%d direct collaborators have admin access", admins+ignoredAdmins))
 		},
 	})
 
 	register(Rule{
 		ID: "GSK120", GHQRID: "repo-acc-002", Scope: ScopeRepository,
-		Category: "access_control", Severity: SeverityMedium, Title: "Direct collaborators instead of teams",
+		Category: "access_control", Severity: SeverityMedium, Title: "Direct collaborators instead of teams", TargetKind: "collaborator login",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.CollaboratorsKnown {
 				return Skip("could not read direct collaborators")
 			}
-			if len(f.Collaborators) > 0 {
-				return Fail(fmt.Sprintf("%d direct collaborators found; prefer granting access via teams", len(f.Collaborators)))
+			var logins []string
+			for _, c := range f.Collaborators {
+				logins = append(logins, c.GetLogin())
+			}
+			logins, ignored := splitIgnoredTargets(f.ignores, "GSK120", logins)
+			if len(logins) > 0 {
+				return failTargets(fmt.Sprintf("%d direct collaborators found; prefer granting access via teams", len(logins)), logins)
+			}
+			if len(ignored) > 0 {
+				return skipIgnored("collaborator login", ignored)
 			}
 			return Pass("no direct collaborators found")
 		},
@@ -246,33 +289,25 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK121", GHQRID: "repo-acc-003", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Deploy keys with write access",
+		Category: "security", Severity: SeverityHigh, Title: "Deploy keys with write access", TargetKind: "deploy key ID",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.DeployKeysKnown {
 				return Skip("could not read deploy keys")
 			}
-			for _, k := range f.DeployKeys {
-				if !k.GetReadOnly() {
-					return Fail("one or more deploy keys have write access")
-				}
-			}
-			return Pass("no deploy keys have write access")
+			return checkDeployKeys(f, "GSK121", "deploy keys with write access", "no deploy keys have write access",
+				func(k *github.Key) bool { return !k.GetReadOnly() })
 		},
 	})
 
 	register(Rule{
 		ID: "GSK122", GHQRID: "repo-acc-004", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Unverified deploy keys",
+		Category: "security", Severity: SeverityMedium, Title: "Unverified deploy keys", TargetKind: "deploy key ID",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.DeployKeysKnown {
 				return Skip("could not read deploy keys")
 			}
-			for _, k := range f.DeployKeys {
-				if !k.GetVerified() {
-					return Fail("one or more deploy keys are unverified")
-				}
-			}
-			return Pass("all deploy keys are verified")
+			return checkDeployKeys(f, "GSK122", "unverified deploy keys", "all deploy keys are verified",
+				func(k *github.Key) bool { return !k.GetVerified() })
 		},
 	})
 

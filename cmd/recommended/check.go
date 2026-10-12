@@ -34,15 +34,19 @@ settings, inspired by microsoft/ghqr.
 Use --repo to check a single repository against repository-scoped rules.
 Use --owner to check an organization against organization-scoped rules.
 --repo and --owner are mutually exclusive.
-Use --config to load ignored rule IDs from a YAML configuration. By default,
-.gh-secure-kit-recommended.yml is loaded from the current directory if present.
-Configured ignore IDs are combined with explicit --ignore flags.`,
+Use --config to load ignored rule IDs and ignored targets from a YAML configuration.
+By default, .gh-secure-kit-recommended.yml is loaded from the current directory
+if present. Configured ignore IDs are combined with explicit --ignore flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if unknown := catalog.UnknownRuleIDs(append(append([]string{}, ruleIDs...), ignoreIDs...)); len(unknown) > 0 {
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
 			}
 			cfg, err := catalog.ResolveConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load recommended configuration: %w", err)
+			}
+			targetIgnores, err := cfg.TargetIgnores()
 			if err != nil {
 				return fmt.Errorf("failed to load recommended configuration: %w", err)
 			}
@@ -60,7 +64,7 @@ Configured ignore IDs are combined with explicit --ignore flags.`,
 			filter := catalog.Filter{
 				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
-				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.Ignore...),
+				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.IgnoreIDs()...),
 				OnlyFixable: fixableOnly,
 			}
 
@@ -69,14 +73,14 @@ Configured ignore IDs are combined with explicit --ignore flags.`,
 			if target.Name != "" {
 				filter.Scope = catalog.ScopeRepository
 				rules := filter.Apply(catalog.AllRules())
-				results, _, err = catalog.EvaluateRepository(ctx, client, target, rules)
+				results, _, err = catalog.EvaluateRepository(ctx, client, target, rules, targetIgnores)
 				if err != nil {
 					return fmt.Errorf("failed to check repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
 				filter.Scope = catalog.ScopeOrganization
 				rules := filter.Apply(catalog.AllRules())
-				results, _, err = catalog.EvaluateOrganization(ctx, client, target, rules)
+				results, _, err = catalog.EvaluateOrganization(ctx, client, target, rules, targetIgnores)
 				if err != nil {
 					return fmt.Errorf("failed to check organization '%s': %w", target.Owner, err)
 				}

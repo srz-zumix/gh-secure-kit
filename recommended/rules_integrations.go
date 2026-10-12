@@ -16,26 +16,26 @@ import (
 func init() {
 	register(Rule{
 		ID: "GSK521", Scope: ScopeOrganization, Category: "access_control", Severity: SeverityHigh,
-		Title: "Suspended users remain organization owners",
+		Title: "Suspended users remain organization owners", TargetKind: "user login",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
-			return checkSuspendedUsers(f.SuspendedOwnersKnown, f.SuspendedOwners, "owners")
+			return checkSuspendedUsers(f.ignores, "GSK521", f.SuspendedOwnersKnown, f.SuspendedOwners, "owners")
 		},
 	})
 	register(Rule{
 		ID: "GSK522", Scope: ScopeOrganization, Category: "access_control", Severity: SeverityMedium,
-		Title: "Suspended users remain organization members",
+		Title: "Suspended users remain organization members", TargetKind: "user login",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
-			return checkSuspendedUsers(f.SuspendedMembersKnown, f.SuspendedMembers, "members")
+			return checkSuspendedUsers(f.ignores, "GSK522", f.SuspendedMembersKnown, f.SuspendedMembers, "members")
 		},
 	})
 	register(Rule{
 		ID: "GSK523", Scope: ScopeOrganization, Category: "actions", Severity: SeverityHigh,
-		Title: "Self-hosted runner group allows public repositories", Fixable: true,
+		Title: "Self-hosted runner group allows public repositories", Fixable: true, TargetKind: "runner group",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if !f.RunnerGroupsKnown {
 				return Skip("could not read organization runner groups")
 			}
-			var unsafe []string
+			var unsafe, ignored []string
 			unknown := false
 			for _, group := range f.RunnerGroups {
 				if group == nil || group.AllowsPublicRepositories == nil {
@@ -43,15 +43,23 @@ func init() {
 					continue
 				}
 				if group.GetAllowsPublicRepositories() {
-					unsafe = append(unsafe, group.GetName())
+					if f.ignores.Match("GSK523", group.GetName()) {
+						ignored = append(ignored, group.GetName())
+					} else {
+						unsafe = append(unsafe, group.GetName())
+					}
 				}
 			}
 			if len(unsafe) > 0 {
 				sort.Strings(unsafe)
-				return Fail("runner groups allowing public repositories: " + strings.Join(unsafe, ", "))
+				return failTargets("runner groups allowing public repositories: "+strings.Join(unsafe, ", "), unsafe)
 			}
 			if unknown {
 				return Skip("could not read public repository access for some runner groups")
+			}
+			if len(ignored) > 0 {
+				sort.Strings(ignored)
+				return skipIgnored("runner group", ignored)
 			}
 			return Pass("no runner group allows public repositories")
 		},
@@ -60,7 +68,7 @@ func init() {
 				return fmt.Errorf("could not read organization runner groups")
 			}
 			for _, group := range f.RunnerGroups {
-				if !group.GetAllowsPublicRepositories() {
+				if !group.GetAllowsPublicRepositories() || f.ignores.Match("GSK523", group.GetName()) {
 					continue
 				}
 				if group.ID == nil {
@@ -71,7 +79,7 @@ func init() {
 				}
 			}
 			for _, group := range f.RunnerGroups {
-				if group.GetAllowsPublicRepositories() {
+				if group.GetAllowsPublicRepositories() && !f.ignores.Match("GSK523", group.GetName()) {
 					if _, err := gh.UpdateOrgRunnerGroup(ctx, g, repo, group.GetID(), gh.RunnerGroupSettings{AllowsPublicRepositories: github.Ptr(false)}); err != nil {
 						return fmt.Errorf("failed to restrict public repository access for runner group %d: %w", group.GetID(), err)
 					}
@@ -92,24 +100,32 @@ func init() {
 		if spec.secret {
 			title, severity = "Webhook has no secret", SeverityMedium
 		}
-		rule := Rule{ID: spec.id, Scope: spec.scope, Category: "security", Severity: severity, Title: title}
+		rule := Rule{ID: spec.id, Scope: spec.scope, Category: "security", Severity: severity, Title: title, TargetKind: "webhook ID"}
 		if spec.scope == ScopeOrganization {
-			rule.CheckOrg = func(f *OrganizationFacts) Outcome { return checkWebhooks(f.Hooks, f.HooksKnown, spec.secret) }
+			rule.CheckOrg = func(f *OrganizationFacts) Outcome {
+				return checkWebhooks(f.ignores, spec.id, f.Hooks, f.HooksKnown, spec.secret)
+			}
 		} else {
-			rule.CheckRepo = func(f *RepositoryFacts) Outcome { return checkWebhooks(f.Hooks, f.HooksKnown, spec.secret) }
+			rule.CheckRepo = func(f *RepositoryFacts) Outcome {
+				return checkWebhooks(f.ignores, spec.id, f.Hooks, f.HooksKnown, spec.secret)
+			}
 		}
 		register(rule)
 	}
 }
 
-func checkSuspendedUsers(known bool, users []*github.User, role string) Outcome {
+func checkSuspendedUsers(ignores TargetIgnores, ruleID string, known bool, users []*github.User, role string) Outcome {
 	if len(users) > 0 {
 		var logins []string
 		for _, user := range users {
 			logins = append(logins, user.GetLogin())
 		}
 		sort.Strings(logins)
-		return Fail("suspended organization " + role + ": " + strings.Join(logins, ", "))
+		logins, ignored := splitIgnoredTargets(ignores, ruleID, logins)
+		if len(logins) > 0 {
+			return failTargets("suspended organization "+role+": "+strings.Join(logins, ", "), logins)
+		}
+		return skipIgnored("user login", ignored)
 	}
 	if !known {
 		return Skip("could not read suspended status of organization " + role)
@@ -117,7 +133,7 @@ func checkSuspendedUsers(known bool, users []*github.User, role string) Outcome 
 	return Pass("no suspended organization " + role)
 }
 
-func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
+func checkWebhooks(ignores TargetIgnores, ruleID string, hooks []*github.Hook, known, secret bool) Outcome {
 	if !known {
 		return Skip("could not read webhooks")
 	}
@@ -157,16 +173,23 @@ func checkWebhooks(hooks []*github.Hook, known, secret bool) Outcome {
 	if secret {
 		issue = "no secret"
 	}
+	var ignored []string
 	if len(unsafe) > 0 {
 		sort.Slice(unsafe, func(i, j int) bool { return unsafe[i] < unsafe[j] })
 		ids := make([]string, len(unsafe))
 		for i, id := range unsafe {
 			ids[i] = strconv.FormatInt(id, 10)
 		}
-		return Fail("active webhook IDs with " + issue + ": " + strings.Join(ids, ", "))
+		ids, ignored = splitIgnoredTargets(ignores, ruleID, ids)
+		if len(ids) > 0 {
+			return failTargets("active webhook IDs with "+issue+": "+strings.Join(ids, ", "), ids)
+		}
 	}
 	if unknown {
 		return Skip("could not determine webhook " + issue + " status for some webhooks")
+	}
+	if len(ignored) > 0 {
+		return skipIgnored("webhook ID", ignored)
 	}
 	return Pass("no active webhooks with " + issue)
 }

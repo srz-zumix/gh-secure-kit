@@ -201,7 +201,7 @@ func TestWebhookRules(t *testing.T) {
 			{"missing config", []*github.Hook{{Active: github.Ptr(true)}}, true, StatusSkip},
 			{"partial violation", []*github.Hook{nil, {Active: github.Ptr(true), Config: &github.HookConfig{URL: github.Ptr("http://example.com"), Secret: github.Ptr("")}}}, true, StatusFail},
 		} {
-			if got := checkWebhooks(tc.hooks, tc.known, secret); got.Status != tc.want {
+			if got := checkWebhooks(nil, "GSK144", tc.hooks, tc.known, secret); got.Status != tc.want {
 				t.Errorf("%s secret=%v: got %+v, want %s", tc.name, secret, got, tc.want)
 			}
 		}

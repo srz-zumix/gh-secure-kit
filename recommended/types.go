@@ -88,6 +88,9 @@ type OrganizationApplyFunc func(ctx context.Context, g *gh.GitHubClient, repo re
 type Outcome struct {
 	Status Status
 	Detail string
+	// Targets lists the failing targets when every finding of a failing rule
+	// is attributable to an individual target; it is nil otherwise.
+	Targets []string
 }
 
 // Pass reports that the target already follows the recommendation.
@@ -111,6 +114,9 @@ type Rule struct {
 	Title    string
 	// Fixable indicates whether ApplyRepo/ApplyOrg can remediate a failing result.
 	Fixable bool
+	// TargetKind names what a failing result enumerates (e.g. "ruleset"). Only
+	// rules with a TargetKind accept per-target ignores in the configuration.
+	TargetKind string
 
 	CheckRepo RepositoryCheckFunc
 	CheckOrg  OrganizationCheckFunc
@@ -124,4 +130,6 @@ type Result struct {
 	Target string
 	Status Status
 	Detail string
+	// Targets is Outcome.Targets of the evaluation.
+	Targets []string
 }

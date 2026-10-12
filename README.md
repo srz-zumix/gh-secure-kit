@@ -1930,14 +1930,23 @@ require enterprise-level changes. Suspended user and webhook checks are read-onl
 `check`, `apply`, and `golden` accept an optional `--config <path>` YAML file.
 When omitted, they load `.gh-secure-kit-recommended.yml` from the current directory
 if present; otherwise, no configured rules are ignored. Explicitly specified
-missing files, invalid YAML, and unknown rule IDs cause an error.
+missing files, invalid YAML, unknown rule IDs, and invalid target patterns cause an error.
 Configured ignore IDs are combined with repeated `--ignore` flags for evaluation.
-Rule IDs are case-insensitive. The configuration currently supports `ignore`:
+Rule IDs are case-insensitive. The configuration currently supports `ignore`.
+An entry is either a rule ID, which ignores the whole rule, or a rule ID mapped to
+a list of regular expressions, which ignores only the targets (for example, ruleset
+or environment names) whose whole name matches one of them. A rule whose findings
+are all ignored is reported as `skip`. Per-target ignores are available for
+GSK119-GSK122, GSK131, GSK135-GSK137, GSK144, GSK145, and GSK521-GSK525; the target
+of each rule is listed in [docs/rules/README.md](docs/rules/README.md).
 
 ```yaml
 ignore:
 - GSK101 # Dependabot alerts not enabled
 - GSK102 # Dependabot enabled but no dependabot.yml found
+- GSK131: # Branch protection can be bypassed
+  - release-bot-.*
+  - legacy ruleset
 ```
 
 ### Check a repository or organization against recommended settings
@@ -2013,6 +2022,10 @@ from evaluation by filters or `--ignore` remain in the configuration. New skip
 results are not added. `--ignore` only skips evaluation; it does not add IDs that
 are not already in the configuration.
 Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
+For rules that support per-target ignores, a failing rule whose findings are all
+attributable to targets adds one exact-match pattern per new target instead of
+ignoring the whole rule. With `--prune`, patterns that match no failing target
+are removed.
 Each ignored ID includes the rule's title as an inline YAML comment.
 
 ```sh

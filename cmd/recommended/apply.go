@@ -35,9 +35,9 @@ Output includes only fixes that were applied, fixes that would be applied
 with --dryrun, and failed fix attempts. Run 'recommended check' to see the
 full list of findings.
 Use --dryrun to report the fixes that would be applied, without changing anything.
-Use --config to load ignored rule IDs from a YAML configuration. By default,
-.gh-secure-kit-recommended.yml is loaded from the current directory if present.
-Configured ignore IDs are combined with explicit --ignore flags.`,
+Use --config to load ignored rule IDs and ignored targets from a YAML configuration.
+By default, .gh-secure-kit-recommended.yml is loaded from the current directory
+if present. Configured ignore IDs are combined with explicit --ignore flags.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !dryRun && guardrails.IsReadonly() {
@@ -48,6 +48,10 @@ Configured ignore IDs are combined with explicit --ignore flags.`,
 				return fmt.Errorf("unknown rule ID(s): %s", strings.Join(unknown, ", "))
 			}
 			cfg, err := catalog.ResolveConfig(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to load recommended configuration: %w", err)
+			}
+			targetIgnores, err := cfg.TargetIgnores()
 			if err != nil {
 				return fmt.Errorf("failed to load recommended configuration: %w", err)
 			}
@@ -65,7 +69,7 @@ Configured ignore IDs are combined with explicit --ignore flags.`,
 			filter := catalog.Filter{
 				MinSeverity: catalog.Severity(severity),
 				IDs:         ruleIDs,
-				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.Ignore...),
+				IgnoreIDs:   append(append([]string{}, ignoreIDs...), cfg.IgnoreIDs()...),
 			}
 
 			ctx := cmd.Context()
@@ -73,14 +77,14 @@ Configured ignore IDs are combined with explicit --ignore flags.`,
 			if target.Name != "" {
 				filter.Scope = catalog.ScopeRepository
 				rules := filter.Apply(catalog.AllRules())
-				results, err = catalog.ApplyRepository(ctx, client, target, rules, dryRun)
+				results, err = catalog.ApplyRepository(ctx, client, target, rules, targetIgnores, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for repository '%s/%s': %w", target.Owner, target.Name, err)
 				}
 			} else {
 				filter.Scope = catalog.ScopeOrganization
 				rules := filter.Apply(catalog.AllRules())
-				results, err = catalog.ApplyOrganization(ctx, client, target, rules, dryRun)
+				results, err = catalog.ApplyOrganization(ctx, client, target, rules, targetIgnores, dryRun)
 				if err != nil {
 					return fmt.Errorf("failed to apply fixes for organization '%s': %w", target.Owner, err)
 				}
