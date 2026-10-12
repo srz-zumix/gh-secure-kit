@@ -109,11 +109,15 @@ type Rule struct {
 	// ID is the stable gh-secure-kit identifier, e.g. "GSK101".
 	ID string
 	// GHQRID references the equivalent microsoft/ghqr rule ID, if any.
-	GHQRID       string
-	Scope        Scope
-	Category     string
-	Severity     Severity
-	Title        string
+	GHQRID   string
+	Scope    Scope
+	Category string
+	Severity Severity
+	Title    string
+	// SettingsPath is the rule's GitHub settings page, relative to the target's
+	// /settings path (e.g. "actions" or "security_analysis"). Use "." for the
+	// settings root. Empty means the rule has no known settings page and no
+	// Settings URL is reported.
 	SettingsPath string
 	// Fixable indicates whether ApplyRepo/ApplyOrg can remediate a failing result.
 	Fixable bool
