@@ -5,6 +5,8 @@ package recommended
 
 import (
 	"context"
+	"net/url"
+	"path"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -91,6 +93,9 @@ type Outcome struct {
 	// Targets lists the failing targets when every finding of a failing rule
 	// is attributable to an individual target; it is nil otherwise.
 	Targets []string
+	// SettingsPath overrides Rule.SettingsPath when the settings page that fixes
+	// the finding depends on the outcome; empty keeps the rule's path.
+	SettingsPath string
 }
 
 // Pass reports that the target already follows the recommendation.
@@ -112,6 +117,11 @@ type Rule struct {
 	Category string
 	Severity Severity
 	Title    string
+	// SettingsPath is the rule's GitHub settings page, relative to the target's
+	// /settings path (e.g. "actions" or "security_analysis"). Use "." for the
+	// settings root. Empty means the rule has no known settings page and no
+	// Settings URL is reported.
+	SettingsPath string
 	// Fixable indicates whether ApplyRepo/ApplyOrg can remediate a failing result.
 	Fixable bool
 	// TargetKind names what a failing result enumerates (e.g. "ruleset"). Only
@@ -126,10 +136,43 @@ type Rule struct {
 
 // Result is the outcome of evaluating a Rule against a specific target.
 type Result struct {
-	Rule   Rule
-	Target string
-	Status Status
-	Detail string
+	Rule        Rule
+	Target      string
+	Status      Status
+	Detail      string
+	SettingsURL string
 	// Targets is Outcome.Targets of the evaluation.
 	Targets []string
+}
+
+func (r Rule) settingsURL(repo repository.Repository) string {
+	return r.settingsURLFor(repo, r.SettingsPath)
+}
+
+// settingsURLFor returns the settings page URL for settingsPath under the
+// rule's scope, or an empty string when settingsPath is empty.
+func (r Rule) settingsURLFor(repo repository.Repository, settingsPath string) string {
+	if settingsPath == "" {
+		return ""
+	}
+	host := repo.Host
+	if host == "" {
+		host = "github.com"
+	}
+	var p string
+	if r.Scope == ScopeOrganization {
+		p = path.Join("/organizations", repo.Owner, "settings", settingsPath)
+	} else {
+		p = path.Join("/", repo.Owner, repo.Name, "settings", settingsPath)
+	}
+	return (&url.URL{Scheme: "https", Host: host, Path: p}).String()
+}
+
+// outcomeSettingsURL returns the settings page URL for an outcome of the rule,
+// preferring the outcome's own settings path over the rule's.
+func (r Rule) outcomeSettingsURL(repo repository.Repository, outcome Outcome) string {
+	if outcome.SettingsPath != "" {
+		return r.settingsURLFor(repo, outcome.SettingsPath)
+	}
+	return r.settingsURL(repo)
 }

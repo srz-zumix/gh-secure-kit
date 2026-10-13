@@ -30,7 +30,8 @@ func init() {
 	})
 	register(Rule{
 		ID: "GSK523", Scope: ScopeOrganization, Category: "actions", Severity: SeverityHigh,
-		Title: "Self-hosted runner group allows public repositories", Fixable: true, TargetKind: "runner group",
+		SettingsPath: "actions/runner-groups",
+		Title:        "Self-hosted runner group allows public repositories", Fixable: true, TargetKind: "runner group",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if !f.RunnerGroupsKnown {
 				return Skip("could not read organization runner groups")
@@ -100,7 +101,7 @@ func init() {
 		if spec.secret {
 			title, severity = "Webhook has no secret", SeverityMedium
 		}
-		rule := Rule{ID: spec.id, Scope: spec.scope, Category: "security", Severity: severity, Title: title, TargetKind: "webhook ID"}
+		rule := Rule{ID: spec.id, Scope: spec.scope, Category: "security", Severity: severity, Title: title, TargetKind: "webhook ID", SettingsPath: "hooks"}
 		if spec.scope == ScopeOrganization {
 			rule.CheckOrg = func(f *OrganizationFacts) Outcome {
 				return checkWebhooks(f.ignores, spec.id, f.Hooks, f.HooksKnown, spec.secret)

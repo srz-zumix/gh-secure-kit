@@ -45,7 +45,8 @@ func init() {
 func registerRepositorySecurityRules() {
 	register(Rule{
 		ID: "GSK101", GHQRID: "repo-sec-001", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Dependabot alerts not enabled", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityHigh, Title: "Dependabot alerts not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.VulnerabilityAlerts == nil {
 				return Skip("could not read Dependabot alerts status")
@@ -104,7 +105,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK105", GHQRID: "repo-sec-008", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Code scanning default setup not configured", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityHigh, Title: "Code scanning default setup not configured", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.CodeScanningSetup == nil {
 				return Skip("could not read code scanning default setup status")
@@ -121,7 +123,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK106", GHQRID: "org-def-004", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Secret scanning not enabled", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityHigh, Title: "Secret scanning not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			status := f.Repo.GetSecurityAndAnalysis().GetSecretScanning().GetStatus()
 			if status == "" {
@@ -139,7 +142,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK107", GHQRID: "org-def-005", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Secret scanning push protection not enabled", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityHigh, Title: "Secret scanning push protection not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			status := f.Repo.GetSecurityAndAnalysis().GetSecretScanningPushProtection().GetStatus()
 			if status == "" {
@@ -157,7 +161,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK108", GHQRID: "org-def-007", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Private vulnerability reporting not enabled", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityMedium, Title: "Private vulnerability reporting not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.PrivateVulnerabilityReporting == nil {
 				return Skip("could not read private vulnerability reporting status")
@@ -174,7 +179,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK109", GHQRID: "org-def-002", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Dependabot security updates not enabled", Fixable: true,
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityMedium, Title: "Dependabot security updates not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.AutomatedSecurityFixes == nil {
 				return Skip("could not read Dependabot security updates status")
@@ -191,7 +197,8 @@ func registerRepositorySecurityRules() {
 
 	register(Rule{
 		ID: "GSK139", GHQRID: "", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Immutable releases not enabled", Fixable: true,
+		SettingsPath: ".",
+		Category:     "security", Severity: SeverityMedium, Title: "Immutable releases not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.HasTags == nil {
 				return Skip("could not determine whether the repository has tags")
@@ -238,7 +245,8 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK119", GHQRID: "repo-acc-001", Scope: ScopeRepository,
-		Category: "access_control", Severity: SeverityHigh, Title: "Excessive admin collaborators", TargetKind: "collaborator login",
+		SettingsPath: "access",
+		Category:     "access_control", Severity: SeverityHigh, Title: "Excessive admin collaborators", TargetKind: "collaborator login",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.CollaboratorsKnown {
 				return Skip("could not read direct collaborators")
@@ -267,7 +275,8 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK120", GHQRID: "repo-acc-002", Scope: ScopeRepository,
-		Category: "access_control", Severity: SeverityMedium, Title: "Direct collaborators instead of teams", TargetKind: "collaborator login",
+		SettingsPath: "access",
+		Category:     "access_control", Severity: SeverityMedium, Title: "Direct collaborators instead of teams", TargetKind: "collaborator login",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.CollaboratorsKnown {
 				return Skip("could not read direct collaborators")
@@ -289,7 +298,8 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK121", GHQRID: "repo-acc-003", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityHigh, Title: "Deploy keys with write access", TargetKind: "deploy key ID",
+		SettingsPath: "keys",
+		Category:     "security", Severity: SeverityHigh, Title: "Deploy keys with write access", TargetKind: "deploy key ID",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.DeployKeysKnown {
 				return Skip("could not read deploy keys")
@@ -301,7 +311,8 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK122", GHQRID: "repo-acc-004", Scope: ScopeRepository,
-		Category: "security", Severity: SeverityMedium, Title: "Unverified deploy keys", TargetKind: "deploy key ID",
+		SettingsPath: "keys",
+		Category:     "security", Severity: SeverityMedium, Title: "Unverified deploy keys", TargetKind: "deploy key ID",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.DeployKeysKnown {
 				return Skip("could not read deploy keys")
@@ -313,7 +324,8 @@ func registerRepositoryAccessRules() {
 
 	register(Rule{
 		ID: "GSK142", GHQRID: "", Scope: ScopeRepository,
-		Category: "access_control", Severity: SeverityMedium, Title: "Forking allowed on private or internal repository", Fixable: true,
+		SettingsPath: ".",
+		Category:     "access_control", Severity: SeverityMedium, Title: "Forking allowed on private or internal repository", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !isPrivateOrInternal(f.Repo) {
 				return Skip("forking restrictions only apply to private and internal repositories")
@@ -336,7 +348,8 @@ func registerRepositoryAccessRules() {
 func registerRepositoryMetadataRules() {
 	register(Rule{
 		ID: "GSK123", GHQRID: "repo-meta-001", Scope: ScopeRepository,
-		Category: "community", Severity: SeverityMedium, Title: "Repository has no description",
+		SettingsPath: ".",
+		Category:     "community", Severity: SeverityMedium, Title: "Repository has no description",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Repo.GetDescription() != "" {
 				return Pass("repository has a description")
@@ -358,7 +371,8 @@ func registerRepositoryMetadataRules() {
 
 	register(Rule{
 		ID: "GSK125", GHQRID: "repo-feat-002", Scope: ScopeRepository,
-		Category: "maintenance", Severity: SeverityLow, Title: "Auto-delete branches on merge not enabled", Fixable: true,
+		SettingsPath: ".",
+		Category:     "maintenance", Severity: SeverityLow, Title: "Auto-delete branches on merge not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Repo.GetDeleteBranchOnMerge() {
 				return Pass("auto-delete branches on merge is enabled")
@@ -373,7 +387,8 @@ func registerRepositoryMetadataRules() {
 
 	register(Rule{
 		ID: "GSK126", GHQRID: "repo-feat-001", Scope: ScopeRepository,
-		Category: "features", Severity: SeverityLow, Title: "Issues and Discussions both disabled", Fixable: true,
+		SettingsPath: ".",
+		Category:     "features", Severity: SeverityLow, Title: "Issues and Discussions both disabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Repo.GetHasIssues() || f.Repo.GetHasDiscussions() {
 				return Pass("Issues or Discussions is enabled")
@@ -388,7 +403,8 @@ func registerRepositoryMetadataRules() {
 
 	register(Rule{
 		ID: "GSK127", GHQRID: "repo-meta-003", Scope: ScopeRepository,
-		Category: "maintenance", Severity: SeverityLow, Title: "Repository appears dormant but is not archived",
+		SettingsPath: ".",
+		Category:     "maintenance", Severity: SeverityLow, Title: "Repository appears dormant but is not archived",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Repo.GetArchived() {
 				return Pass("repository is archived")
