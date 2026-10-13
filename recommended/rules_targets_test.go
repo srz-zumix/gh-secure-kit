@@ -94,6 +94,36 @@ func TestGSK131LegacyFindingIsNotTargeted(t *testing.T) {
 	}
 }
 
+func TestGSK131SettingsPathFollowsFindings(t *testing.T) {
+	bypassRuleset := func() *github.RepositoryRuleset {
+		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
+		rs.Name = "one"
+		rs.BypassActors = []*github.BypassActor{{
+			ActorType:  github.Ptr(github.BypassActorTypeIntegration),
+			BypassMode: github.Ptr(github.BypassModeAlways),
+		}}
+		return rs
+	}
+	legacy := &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: false}}
+	tests := []struct {
+		name string
+		f    *RepositoryFacts
+		want string
+	}{
+		{"legacy only", func() *RepositoryFacts { f := factsWithRulesets(); f.Protection = legacy; return f }(), "branches"},
+		{"ruleset only", factsWithRulesets(bypassRuleset()), "rules"},
+		{"mixed", func() *RepositoryFacts { f := factsWithRulesets(bypassRuleset()); f.Protection = legacy; return f }(), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := repoOutcome(t, "GSK131", tt.f)
+			if got.Status != StatusFail || got.SettingsPath != tt.want {
+				t.Fatalf("got %+v, want failure with settings path %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestEnvironmentRulesIgnoreEnvironmentsByName(t *testing.T) {
 	reviewer := []*github.ProtectionRule{{Type: github.Ptr("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: github.Ptr("User")}}}}
 	f := &RepositoryFacts{
