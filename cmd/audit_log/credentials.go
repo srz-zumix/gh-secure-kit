@@ -26,6 +26,7 @@ func NewCredentialsCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "credentials",
+		Args:  cobra.NoArgs,
 		Short: "Detect credential-related operations in the organization audit log",
 		Long: `Detect operations on credentials in the organization audit log:
 SSH keys and deploy keys, personal access tokens, SSO credential authorizations,
@@ -51,7 +52,7 @@ dates (2006-01-02), or relative periods such as 7d, 2w, 24h (default: no limit).
 			}
 
 			detections, err := auditlog.Detect(cmd.Context(), client, repository, auditlog.Options{
-				Categories: categories,
+				Categories: auditlog.NormalizeCategories(categories),
 				Since:      sinceTime,
 				Until:      untilTime,
 			})

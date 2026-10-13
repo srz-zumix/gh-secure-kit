@@ -85,6 +85,22 @@ func findDef(name string) (categoryDef, bool) {
 	return categoryDef{}, false
 }
 
+// NormalizeCategories maps category names case-insensitively to their
+// canonical values and removes duplicates and unknown names, preserving order.
+func NormalizeCategories(categories []string) []string {
+	var result []string
+	seen := map[string]bool{}
+	for _, c := range categories {
+		for _, canonical := range Categories {
+			if strings.EqualFold(c, canonical) && !seen[canonical] {
+				seen[canonical] = true
+				result = append(result, canonical)
+			}
+		}
+	}
+	return result
+}
+
 // Queries returns the audit log search phrases that cover the given categories.
 // All categories are used when categories is empty.
 func Queries(categories []string) []string {

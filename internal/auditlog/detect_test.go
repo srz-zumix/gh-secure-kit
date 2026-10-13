@@ -141,3 +141,16 @@ func TestDetectionJSONIncludesCategory(t *testing.T) {
 		t.Errorf("category missing in JSON: %s", b)
 	}
 }
+
+func TestNormalizeCategories(t *testing.T) {
+	got := NormalizeCategories([]string{"SSH", "pat", "ssh", "Pat", "unknown"})
+	want := []string{CategorySSH, CategoryPAT}
+	if len(got) != len(want) {
+		t.Fatalf("NormalizeCategories() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("NormalizeCategories()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
