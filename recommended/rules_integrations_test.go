@@ -46,17 +46,17 @@ func TestCollectSuspendedUsers(t *testing.T) {
 		case "/users/fixture_active":
 			return rulesetResponse(request, 200, `{"login":"fixture_active","suspended_at":null}`), nil
 		default:
-			return rulesetResponse(request, 403, `{"message":"forbidden"}`), nil
+			return rulesetResponse(request, 500, `{"message":"unavailable"}`), nil
 		}
 	}))
 	users := []*github.User{{Login: github.Ptr("fixture_suspended")}, {Login: github.Ptr("fixture_active")}}
-	got, known := collectSuspendedUsers(context.Background(), client, "github.example.test", users)
-	if !known || len(got) != 1 || got[0].GetLogin() != "fixture_suspended" {
+	got, known, err := collectSuspendedUsers(context.Background(), client, "github.example.test", users)
+	if err != nil || !known || len(got) != 1 || got[0].GetLogin() != "fixture_suspended" {
 		t.Fatalf("got %v, known %v", got, known)
 	}
 	users = append(users, &github.User{Login: github.Ptr("fixture_unknown")}, nil)
-	got, known = collectSuspendedUsers(context.Background(), client, "github.example.test", users)
-	if known || len(got) != 1 {
+	got, known, err = collectSuspendedUsers(context.Background(), client, "github.example.test", users)
+	if err != nil || known || len(got) != 1 {
 		t.Fatalf("partial results: got %v, known %v", got, known)
 	}
 }
@@ -75,8 +75,8 @@ func TestCollectSuspendedUsersFromList(t *testing.T) {
 				{Login: github.Ptr("fixture_active")},
 				{Login: github.Ptr("fixture_timestamp"), SuspendedAt: &github.Timestamp{}},
 			}
-			got, known := collectSuspendedUsers(context.Background(), client, host, users)
-			if !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "fixture_timestamp" {
+			got, known, err := collectSuspendedUsers(context.Background(), client, host, users)
+			if err != nil || !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "fixture_timestamp" {
 				t.Fatalf("got %v, known %v", got, known)
 			}
 			wantRequests := 0
@@ -86,8 +86,8 @@ func TestCollectSuspendedUsersFromList(t *testing.T) {
 			if requests != wantRequests {
 				t.Fatalf("requests = %d, want %d", requests, wantRequests)
 			}
-			got, known = collectSuspendedUsers(context.Background(), client, host, append(users, nil))
-			if known || len(got) != 2 {
+			got, known, err = collectSuspendedUsers(context.Background(), client, host, append(users, nil))
+			if err != nil || known || len(got) != 2 {
 				t.Fatalf("partial results: got %v, known %v", got, known)
 			}
 		})
