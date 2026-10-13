@@ -1958,6 +1958,11 @@ gh secure-kit recommended check --owner <org> [flags]
 
 Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
 
+If the target cannot be retrieved, or any settings request returns HTTP 401
+or 403, the command exits with an error without reporting check results,
+regardless of `--exit-code`. Verify the active account with `gh auth status`
+and its permissions for the target host, repository, or organization.
+
 Table output always includes a `Settings URL` column; the cell is filled only
 when a rule has a known GitHub settings page and is empty otherwise. Links use
 the target's GitHub host, including GitHub Enterprise Server. JSON output
