@@ -93,6 +93,9 @@ type Outcome struct {
 	// Targets lists the failing targets when every finding of a failing rule
 	// is attributable to an individual target; it is nil otherwise.
 	Targets []string
+	// SettingsPath overrides Rule.SettingsPath when the settings page that fixes
+	// the finding depends on the outcome; empty keeps the rule's path.
+	SettingsPath string
 }
 
 // Pass reports that the target already follows the recommendation.
@@ -143,18 +146,33 @@ type Result struct {
 }
 
 func (r Rule) settingsURL(repo repository.Repository) string {
-	if r.SettingsPath == "" {
+	return r.settingsURLFor(repo, r.SettingsPath)
+}
+
+// settingsURLFor returns the settings page URL for settingsPath under the
+// rule's scope, or an empty string when settingsPath is empty.
+func (r Rule) settingsURLFor(repo repository.Repository, settingsPath string) string {
+	if settingsPath == "" {
 		return ""
 	}
 	host := repo.Host
 	if host == "" {
 		host = "github.com"
 	}
-	var settingsPath string
+	var p string
 	if r.Scope == ScopeOrganization {
-		settingsPath = path.Join("/organizations", repo.Owner, "settings", r.SettingsPath)
+		p = path.Join("/organizations", repo.Owner, "settings", settingsPath)
 	} else {
-		settingsPath = path.Join("/", repo.Owner, repo.Name, "settings", r.SettingsPath)
+		p = path.Join("/", repo.Owner, repo.Name, "settings", settingsPath)
 	}
-	return (&url.URL{Scheme: "https", Host: host, Path: settingsPath}).String()
+	return (&url.URL{Scheme: "https", Host: host, Path: p}).String()
+}
+
+// outcomeSettingsURL returns the settings page URL for an outcome of the rule,
+// preferring the outcome's own settings path over the rule's.
+func (r Rule) outcomeSettingsURL(repo repository.Repository, outcome Outcome) string {
+	if outcome.SettingsPath != "" {
+		return r.settingsURLFor(repo, outcome.SettingsPath)
+	}
+	return r.settingsURL(repo)
 }

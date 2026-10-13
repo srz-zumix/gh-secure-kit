@@ -468,8 +468,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK131", GHQRID: "", Scope: ScopeRepository,
-		SettingsPath: "rules",
-		Category:     "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed", TargetKind: "ruleset",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed", TargetKind: "ruleset",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.ProtectionKnown || !f.RulesetsKnown {
 				return Skip("could not determine branch protection or ruleset status for the default branch")
@@ -496,10 +495,18 @@ func registerBranchProtectionRules() {
 				return Pass("branch protection on the default branch cannot be bypassed")
 			}
 			detail := strings.Join(findings.reasons, "; ")
+			// Link the settings page only when every finding is fixed on the same
+			// page: legacy protection under branches, rulesets under rules.
 			if findings.legacy {
-				return Fail(detail)
+				outcome := Fail(detail)
+				if len(findings.rulesets) == 0 {
+					outcome.SettingsPath = "branches"
+				}
+				return outcome
 			}
-			return failTargets(detail, findings.rulesets)
+			outcome := failTargets(detail, findings.rulesets)
+			outcome.SettingsPath = "rules"
+			return outcome
 		},
 	})
 }

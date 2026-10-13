@@ -25,7 +25,7 @@ func EvaluateRepository(ctx context.Context, g *gh.GitHubClient, repo repository
 			continue
 		}
 		outcome := rule.CheckRepo(facts)
-		results = append(results, Result{Rule: rule, Target: target, Status: outcome.Status, Detail: outcome.Detail, Targets: outcome.Targets, SettingsURL: rule.settingsURL(repo)})
+		results = append(results, Result{Rule: rule, Target: target, Status: outcome.Status, Detail: outcome.Detail, Targets: outcome.Targets, SettingsURL: rule.outcomeSettingsURL(repo, outcome)})
 	}
 	return results, facts, nil
 }
@@ -46,7 +46,7 @@ func EvaluateOrganization(ctx context.Context, g *gh.GitHubClient, repo reposito
 			continue
 		}
 		outcome := rule.CheckOrg(facts)
-		results = append(results, Result{Rule: rule, Target: repo.Owner, Status: outcome.Status, Detail: outcome.Detail, Targets: outcome.Targets, SettingsURL: rule.settingsURL(repo)})
+		results = append(results, Result{Rule: rule, Target: repo.Owner, Status: outcome.Status, Detail: outcome.Detail, Targets: outcome.Targets, SettingsURL: rule.outcomeSettingsURL(repo, outcome)})
 	}
 	return results, facts, nil
 }
