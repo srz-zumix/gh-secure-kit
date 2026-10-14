@@ -91,6 +91,14 @@ func TestParseTimeRange(t *testing.T) {
 	if _, _, err := ParseTimeRange("bogus", ""); err == nil {
 		t.Error("expected error for invalid --since")
 	}
+	if _, u, err := ParseTimeRange("", "2026-02-03"); err != nil {
+		t.Fatal(err)
+	} else if want := time.Date(2026, 2, 3, 23, 59, 59, 999999999, time.Local); !u.Equal(want) {
+		t.Errorf("date-only until = %v, want %v", u, want)
+	}
+	if _, _, err := ParseTimeRange("2026-02-03", "2026-02-03"); err != nil {
+		t.Errorf("same-day range should be valid: %v", err)
+	}
 	if _, _, err := ParseTimeRange("", "bogus"); err == nil {
 		t.Error("expected error for invalid --until")
 	}

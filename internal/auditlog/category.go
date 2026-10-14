@@ -108,16 +108,23 @@ func Queries(categories []string) []string {
 		categories = Categories
 	}
 	var queries []string
+	seen := map[string]bool{}
+	add := func(q string) {
+		if !seen[q] {
+			seen[q] = true
+			queries = append(queries, q)
+		}
+	}
 	for _, c := range categories {
 		d, ok := findDef(c)
 		if !ok {
 			continue
 		}
 		for _, g := range d.groups {
-			queries = append(queries, "action:"+g)
+			add("action:" + g)
 		}
 		for _, a := range d.actions {
-			queries = append(queries, "action:"+a)
+			add("action:" + a)
 		}
 	}
 	return queries

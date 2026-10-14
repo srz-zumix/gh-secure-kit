@@ -31,6 +31,7 @@ type Options struct {
 }
 
 // ParseTimeRange parses --since/--until values; an empty string yields a zero time.
+// A date-only --until (YYYY-MM-DD) is inclusive, i.e. it is moved to the end of that day.
 func ParseTimeRange(since, until string) (time.Time, time.Time, error) {
 	var s, u time.Time
 	var err error
@@ -42,6 +43,9 @@ func ParseTimeRange(since, until string) (time.Time, time.Time, error) {
 	if until != "" {
 		if u, err = parser.ParseTime(until); err != nil {
 			return s, u, fmt.Errorf("invalid --until: %w", err)
+		}
+		if _, dateErr := time.Parse("2006-01-02", until); dateErr == nil {
+			u = u.AddDate(0, 0, 1).Add(-time.Nanosecond)
 		}
 	}
 	if !s.IsZero() && !u.IsZero() && s.After(u) {
