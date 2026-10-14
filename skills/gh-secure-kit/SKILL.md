@@ -35,6 +35,8 @@ gh secure-kit                      # Root command
 ├── advanced-security              # GitHub Advanced Security subcommands
 │   ├── disable                    # Disable GitHub Advanced Security for an org
 │   └── enable                     # Enable GitHub Advanced Security for an org
+├── audit-log                      # Organization audit log subcommands
+│   └── credentials                # Detect credential-related operations (SSH keys, PATs, SSO, OAuth/GitHub Apps)
 ├── dependabot                     # Dependabot management subcommands
 │   ├── alerts                     # Dependabot alerts subcommands
 │   │   ├── disable                # Disable Dependabot alerts for an org
@@ -137,6 +139,7 @@ gh secure-kit                      # Root command
 ├── recommended                    # Recommended security settings subcommands
 │   ├── check                      # Check a repository or organization against recommended settings
 │   ├── apply                      # Apply fixes for failing recommendations
+│   ├── golden                     # Generate an ignore configuration from current recommendations
 │   ├── list                       # List the catalog of recommended rules
 │   └── explain                    # Show detailed documentation for a rule
 └── security-advisories            # Repository security advisories subcommands
@@ -2211,9 +2214,83 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 | ------ | ------- | --------- | ------------- |
 | `--owner` | `-o` | | The organization name (optional) |
 
+## Audit Log
+
+### Detect credential-related operations in the organization audit log (gh secure-kit audit-log credentials)
+
+```sh
+gh secure-kit audit-log credentials [--owner <org>] [--category <category>,...] [--since <time>] [--until <time>]
+```
+
+Detect operations on credentials in the organization audit log: SSH keys and deploy keys, personal access tokens, SSO credential authorizations, OAuth apps, and GitHub Apps. Results are listed newest first with a `CATEGORY` column.
+
+Categories (default: all):
+
+| Category | Detected events |
+| -------- | --------------- |
+| `ssh` | `public_key.*`, `ssh_certificate_authority.*`, `ssh_certificate_requirement.*` |
+| `pat` | `personal_access_token.*`, `auto_approve_personal_access_token_requests.*` |
+| `sso-credential` | `org_credential_authorization.*` |
+| `oauth-app` | `oauth_application.*`, `org.oauth_app_access_*`, `org.{enable,disable}_oauth_app_restrictions` |
+| `github-app` | `integration.*`, `integration_installation.*`, `integration_installation_request.*`, `org.integration_manager_*` |
+
+`--since` and `--until` accept RFC3339 timestamps, dates (`2006-01-02`), or relative periods such as `7d`, `2w`, `24h`. By default the whole audit log retention period is searched.
+
+```sh
+gh secure-kit audit-log credentials --owner my-org --since 30d
+
+# SSH key and PAT operations as JSON
+gh secure-kit audit-log credentials --owner my-org --category ssh,pat --format json
+
+# Actors of PAT operations in the last week
+gh secure-kit audit-log credentials --owner my-org --category pat --since 7d --format json --jq '.[].entry.actor'
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--category` | `-c` | all | Categories to detect: {ssh\|pat\|sso-credential\|oauth-app\|github-app} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--since` | | | Only include entries at or after this time (RFC3339, YYYY-MM-DD, or period like 7d) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--until` | | | Only include entries at or before this time (RFC3339, YYYY-MM-DD, or period like 7d) |
+
 ## Recommended
 
 Checks and applies a catalog of GitHub security best-practice recommendations, inspired by [microsoft/ghqr](https://github.com/microsoft/ghqr). Each rule has detailed documentation (similar to ShellCheck's wiki) embedded in the extension and viewable with `recommended explain <ID>`; see [docs/rules](../../docs/rules/README.md) for the full catalog.
+
+The catalog includes suspended owners and members using Enterprise Server
+timestamps or Enterprise Cloud EMU login patterns (GSK521/GSK522),
+runner groups allowing public repositories (GSK523), and active
+webhook transport and signing checks (GSK144/GSK145 for repositories,
+GSK524/GSK525 for organizations). Unavailable metadata is skipped rather than
+treated as safe. GSK523 can disable public repository access; inherited groups
+require enterprise-level changes. Suspended user and webhook checks are read-only.
+
+`check`, `apply`, and `golden` accept an optional `--config <path>` YAML file.
+When omitted, they load `.gh-secure-kit-recommended.yml` from the current directory
+if present; otherwise, no configured rules are ignored. Explicitly specified
+missing files, invalid YAML, unknown rule IDs, and invalid target patterns cause an error.
+Configured ignore IDs are combined with repeated `--ignore` flags for evaluation.
+Rule IDs are case-insensitive. The configuration currently supports `ignore`.
+An entry is either a rule ID, which ignores the whole rule, or a rule ID mapped to
+a list of regular expressions, which ignores only the targets (for example, ruleset
+or environment names) whose whole name matches one of them. A rule whose findings
+are all ignored is reported as `skip`. Per-target ignores are available for
+GSK119-GSK122, GSK131, GSK135-GSK137, GSK144, GSK145, and GSK521-GSK525; the target
+of each rule is listed in [docs/rules/README.md](../../docs/rules/README.md).
+
+```yaml
+ignore:
+  - GSK101 # Dependabot alerts not enabled
+  - GSK102 # Dependabot enabled but no dependabot.yml found
+  - GSK131: # Branch protection can be bypassed
+      - release-bot-.*
+      - legacy ruleset
+```
 
 ### Check a repository or organization against recommended settings (gh secure-kit recommended check)
 
@@ -2223,6 +2300,17 @@ gh secure-kit recommended check --owner <org> [flags]
 ```
 
 Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
+
+If the target cannot be retrieved, or any settings request returns HTTP 401
+or 403, the command exits with an error without reporting check results,
+regardless of `--exit-code`. Verify the active account with `gh auth status`
+and its permissions for the target host, repository, or organization.
+
+Table output always includes a `Settings URL` column; the cell is filled only
+when a rule has a known GitHub settings page and is empty otherwise. Links use
+the target's GitHub host, including GitHub Enterprise Server. JSON output
+includes `settings_url` only for rules with a known settings page and omits the
+field otherwise.
 
 ```sh
 # Check the current repository
@@ -2249,6 +2337,7 @@ gh secure-kit recommended check --status fail
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
 | `--exit-code` | | `false` | Exit with status 1 if any rule fails; default: always exit 0 |
 | `--fixable-only` | | `false` | Only show rules that can be fixed with `recommended apply` |
 | `--format` | | | Output format: {json} |
@@ -2269,6 +2358,9 @@ gh secure-kit recommended apply --owner <org> [flags]
 ```
 
 Evaluate recommended GitHub security settings and apply the fix for every failing rule that supports automated remediation. Use `--repo` to fix a single repository, or `--owner` to fix an organization. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used. Output includes only fixes that were applied, fixes that would be applied with `--dryrun`, and failed fix attempts; run `recommended check` to see the full list of findings. Use `--dryrun` to report the fixes that would be applied, without changing anything. Branch-protection fixes create or update the repository-owned `gh-secure-kit/branch-protection` ruleset. GSK110 requires pull requests before merging; each additional selected rule adds only its own requirement. If only one repository member exists, the one-approval rule uses a separate review Ruleset with the owner exempted as a bypass actor. GSK116 remains manual because required check names cannot be inferred. Refuses to run when `--read-only` is set, unless `--dryrun` is also given.
+
+Results include the same settings links as `recommended check` in the
+`Settings URL` column and the optional JSON `settings_url` field.
 
 ```sh
 # Apply all fixable recommendations to the current repository
@@ -2291,6 +2383,7 @@ gh secure-kit recommended apply --dryrun
 
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
 | `--dryrun` | `-n` | `false` | Report the fixes that would be applied, without changing anything |
 | `--format` | | | Output format: {json} |
 | `--ignore` | | | Skip the given rule ID (can be specified multiple times) |
@@ -2300,6 +2393,63 @@ gh secure-kit recommended apply --dryrun
 | `--rule` | | | Only include the given rule ID (can be specified multiple times); default: all rules |
 | `--severity` | | `""` | Only include findings at or above this severity {critical\|high\|medium\|low\|info} |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+
+### Generate an ignore configuration from current recommendations (gh secure-kit recommended golden)
+
+```sh
+gh secure-kit recommended golden [flags]
+```
+
+Evaluate recommended GitHub security settings and output a YAML configuration
+that ignores currently failing rules, accepting the current state as a baseline.
+Use optional `--repo` for a repository or `--owner` for an organization; these
+flags are mutually exclusive. If neither is given, the current repository is used.
+Output defaults to the `--config` path, or `.gh-secure-kit-recommended.yml` in the
+current directory when `--config` is omitted. Optional `--output <path>` selects
+another file; `--output -` writes to stdout. Existing output paths require
+`--overwrite` (default: `false`); otherwise, the command fails before evaluation.
+Files are written only after evaluation succeeds. No GitHub settings are changed.
+
+Existing configured ignore IDs are retained by default. With `--prune`, existing
+ignored rules are re-evaluated and only IDs confirmed to pass are removed.
+Existing IDs that are failing, skipped, unevaluated, out of scope, or excluded
+from evaluation by filters or `--ignore` remain in the configuration. New skip
+results are not added. `--ignore` only skips evaluation; it does not add IDs that
+are not already in the configuration.
+Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
+For rules that support per-target ignores, a failing rule whose findings are all
+attributable to targets adds one exact-match pattern per new target instead of
+ignoring the whole rule. With `--prune`, patterns that match no failing target
+are removed.
+Each ignored ID includes the rule's title as an inline YAML comment.
+
+```sh
+gh secure-kit recommended golden
+gh secure-kit recommended check --status fail --exit-code
+gh secure-kit recommended golden --prune --overwrite
+gh secure-kit recommended golden --output -
+gh secure-kit recommended golden --owner octo-org --output org-recommended.yml
+gh secure-kit recommended check --owner octo-org --config org-recommended.yml
+gh secure-kit recommended golden --owner octo-org --config org-recommended.yml --overwrite
+```
+
+Use `--overwrite`, not shell redirection, when updating the input configuration:
+redirecting stdout to that same file would truncate it before it is read.
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--config` | | `""` | Optional YAML configuration path; default: auto-discover `.gh-secure-kit-recommended.yml` in the current directory |
+| `--fixable-only` | | `false` | Only evaluate rules that can be fixed with `recommended apply` |
+| `--ignore` | | | Skip the given rule ID without adding it to the configuration (repeatable) |
+| `--output` | | `""` | Optional output path; default: `--config` path or `.gh-secure-kit-recommended.yml`; `-` writes to stdout |
+| `--overwrite` | | `false` | Allow replacing an existing output file |
+| `--owner` | `-o` | `""` | Optional organization name (evaluates organization-scoped rules) |
+| `--prune` | | `false` | Re-evaluate existing ignored rules and remove only those that pass |
+| `--repo` | `-R` | `""` | Optional repository in 'owner/repo' format; default: current repository |
+| `--rule` | | | Only evaluate the given rule ID (repeatable); default: all rules |
+| `--severity` | | `""` | Optional minimum severity {critical\|high\|medium\|low\|info}; default: all severities |
 
 ### List the catalog of recommended rules (gh secure-kit recommended list)
 

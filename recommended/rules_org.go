@@ -16,6 +16,7 @@ func registerOrganizationRules() {
 	register(Rule{
 		ID: "GSK501", GHQRID: "org-sec-001", Scope: ScopeOrganization,
 		Category: "security", Severity: SeverityCritical, Title: "Two-factor authentication not required for members",
+		SettingsPath: "security",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetTwoFactorRequirementEnabled() {
 				return Pass("two-factor authentication is required for all members")
@@ -26,7 +27,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK502", GHQRID: "org-sec-002", Scope: ScopeOrganization,
-		Category: "security", Severity: SeverityMedium, Title: "Web commit signoff not required", Fixable: true,
+		SettingsPath: "repository-defaults",
+		Category:     "security", Severity: SeverityMedium, Title: "Web commit signoff not required", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetWebCommitSignoffRequired() {
 				return Pass("web-based commit signoff is required")
@@ -41,7 +43,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK503", GHQRID: "org-sec-003", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityHigh, Title: "Default repository permission is admin or write", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityHigh, Title: "Default repository permission is admin or write", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			perm := f.Org.GetDefaultRepoPermission()
 			if perm == "admin" || perm == "write" {
@@ -57,7 +60,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK504", GHQRID: "org-sec-004", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityMedium, Title: "Members can create public repositories", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityMedium, Title: "Members can create public repositories", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanCreatePublicRepos() {
 				return Fail("members are allowed to create public repositories")
@@ -83,7 +87,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK506", GHQRID: "org-act-002", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "Actions allows all third-party actions and reusable workflows", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Actions allows all third-party actions and reusable workflows", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.ActionsPermissions == nil {
 				return Skip("could not retrieve Actions permissions for the organization")
@@ -101,7 +106,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK507", GHQRID: "", Scope: ScopeOrganization,
-		Category: "security", Severity: SeverityHigh, Title: "No default code security configuration for new repositories",
+		SettingsPath: "security_analysis",
+		Category:     "security", Severity: SeverityHigh, Title: "No default code security configuration for new repositories",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if !f.DefaultSecurityConfigsKnown {
 				return Skip("could not retrieve default code security configurations for the organization")
@@ -117,7 +123,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK508", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityMedium, Title: "Actions enabled for all repositories",
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityMedium, Title: "Actions enabled for all repositories",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.ActionsPermissions == nil {
 				return Skip("could not retrieve Actions permissions for the organization")
@@ -132,7 +139,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK509", GHQRID: "", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityHigh, Title: "Members can fork private repositories", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityHigh, Title: "Members can fork private repositories", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanForkPrivateRepos() {
 				return Fail("members are allowed to fork private repositories")
@@ -147,7 +155,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK510", GHQRID: "", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityHigh, Title: "Members can delete repositories", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityHigh, Title: "Members can delete repositories", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanDeleteRepositories() {
 				return Fail("members with admin permissions are allowed to delete repositories")
@@ -162,7 +171,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK511", GHQRID: "", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityHigh, Title: "Members can change repository visibility", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityHigh, Title: "Members can change repository visibility", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanChangeRepoVisibility() {
 				return Fail("members with admin permissions are allowed to change a repository's visibility")
@@ -177,7 +187,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK512", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "GITHUB_TOKEN default permissions are read-write", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "GITHUB_TOKEN default permissions are read-write", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.DefaultWorkflowPermissions == nil {
 				return Skip("could not retrieve default workflow permissions for the organization")
@@ -195,7 +206,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK513", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "Actions can approve pull requests", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Actions can approve pull requests", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.DefaultWorkflowPermissions == nil {
 				return Skip("could not retrieve default workflow permissions for the organization")
@@ -213,7 +225,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK514", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "Fork pull request workflows run without maintainer approval", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Fork pull request workflows run without maintainer approval", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.ForkPRContributorApproval == nil {
 				return Skip("could not retrieve the fork pull request contributor approval policy for the organization")
@@ -231,7 +244,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK515", GHQRID: "", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityMedium, Title: "Members can create private repositories", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityMedium, Title: "Members can create private repositories", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanCreatePrivateRepos() {
 				return Fail("members are allowed to create private repositories")
@@ -246,7 +260,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK516", GHQRID: "", Scope: ScopeOrganization,
-		Category: "access_control", Severity: SeverityMedium, Title: "Members can create internal repositories", Fixable: true,
+		SettingsPath: "member_privileges",
+		Category:     "access_control", Severity: SeverityMedium, Title: "Members can create internal repositories", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.Org.GetMembersCanCreateInternalRepos() {
 				return Fail("members are allowed to create internal repositories")
@@ -261,7 +276,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK517", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "Actions SHA pinning not required", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Actions SHA pinning not required", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			if f.ActionsPermissions == nil {
 				return Skip("could not retrieve Actions permissions for the organization")
@@ -300,7 +316,8 @@ func registerOrganizationRules() {
 
 	register(Rule{
 		ID: "GSK519", GHQRID: "", Scope: ScopeOrganization,
-		Category: "actions", Severity: SeverityHigh, Title: "Private fork pull request workflows receive write tokens or secrets", Fixable: true,
+		SettingsPath: "actions",
+		Category:     "actions", Severity: SeverityHigh, Title: "Private fork pull request workflows receive write tokens or secrets", Fixable: true,
 		CheckOrg: func(f *OrganizationFacts) Outcome {
 			return checkForkPRWorkflowSettings(f.PrivateForkPRWorkflows, "organization")
 		},

@@ -100,7 +100,8 @@ func activeRulesetProtectsAllBranches(f *RepositoryFacts) bool {
 func registerRepositoryEnvironmentRules() {
 	register(Rule{
 		ID: "GSK135", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityMedium, Title: "Environment with secrets has no required reviewers configured",
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityMedium, Title: "Environment with secrets has no required reviewers configured", TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
@@ -128,11 +129,15 @@ func registerRepositoryEnvironmentRules() {
 			// Report confirmed violations before skipping, so a single
 			// unreadable environment does not mask an environment already
 			// known to lack required reviewers.
+			missing, ignored := splitIgnoredTargets(f.ignores, "GSK135", missing)
 			if len(missing) > 0 {
-				return Fail(fmt.Sprintf("environments with secrets but no required reviewers: %s", strings.Join(missing, ", ")))
+				return failTargets(fmt.Sprintf("environments with secrets but no required reviewers: %s", strings.Join(missing, ", ")), missing)
 			}
 			if len(unknown) > 0 {
 				return Skip(fmt.Sprintf("could not read secrets for environments: %s", strings.Join(unknown, ", ")))
+			}
+			if len(ignored) > 0 {
+				return skipIgnored("environment", ignored)
 			}
 			return Pass("all environments with secrets require reviewers before deployment")
 		},
@@ -140,7 +145,8 @@ func registerRepositoryEnvironmentRules() {
 
 	register(Rule{
 		ID: "GSK136", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityHigh, Title: "Environment with secrets allows self-review", Fixable: true,
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityHigh, Title: "Environment with secrets allows self-review", Fixable: true, TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
@@ -163,17 +169,24 @@ func registerRepositoryEnvironmentRules() {
 			// Report confirmed violations before skipping, so a single
 			// unreadable environment does not mask an environment already
 			// known to allow self-review.
+			selfReview, ignored := splitIgnoredTargets(f.ignores, "GSK136", selfReview)
 			if len(selfReview) > 0 {
-				return Fail(fmt.Sprintf("environments with secrets allowing self-review: %s", strings.Join(selfReview, ", ")))
+				return failTargets(fmt.Sprintf("environments with secrets allowing self-review: %s", strings.Join(selfReview, ", ")), selfReview)
 			}
 			if len(unknown) > 0 {
 				return Skip(fmt.Sprintf("could not read secrets for environments: %s", strings.Join(unknown, ", ")))
+			}
+			if len(ignored) > 0 {
+				return skipIgnored("environment", ignored)
 			}
 			return Pass("no environment with secrets allows self-review")
 		},
 		ApplyRepo: func(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, f *RepositoryFacts) error {
 			for _, env := range f.Environments {
 				name := env.GetName()
+				if f.ignores.Match("GSK136", name) {
+					continue
+				}
 				// Only secret-bearing environments are flagged by the check, so
 				// remediation must not touch environments without secrets even if
 				// they happen to allow self-review. Environments whose secrets
@@ -197,7 +210,8 @@ func registerRepositoryEnvironmentRules() {
 
 	register(Rule{
 		ID: "GSK137", GHQRID: "", Scope: ScopeRepository,
-		Category: "environments", Severity: SeverityMedium, Title: "Environment deployment branch policy allows all branches",
+		SettingsPath: "environments",
+		Category:     "environments", Severity: SeverityMedium, Title: "Environment deployment branch policy allows all branches", TargetKind: "environment",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.EnvironmentsKnown {
 				return Skip("could not read environments")
@@ -252,11 +266,15 @@ func registerRepositoryEnvironmentRules() {
 				// restricts which branches can deploy.
 				unrestricted = append(unrestricted, name)
 			}
+			unrestricted, ignored := splitIgnoredTargets(f.ignores, "GSK137", unrestricted)
 			if len(unrestricted) > 0 {
-				return Fail(fmt.Sprintf("environments deployable from any branch: %s", strings.Join(unrestricted, ", ")))
+				return failTargets(fmt.Sprintf("environments deployable from any branch: %s", strings.Join(unrestricted, ", ")), unrestricted)
 			}
 			if len(indeterminate) > 0 {
 				return Skip(fmt.Sprintf("environments restrict deployments but the restriction could not be confirmed: %s", strings.Join(indeterminate, ", ")))
+			}
+			if len(ignored) > 0 {
+				return skipIgnored("environment", ignored)
 			}
 			return Pass("all environments restrict which branches can deploy")
 		},

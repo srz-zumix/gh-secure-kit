@@ -25,21 +25,31 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 		return fmt.Errorf("failed to create branch %q: %w", branchName, err)
 	}
 
-	branch := branchName
-	if _, err := gh.CreateRepositoryFile(ctx, g, repo, path, &gh.RepositoryContentFileOptions{
-		Message: commitMessage,
-		Content: content,
-		Branch:  &branch,
-	}); err != nil {
-		// The create-file endpoint returns 422 when the file already exists on
-		// the branch (it needs the current blob SHA to update). Treat that as a
-		// successful reuse only if the file is really present on the branch;
-		// otherwise the 422 signals a genuine failure and must be surfaced.
-		if !gh.IsHTTPUnprocessableEntity(err) {
-			return fmt.Errorf("failed to create %s on branch %q: %w", path, branchName, err)
-		}
-		if _, getErr := gh.GetRepositoryFileContent(ctx, g, repo, path, &branch); getErr != nil {
-			return fmt.Errorf("creating %s on branch %q returned %v; verifying whether the file already exists failed: %w", path, branchName, err, getErr)
+	// Pin the existence check and the commit to the same head SHA so a
+	// concurrent writer cannot slip a change in between them.
+	head, err := gh.GetBranch(ctx, g, repo, branchName)
+	if err != nil {
+		return fmt.Errorf("failed to get branch %q: %w", branchName, err)
+	}
+	headSHA := head.GetCommit().GetSHA()
+
+	// A previous run may already have committed the file to this branch; reuse it.
+	exists, err := repositoryFileExists(ctx, g, repo, path, headSHA)
+	if err != nil {
+		return fmt.Errorf("failed to check whether %s exists on branch %q at %s: %w", path, branchName, headSHA, err)
+	}
+	if !exists {
+		// The Contents API leaves commits unsigned; createCommitOnBranch makes GitHub sign them (verified).
+		if _, commitErr := gh.CreateCommitOnBranch(ctx, g, repo, branchName, headSHA, commitMessage, map[string][]byte{path: content}); commitErr != nil {
+			// The branch may have advanced since headSHA (e.g. a concurrent run
+			// added the file). Reuse the file if it is now present on the branch.
+			present, checkErr := repositoryFileExists(ctx, g, repo, path, branchName)
+			if checkErr != nil {
+				return fmt.Errorf("failed to commit %s to branch %q: %v; rechecking the branch failed: %w", path, branchName, commitErr, checkErr)
+			}
+			if !present {
+				return fmt.Errorf("failed to commit %s to branch %q: %w", path, branchName, commitErr)
+			}
 		}
 	}
 
@@ -65,4 +75,16 @@ func applyFileViaPullRequest(ctx context.Context, g *gh.GitHubClient, repo repos
 		}
 	}
 	return nil
+}
+
+// repositoryFileExists reports whether path exists in repo at the given ref
+// (a branch name or commit SHA).
+func repositoryFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, path, ref string) (bool, error) {
+	if _, err := gh.GetRepositoryFileContent(ctx, g, repo, path, &ref); err != nil {
+		if gh.IsHTTPNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

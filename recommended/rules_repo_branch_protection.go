@@ -259,7 +259,8 @@ func fnmatchToRegexp(pattern string) (*regexp.Regexp, error) {
 func registerBranchProtectionRules() {
 	register(Rule{
 		ID: "GSK110", GHQRID: "repo-bp-001", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityCritical, Title: "No branch protection configured on default branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if f.Protection != nil || activeRulesetProtectsDefaultBranch(f) {
 				return Pass("default branch is protected by a branch protection rule or ruleset")
@@ -275,19 +276,22 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK111", GHQRID: "repo-bp-002", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityCritical, Title: "No approving reviews required before merge", Fixable: true,
 		CheckRepo: checkMinimumRequiredReviews(1, "no approving reviews are required before merge"),
 	})
 
 	register(Rule{
 		ID: "GSK112", GHQRID: "repo-bp-003", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityMedium, Title: "Only 1 approving review required", Fixable: true,
 		CheckRepo: checkMinimumRequiredReviews(2, "fewer than 2 approving reviews are required"),
 	})
 
 	register(Rule{
 		ID: "GSK113", GHQRID: "repo-bp-004", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityHigh, Title: "Stale reviews not dismissed on new commits", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Effective value is the union of legacy protection and every
 			// applicable active ruleset, so the requirement is met when any
@@ -309,7 +313,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK114", GHQRID: "repo-bp-005", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityMedium, Title: "Code owner review not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -328,7 +333,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK115", GHQRID: "repo-bp-007", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityHigh, Title: "Strict status checks not enabled", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -349,7 +355,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK116", GHQRID: "repo-bp-009", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "No required status checks configured",
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityHigh, Title: "No required status checks configured",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			count := combinedRequiredStatusCheckCount(f)
 			return combinedRequirement(f, count > 0,
@@ -360,7 +367,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK117", GHQRID: "repo-bp-010", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityCritical, Title: "Force pushes allowed on protected branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			// Legacy protection satisfies the rule only when it is present and does
 			// not allow force pushes; an applicable ruleset satisfies it with a
@@ -379,7 +387,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK118", GHQRID: "repo-bp-012", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityMedium, Title: "Signed commits not required", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -398,7 +407,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK128", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityHigh, Title: "Branch deletion allowed on protected branch", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityHigh, Title: "Branch deletion allowed on protected branch", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := f.Protection != nil && !f.Protection.GetAllowDeletions().GetEnabled()
 			for _, rs := range activeDefaultBranchRulesets(f) {
@@ -414,7 +424,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK129", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityLow, Title: "Conversation resolution not required before merge", Fixable: true,
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityLow, Title: "Conversation resolution not required before merge", Fixable: true,
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -433,7 +444,8 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK130", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityInfo, Title: "Linear history not required",
+		SettingsPath: "branches",
+		Category:     "branch_protection", Severity: SeverityInfo, Title: "Linear history not required",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			satisfied := false
 			if f.Protection != nil {
@@ -456,7 +468,7 @@ func registerBranchProtectionRules() {
 
 	register(Rule{
 		ID: "GSK131", GHQRID: "", Scope: ScopeRepository,
-		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed",
+		Category: "branch_protection", Severity: SeverityMedium, Title: "Branch protection can be bypassed", TargetKind: "ruleset",
 		CheckRepo: func(f *RepositoryFacts) Outcome {
 			if !f.ProtectionKnown || !f.RulesetsKnown {
 				return Skip("could not determine branch protection or ruleset status for the default branch")
@@ -472,16 +484,44 @@ func registerBranchProtectionRules() {
 			// excluded by bypassFindings below; a bypass any other actor could use
 			// stays reportable even for a single-member repository.
 			ownerExempt := oneMemberRepository(f) && combinedReviewCount(f) >= 1
-			reasons := bypassFindings(f, ownerExempt)
-			if len(reasons) == 0 {
+			findings := bypassFindings(f, ownerExempt)
+			if len(findings.reasons) == 0 {
+				if len(findings.ignored) > 0 {
+					return skipIgnored("ruleset", findings.ignored)
+				}
 				if ownerExempt {
 					return Skip("the repository has a single member who needs a bypass to merge their own pull requests")
 				}
 				return Pass("branch protection on the default branch cannot be bypassed")
 			}
-			return Fail(strings.Join(reasons, "; "))
+			detail := strings.Join(findings.reasons, "; ")
+			// Link the settings page only when every finding is fixed on the same
+			// page: legacy protection under branches, rulesets under rules.
+			if findings.legacy {
+				outcome := Fail(detail)
+				if len(findings.rulesets) == 0 {
+					outcome.SettingsPath = "branches"
+				}
+				return outcome
+			}
+			outcome := failTargets(detail, findings.rulesets)
+			outcome.SettingsPath = "rules"
+			return outcome
 		},
 	})
+}
+
+// bypassResult is the outcome of bypassFindings.
+type bypassResult struct {
+	// reasons describes every finding that is not ignored.
+	reasons []string
+	// legacy reports a finding that is not attributable to a ruleset, so it
+	// cannot be ignored per target.
+	legacy bool
+	// rulesets are the names of the rulesets in reasons.
+	rulesets []string
+	// ignored are the names of the rulesets excluded by the configuration.
+	ignored []string
 }
 
 // bypassFindings describes every way the default branch protection can be
@@ -492,8 +532,8 @@ func registerBranchProtectionRules() {
 // ruleset is therefore not trusted by name: only the owner-exempt review shape
 // the remediation produces is tolerated, so any surviving unconditional bypass
 // is a genuine finding even on a ruleset that uses the managed review name.
-func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
-	var reasons []string
+func bypassFindings(f *RepositoryFacts, ownerExempt bool) bypassResult {
+	var res bypassResult
 	// In a single-member user repository the owner is the only administrator, so a
 	// disabled admin enforcement can be the owner's own required review bypass.
 	// That exemption is tolerated only when the legacy protection is the review-only
@@ -503,7 +543,8 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 	// reportable, as does a disabled enforcement in any multi-member repository.
 	if f.Protection != nil && !f.Protection.GetEnforceAdmins().GetEnabled() &&
 		(!ownerExempt || !legacyProtectionMatchesOwnerExemptShape(f)) {
-		reasons = append(reasons, "branch protection is not enforced for administrators")
+		res.reasons = append(res.reasons, "branch protection is not enforced for administrators")
+		res.legacy = true
 	}
 	for _, rs := range activeDefaultBranchRulesets(f) {
 		if !gh.HasAnyRulesetRule(rs.Rules) {
@@ -521,9 +562,14 @@ func bypassFindings(f *RepositoryFacts, ownerExempt bool) []string {
 		if ownerExempt && rulesetMatchesOwnerExemptShape(f, rs) {
 			continue
 		}
-		reasons = append(reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+		if f.ignores.Match("GSK131", rs.Name) {
+			res.ignored = append(res.ignored, rs.Name)
+			continue
+		}
+		res.reasons = append(res.reasons, fmt.Sprintf("ruleset %q grants an unconditional bypass", rs.Name))
+		res.rulesets = append(res.rulesets, rs.Name)
 	}
-	return reasons
+	return res
 }
 
 // legacyProtectionMatchesOwnerExemptShape reports whether the legacy branch

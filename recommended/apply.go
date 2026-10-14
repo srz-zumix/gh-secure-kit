@@ -22,8 +22,8 @@ type ApplyResult struct {
 // fixable, or were skipped during evaluation are reported but not touched.
 // When dryRun is true, no changes are made; Applied instead reports whether a
 // fix would have been applied.
-func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule, dryRun bool) ([]ApplyResult, error) {
-	results, facts, err := EvaluateRepository(ctx, g, repo, rules)
+func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule, ignores TargetIgnores, dryRun bool) ([]ApplyResult, error) {
+	results, facts, err := EvaluateRepository(ctx, g, repo, rules, ignores)
 	if err != nil {
 		return nil, err
 	}
@@ -127,8 +127,8 @@ func ApplyRepository(ctx context.Context, g *gh.GitHubClient, repo repository.Re
 // applies the fix for every failing, fixable rule. When dryRun is true, no
 // changes are made; Applied instead reports whether a fix would have been
 // applied.
-func ApplyOrganization(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule, dryRun bool) ([]ApplyResult, error) {
-	results, facts, err := EvaluateOrganization(ctx, g, repo, rules)
+func ApplyOrganization(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule, ignores TargetIgnores, dryRun bool) ([]ApplyResult, error) {
+	results, facts, err := EvaluateOrganization(ctx, g, repo, rules, ignores)
 	if err != nil {
 		return nil, err
 	}

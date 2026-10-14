@@ -3,9 +3,11 @@ package recommended
 import (
 	"context"
 	"errors"
+	"net/http"
 	"regexp"
 	"strings"
 
+	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v90/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -18,7 +20,12 @@ var branchErrorHTTPStatus = regexp.MustCompile(`\(HTTP (\d{3})\)`)
 // RepositoryFacts holds the raw data collected from GitHub for a single
 // repository, used as input to every repository-scoped Rule.Check function.
 type RepositoryFacts struct {
-	Repo *github.Repository
+	// ignores holds the per-target ignores of the configuration.
+	ignores TargetIgnores
+
+	Repo       *github.Repository
+	Hooks      []*github.Hook
+	HooksKnown bool
 
 	// Protection is nil when the default branch has no legacy branch protection rule.
 	Protection *github.Protection
@@ -125,6 +132,12 @@ func isNotFound(err error) bool {
 	return false
 }
 
+func isAccessDenied(err error) bool {
+	var response *github.ErrorResponse
+	return errors.As(err, &response) && response.Response != nil &&
+		(response.Response.StatusCode == http.StatusUnauthorized || response.Response.StatusCode == http.StatusForbidden)
+}
+
 // isBranchNotProtected reports whether err means the default branch has no legacy
 // branch protection. GitHub answers the branch-protection endpoint with a 404 for
 // an unprotected branch, but some client transports drop the HTTP response while
@@ -162,15 +175,18 @@ func isBranchNotProtected(err error) bool {
 // branch. The second return is false when the answer is unknown (a non-404
 // error such as a permission or transient API failure), so callers can skip a
 // rule instead of recording a false "missing file".
-func fileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, path string) (exists bool, known bool) {
-	_, err := gh.GetRepositoryFileContent(ctx, g, repo, path, nil)
+func fileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, path string) (exists bool, known bool, err error) {
+	_, err = gh.GetRepositoryFileContent(ctx, g, repo, path, nil)
 	if err == nil {
-		return true, true
+		return true, true, nil
+	}
+	if isAccessDenied(err) {
+		return false, false, err
 	}
 	if isNotFound(err) {
-		return false, true
+		return false, true, nil
 	}
-	return false, false
+	return false, false, nil
 }
 
 // anyFileExists reports whether any of the candidate paths exists, as a
@@ -178,29 +194,32 @@ func fileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Reposit
 // when every path was definitively absent (404), and nil when the result is
 // unknown (no path was found but at least one lookup failed for a non-404
 // reason).
-func anyFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, paths ...string) *bool {
+func anyFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, paths ...string) (*bool, error) {
 	known := true
 	for _, path := range paths {
-		exists, ok := fileExists(ctx, g, repo, path)
+		exists, ok, err := fileExists(ctx, g, repo, path)
+		if err != nil {
+			return nil, err
+		}
 		if exists {
-			return github.Ptr(true)
+			return github.Ptr(true), nil
 		}
 		if !ok {
 			known = false
 		}
 	}
 	if !known {
-		return nil
+		return nil, nil
 	}
-	return github.Ptr(false)
+	return github.Ptr(false), nil
 }
 
 // CollectRepositoryFacts gathers the data required to evaluate the given repository-scoped
 // rules. Facts whose collection scales with the number of environments (environment secrets
 // and custom branch policies) are only collected when a selected rule actually needs them,
 // so unrelated checks do not pay their per-environment API cost.
-// Individual collectors are best-effort: a permission error or 404 degrades the related
-// facts to their zero value instead of aborting the whole collection.
+// Authentication and permission errors abort collection; other individual failures
+// leave the related facts unknown.
 func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) (*RepositoryFacts, error) {
 	repoInfo, err := gh.GetRepository(ctx, g, repo)
 	if err != nil {
@@ -216,6 +235,8 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		// The legacy protection API returns 404 both for "no protection" and for
 		// "branch not found"; either way the branch has no legacy protection.
 		f.ProtectionKnown = true
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	// A non-404 error leaves ProtectionKnown false so rules skip rather than
 	// report a false negative.
@@ -231,51 +252,82 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 				if detailed, derr := gh.GetRepositoryRuleset(ctx, g, repo, rs.GetID(), true); derr == nil && detailed != nil {
 					rs = detailed
 				} else {
+					if isAccessDenied(derr) {
+						return nil, derr
+					}
 					f.RulesetsKnown = false
 				}
 			}
 			f.Rulesets = append(f.Rulesets, rs)
 		}
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 
 	if collaborators, err := gh.ListRepositoryCollaborators(ctx, g, repo, []string{"direct"}, nil); err == nil {
 		f.Collaborators = collaborators
 		f.CollaboratorsKnown = true
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 
 	if keys, err := gh.ListDeployKeys(ctx, g, repo); err == nil {
 		f.DeployKeys = keys
 		f.DeployKeysKnown = true
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 
-	f.HasSecurityMD = anyFileExists(ctx, g, repo, "SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md")
-	f.HasCodeowners = anyFileExists(ctx, g, repo, "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS")
-	f.HasDependabotYML = anyFileExists(ctx, g, repo, ".github/dependabot.yml", ".github/dependabot.yaml")
+	if f.HasSecurityMD, err = anyFileExists(ctx, g, repo, "SECURITY.md", ".github/SECURITY.md", "docs/SECURITY.md"); err != nil {
+		return nil, err
+	}
+	if f.HasCodeowners, err = anyFileExists(ctx, g, repo, "CODEOWNERS", ".github/CODEOWNERS", "docs/CODEOWNERS"); err != nil {
+		return nil, err
+	}
+	if f.HasDependabotYML, err = anyFileExists(ctx, g, repo, ".github/dependabot.yml", ".github/dependabot.yaml"); err != nil {
+		return nil, err
+	}
 
 	if setup, err := gh.GetCodeScanningDefaultSetupConfiguration(ctx, g, repo); err == nil {
 		f.CodeScanningSetup = setup
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if status, err := gh.GetVulnerabilityAlerts(ctx, g, repo); err == nil {
 		f.VulnerabilityAlerts = status
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if status, err := gh.GetAutomatedSecurityFixes(ctx, g, repo); err == nil {
 		f.AutomatedSecurityFixes = status
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if status, err := gh.GetPrivateVulnerabilityReporting(ctx, g, repo); err == nil {
 		f.PrivateVulnerabilityReporting = status
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetRepoDefaultWorkflowPermissions(ctx, g, repo); err == nil {
 		f.DefaultWorkflowPermissions = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetRepoForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetRepoActionsPermissions(ctx, g, repo); err == nil {
 		f.ActionsPermissions = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if isPrivateOrInternal(repoInfo) {
 		if settings, err := gh.GetRepoPrivateRepoForkPRWorkflowSettings(ctx, g, repo); err == nil {
 			f.PrivateForkPRWorkflows = settings
+		} else if isAccessDenied(err) {
+			return nil, err
 		}
 	}
 	if hasTags, err := gh.HasTags(ctx, g, repo); err == nil {
@@ -283,8 +335,12 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		if hasTags {
 			if status, err := gh.GetRepoImmutableReleases(ctx, g, repo); err == nil {
 				f.ImmutableReleases = status
+			} else if isAccessDenied(err) {
+				return nil, err
 			}
 		}
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	needSecrets, needBranchPolicies := environmentFactNeeds(rules)
 	if needSecrets || needBranchPolicies {
@@ -304,6 +360,9 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 				for _, env := range environments {
 					secrets, err := gh.ListEnvSecrets(ctx, g, repo, env.GetName())
 					if err != nil {
+						if isAccessDenied(err) {
+							return nil, err
+						}
 						continue
 					}
 					secretsKnown[env.GetName()] = true
@@ -331,6 +390,9 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 					}
 					policies, err := gh.ListDeploymentCustomBranchPolicies(ctx, g, repo, env)
 					if err != nil {
+						if isAccessDenied(err) {
+							return nil, err
+						}
 						continue
 					}
 					branchPolicies[env.GetName()] = policies
@@ -339,15 +401,36 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 				f.EnvironmentBranchPolicies = branchPolicies
 				f.EnvironmentBranchPoliciesKnown = policiesKnown
 			}
+		} else if isAccessDenied(err) {
+			return nil, err
 		}
 	}
 
+	if selectedRule(rules, "GSK144", "GSK145") {
+		if hooks, err := gh.ListRepoHooks(ctx, g, repo); err == nil {
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK145") {
+				if err := fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Repositories.GetHookConfiguration(ctx, repo.Owner, repo.Name, id)
+					return config, err
+				}); err != nil {
+					return nil, err
+				}
+			}
+			f.Hooks, f.HooksKnown = hooks, true
+		} else if isAccessDenied(err) {
+			return nil, err
+		}
+	}
 	return f, nil
 }
 
 // OrganizationFacts holds the raw data collected from GitHub for a single
 // organization, used as input to every organization-scoped Rule.Check function.
 type OrganizationFacts struct {
+	// ignores holds the per-target ignores of the configuration.
+	ignores                TargetIgnores
 	Org                    *github.Organization
 	SecurityManagerTeams   []*github.Team
 	ActionsPermissions     *github.ActionsPermissions
@@ -372,44 +455,180 @@ type OrganizationFacts struct {
 	Owners []*github.User
 	// OwnersKnown is false when the owner list could not be fetched, so the
 	// owner-count rule skips instead of treating the organization as having none.
-	OwnersKnown bool
+	OwnersKnown           bool
+	SuspendedOwners       []*github.User
+	SuspendedOwnersKnown  bool
+	SuspendedMembers      []*github.User
+	SuspendedMembersKnown bool
+	RunnerGroups          []*github.RunnerGroup
+	RunnerGroupsKnown     bool
+	Hooks                 []*github.Hook
+	HooksKnown            bool
 }
 
 // CollectOrganizationFacts gathers the data required to evaluate all organization-scoped rules.
-func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository) (*OrganizationFacts, error) {
+func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repository.Repository, rules []Rule) (*OrganizationFacts, error) {
 	org, err := gh.GetOrg(ctx, g, repo)
 	if err != nil {
 		return nil, err
 	}
 
 	f := &OrganizationFacts{Org: org}
+	if len(rules) == 0 {
+		rules = AllRules()
+	}
 
 	if teams, err := gh.ListTeamsAssignedToRole(ctx, g, repo, "security_manager"); err == nil {
 		f.SecurityManagerTeams = teams
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetOrgActionsPermissions(ctx, g, repo); err == nil {
 		f.ActionsPermissions = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if configs, err := gh.ListDefaultCodeSecurityConfigurations(ctx, g, repo); err == nil {
 		f.DefaultSecurityConfigs = configs
 		f.DefaultSecurityConfigsKnown = true
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetOrgDefaultWorkflowPermissions(ctx, g, repo); err == nil {
 		f.DefaultWorkflowPermissions = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if permissions, err := gh.GetOrgForkPRContributorApprovalPermissions(ctx, g, repo); err == nil {
 		f.ForkPRContributorApproval = permissions
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if settings, err := gh.GetOrgImmutableReleasesSettings(ctx, g, repo); err == nil {
 		f.ImmutableReleases = settings
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if settings, err := gh.GetOrgPrivateRepoForkPRWorkflowSettings(ctx, g, repo); err == nil {
 		f.PrivateForkPRWorkflows = settings
+	} else if isAccessDenied(err) {
+		return nil, err
 	}
 	if owners, err := gh.ListOrgMembers(ctx, g, repo, []string{"admin"}, false); err == nil {
 		f.Owners = owners
 		f.OwnersKnown = true
+	} else if isAccessDenied(err) {
+		return nil, err
+	}
+	if selectedRule(rules, "GSK521") && f.OwnersKnown {
+		f.SuspendedOwners, f.SuspendedOwnersKnown, err = collectSuspendedUsers(ctx, g, repo.Host, f.Owners)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if selectedRule(rules, "GSK522") {
+		if members, err := gh.ListOrgMembers(ctx, g, repo, []string{"member"}, false); err == nil {
+			f.SuspendedMembers, f.SuspendedMembersKnown, err = collectSuspendedUsers(ctx, g, repo.Host, members)
+			if err != nil {
+				return nil, err
+			}
+		} else if isAccessDenied(err) {
+			return nil, err
+		}
+	}
+	if selectedRule(rules, "GSK523") {
+		if groups, err := gh.ListOrgRunnerGroups(ctx, g, repo); err == nil {
+			f.RunnerGroups, f.RunnerGroupsKnown = groups, true
+		} else if isAccessDenied(err) {
+			return nil, err
+		}
+	}
+	if selectedRule(rules, "GSK524", "GSK525") {
+		if hooks, err := gh.ListOrgHooks(ctx, g, repo); err == nil {
+			// Only the secret rule needs the per-hook configuration endpoint;
+			// the list response already carries url and insecure_ssl.
+			if selectedRule(rules, "GSK525") {
+				if err := fillHookConfigs(ctx, hooks, func(ctx context.Context, id int64) (*github.HookConfig, error) {
+					config, _, err := g.GetClient().Organizations.GetHookConfiguration(ctx, repo.Owner, id)
+					return config, err
+				}); err != nil {
+					return nil, err
+				}
+			}
+			f.Hooks, f.HooksKnown = hooks, true
+		} else if isAccessDenied(err) {
+			return nil, err
+		}
 	}
 
 	return f, nil
+}
+
+func selectedRule(rules []Rule, ids ...string) bool {
+	for _, rule := range rules {
+		for _, id := range ids {
+			if rule.ID == id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// fillHookConfigs replaces the configuration of every active webhook with the
+// one returned by the per-hook configuration endpoint. Webhook list responses
+// omit the secret field entirely, while the configuration endpoint reports it
+// masked when one is configured. A hook whose configuration cannot be fetched
+// keeps no configuration at all so the rules treat it as indeterminate instead
+// of reporting a missing secret.
+func fillHookConfigs(ctx context.Context, hooks []*github.Hook, get func(ctx context.Context, id int64) (*github.HookConfig, error)) error {
+	for _, hook := range hooks {
+		if hook == nil || hook.Active == nil || !hook.GetActive() {
+			continue
+		}
+		if hook.GetID() == 0 {
+			hook.Config = nil
+			continue
+		}
+		config, err := get(ctx, hook.GetID())
+		if isAccessDenied(err) {
+			return err
+		}
+		if err != nil || config == nil {
+			hook.Config = nil
+			continue
+		}
+		hook.Config = config
+	}
+	return nil
+}
+
+func collectSuspendedUsers(ctx context.Context, g *gh.GitHubClient, host string, users []*github.User) ([]*github.User, bool, error) {
+	var suspended []*github.User
+	known := true
+	for _, user := range users {
+		if user.GetLogin() == "" {
+			known = false
+			continue
+		}
+		if gh.IsSuspendedUser(user) {
+			suspended = append(suspended, user)
+			continue
+		}
+		if !auth.IsEnterprise(host) {
+			continue
+		}
+		details, err := gh.FindUser(ctx, g, user.GetLogin())
+		if isAccessDenied(err) {
+			return nil, false, err
+		}
+		if err != nil || details == nil {
+			known = false
+			continue
+		}
+		if gh.IsSuspendedUser(details) {
+			suspended = append(suspended, details)
+		}
+	}
+	return suspended, known, nil
 }

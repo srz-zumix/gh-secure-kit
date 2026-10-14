@@ -10,6 +10,34 @@ Run `gh secure-kit recommended explain <ID>` to view a rule's documentation
 from the command line, or `gh secure-kit recommended list` to see the full
 catalog with severity, scope, and fixability.
 
+## Ignoring individual targets
+
+Rules that report individual items can be ignored per item in
+`.gh-secure-kit-recommended.yml`. Give a rule ID a list of regular expressions
+(each must match the whole target name):
+
+```yaml
+ignore:
+- GSK131: # Branch protection can be bypassed
+  - release-bot-.*
+- GSK135: # Environment with secrets has no required reviewers configured
+  - staging
+```
+
+| Rule | Target |
+|---|---|
+| GSK119, GSK120 | Collaborator login |
+| GSK121, GSK122 | Deploy key ID |
+| GSK131 | Ruleset name |
+| GSK135, GSK136, GSK137 | Environment name |
+| GSK144, GSK145, GSK524, GSK525 | Webhook ID |
+| GSK521, GSK522 | User login |
+| GSK523 | Runner group name |
+
+A rule whose findings are all ignored is reported as `skip`. The classic
+"not enforced for administrators" finding of GSK131 cannot be ignored per
+target; ignore the whole rule instead.
+
 ## Repository rules
 
 | Rule | Severity | Fixable | Title |
@@ -57,6 +85,8 @@ catalog with severity, scope, and fixability.
 | [GSK141](GSK141.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
 | [GSK142](GSK142.md) | Medium | Yes | Forking allowed on private or internal repository |
 | [GSK143](GSK143.md) | Info | No | No push ruleset restricting pushed files |
+| [GSK144](GSK144.md) | High | No | Webhook uses insecure transport |
+| [GSK145](GSK145.md) | Medium | No | Webhook has no secret |
 
 ## Organization rules
 
@@ -82,3 +112,8 @@ catalog with severity, scope, and fixability.
 | [GSK518](GSK518.md) | Medium | No | Immutable releases not enforced for all repositories |
 | [GSK519](GSK519.md) | High | Yes | Private fork pull request workflows receive write tokens or secrets |
 | [GSK520](GSK520.md) | Medium | No | Excessive organization owners |
+| [GSK521](GSK521.md) | High | No | Suspended users remain organization owners |
+| [GSK522](GSK522.md) | Medium | No | Suspended users remain organization members |
+| [GSK523](GSK523.md) | High | Yes | Self-hosted runner group allows public repositories |
+| [GSK524](GSK524.md) | High | No | Webhook uses insecure transport |
+| [GSK525](GSK525.md) | Medium | No | Webhook has no secret |
