@@ -35,6 +35,8 @@ gh secure-kit                      # Root command
 ├── advanced-security              # GitHub Advanced Security subcommands
 │   ├── disable                    # Disable GitHub Advanced Security for an org
 │   └── enable                     # Enable GitHub Advanced Security for an org
+├── audit-log                      # Organization audit log subcommands
+│   └── credentials                # Detect credential-related operations (SSH keys, PATs, SSO, OAuth/GitHub Apps)
 ├── dependabot                     # Dependabot management subcommands
 │   ├── alerts                     # Dependabot alerts subcommands
 │   │   ├── disable                # Disable Dependabot alerts for an org
@@ -2211,6 +2213,50 @@ Enable GitHub Advanced Security for all eligible repositories in an organization
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--owner` | `-o` | | The organization name (optional) |
+
+## Audit Log
+
+### Detect credential-related operations in the organization audit log (gh secure-kit audit-log credentials)
+
+```sh
+gh secure-kit audit-log credentials [--owner <org>] [--category <category>,...] [--since <time>] [--until <time>]
+```
+
+Detect operations on credentials in the organization audit log: SSH keys and deploy keys, personal access tokens, SSO credential authorizations, OAuth apps, and GitHub Apps. Results are listed newest first with a `CATEGORY` column.
+
+Categories (default: all):
+
+| Category | Detected events |
+| -------- | --------------- |
+| `ssh` | `public_key.*`, `ssh_certificate_authority.*`, `ssh_certificate_requirement.*` |
+| `pat` | `personal_access_token.*`, `auto_approve_personal_access_token_requests.*` |
+| `sso-credential` | `org_credential_authorization.*` |
+| `oauth-app` | `oauth_application.*`, `org.oauth_app_access_*`, `org.{enable,disable}_oauth_app_restrictions` |
+| `github-app` | `integration.*`, `integration_installation.*`, `integration_installation_request.*`, `org.integration_manager_*` |
+
+`--since` and `--until` accept RFC3339 timestamps, dates (`2006-01-02`), or relative periods such as `7d`, `2w`, `24h`. By default the whole audit log retention period is searched.
+
+```sh
+gh secure-kit audit-log credentials --owner my-org --since 30d
+
+# SSH key and PAT operations as JSON
+gh secure-kit audit-log credentials --owner my-org --category ssh,pat --format json
+
+# Actors of PAT operations in the last week
+gh secure-kit audit-log credentials --owner my-org --category pat --since 7d --format json --jq '.[].entry.actor'
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ------ | ------- | --------- | ------------- |
+| `--category` | `-c` | all | Categories to detect: {ssh\|pat\|sso-credential\|oauth-app\|github-app} |
+| `--format` | | | Output format: {json} |
+| `--jq` | `-q` | | Filter JSON output using a jq expression |
+| `--owner` | `-o` | | The organization name (optional) |
+| `--since` | | | Only include entries at or after this time (RFC3339, YYYY-MM-DD, or period like 7d) |
+| `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--until` | | | Only include entries at or before this time (RFC3339, YYYY-MM-DD, or period like 7d) |
 
 ## Recommended
 
