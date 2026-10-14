@@ -18,6 +18,31 @@ func orgRuleOutcome(t *testing.T, id string, f *OrganizationFacts) Status {
 	return r.CheckOrg(f).Status
 }
 
+func TestGSK501TwoFactorAuthentication(t *testing.T) {
+	tests := []struct {
+		name    string
+		managed bool
+		enabled bool
+		want    Status
+	}{
+		{"required", false, true, StatusPass},
+		{"not required", false, false, StatusFail},
+		{"managed users", true, false, StatusSkip},
+		{"managed users with requirement", true, true, StatusSkip},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			facts := &OrganizationFacts{
+				Org:                    &github.Organization{TwoFactorRequirementEnabled: github.Ptr(test.enabled)},
+				EnterpriseManagedUsers: test.managed,
+			}
+			if got := orgRuleOutcome(t, "GSK501", facts); got != test.want {
+				t.Errorf("got %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
 func TestGSK507DefaultCodeSecurityConfiguration(t *testing.T) {
 	if got := orgRuleOutcome(t, "GSK507", &OrganizationFacts{}); got != StatusSkip {
 		t.Errorf("unknown configs: got %v, want skip", got)

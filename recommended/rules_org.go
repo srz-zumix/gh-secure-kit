@@ -18,6 +18,9 @@ func registerOrganizationRules() {
 		Category: "security", Severity: SeverityCritical, Title: "Two-factor authentication not required for members",
 		SettingsPath: "security",
 		CheckOrg: func(f *OrganizationFacts) Outcome {
+			if f.EnterpriseManagedUsers {
+				return Skip("Enterprise Managed Users authenticate through the identity provider; verify MFA enforcement in the IdP")
+			}
 			if f.Org.GetTwoFactorRequirementEnabled() {
 				return Pass("two-factor authentication is required for all members")
 			}

@@ -11,6 +11,81 @@ import (
 	"github.com/google/go-github/v90/github"
 )
 
+func TestIsEnterpriseManagedOrganization(t *testing.T) {
+	tests := []struct {
+		name   string
+		host   string
+		owners []*github.User
+		want   bool
+	}{
+		{"managed owner", "github.com", []*github.User{{Login: github.Ptr("fixture-user_acme")}}, true},
+		{"setup owner", "github.com", []*github.User{{Login: github.Ptr("acme_admin")}}, true},
+		{"personal owner", "github.com", []*github.User{{Login: github.Ptr("fixture-user")}}, false},
+		{"owners unavailable", "github.com", nil, false},
+		{"nil owner", "github.com", []*github.User{nil}, false},
+		{"data residency", "fixture.ghe.com", nil, true},
+		{"data residency uppercase", "FIXTURE.GHE.COM", nil, true},
+		{"enterprise server", "github.example.com", []*github.User{{Login: github.Ptr("fixture_user")}}, false},
+		{"lookalike host", "fixture.ghe.com.example.com", []*github.User{{Login: github.Ptr("fixture_user")}}, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := isEnterpriseManagedOrganization(test.host, test.owners); got != test.want {
+				t.Errorf("got %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func TestCollectOrganizationFactsEnterpriseManagedUsers(t *testing.T) {
+	rule, ok := RuleByID("GSK501")
+	if !ok {
+		t.Fatal("GSK501 not found")
+	}
+	tests := []struct {
+		name       string
+		host       string
+		owners     string
+		ownerCode  int
+		want       bool
+		wantStatus Status
+	}{
+		{"managed organization", "github.com", `[{"login":"fixture-user_acme"}]`, 200, true, StatusSkip},
+		{"personal organization", "github.com", `[{"login":"fixture-user"}]`, 200, false, StatusFail},
+		{"owners unavailable", "github.com", `{"message":"unavailable"}`, 500, false, StatusFail},
+		{"data residency", "fixture.ghe.com", `[{"login":"fixture-user"}]`, 200, true, StatusSkip},
+		{"enterprise server", "github.example.com", `[{"login":"fixture_user"}]`, 200, false, StatusFail},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				switch request.URL.Path {
+				case "/orgs/fixture-org":
+					return rulesetResponse(request, 200, `{"login":"fixture-org","two_factor_requirement_enabled":false}`), nil
+				case "/orgs/fixture-org/members":
+					if got := request.URL.Query().Get("role"); got != "admin" {
+						t.Errorf("role = %q, want admin", got)
+					}
+					return rulesetResponse(request, test.ownerCode, test.owners), nil
+				default:
+					return rulesetResponse(request, 404, `{"message":"Not Found"}`), nil
+				}
+			}))
+			target := repository.Repository{Host: test.host, Owner: "fixture-org"}
+			facts, err := CollectOrganizationFacts(context.Background(), client, target, []Rule{rule})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if facts.EnterpriseManagedUsers != test.want {
+				t.Errorf("EnterpriseManagedUsers = %v, want %v", facts.EnterpriseManagedUsers, test.want)
+			}
+			if got := rule.CheckOrg(facts).Status; got != test.wantStatus {
+				t.Errorf("status = %v, want %v", got, test.wantStatus)
+			}
+		})
+	}
+}
+
 func TestEvaluateAccessDenied(t *testing.T) {
 	for _, scope := range []Scope{ScopeRepository, ScopeOrganization} {
 		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound} {
