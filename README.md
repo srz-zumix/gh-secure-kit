@@ -1999,6 +1999,14 @@ gh secure-kit recommended check --owner <org> [flags]
 
 Check a repository or organization against recommended GitHub security settings. Use `--repo` to check repository-scoped rules, or `--owner` to check organization-scoped rules. `--repo` and `--owner` are mutually exclusive; if neither is given, the current repository is used.
 
+The organization 2FA rule (`GSK501`) reports `skip` for Enterprise Managed
+Users (EMU), where MFA must be enforced in the identity provider. EMU is
+identified by an organization owner's underscore-containing login on
+GitHub.com, or by a `*.ghe.com` host. This uses existing owner data without
+additional API requests. If owner data is unavailable on GitHub.com, the
+normal 2FA check is retained. GitHub Enterprise Server is excluded from
+EMU detection.
+
 If the target cannot be retrieved, or any settings request returns HTTP 401
 or 403, the command exits with an error without reporting check results,
 regardless of `--exit-code`. Verify the active account with `gh auth status`

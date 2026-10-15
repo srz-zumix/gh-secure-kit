@@ -432,6 +432,7 @@ type OrganizationFacts struct {
 	// ignores holds the per-target ignores of the configuration.
 	ignores                TargetIgnores
 	Org                    *github.Organization
+	EnterpriseManagedUsers bool
 	SecurityManagerTeams   []*github.Team
 	ActionsPermissions     *github.ActionsPermissions
 	DefaultSecurityConfigs []*github.CodeSecurityConfigurationWithDefaultForNewRepos
@@ -520,6 +521,7 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	} else if isAccessDenied(err) {
 		return nil, err
 	}
+	f.EnterpriseManagedUsers = isEnterpriseManagedOrganization(repo.Host, f.Owners)
 	if selectedRule(rules, "GSK521") && f.OwnersKnown {
 		f.SuspendedOwners, f.SuspendedOwnersKnown, err = collectSuspendedUsers(ctx, g, repo.Host, f.Owners)
 		if err != nil {
@@ -562,6 +564,21 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 
 	return f, nil
+}
+
+func isEnterpriseManagedOrganization(host string, owners []*github.User) bool {
+	if auth.IsEnterprise(host) {
+		return false
+	}
+	if strings.HasSuffix(strings.ToLower(host), ".ghe.com") {
+		return true
+	}
+	for _, owner := range owners {
+		if strings.Contains(owner.GetLogin(), "_") {
+			return true
+		}
+	}
+	return false
 }
 
 func selectedRule(rules []Rule, ids ...string) bool {
