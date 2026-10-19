@@ -138,6 +138,17 @@ func isAccessDenied(err error) bool {
 		(response.Response.StatusCode == http.StatusUnauthorized || response.Response.StatusCode == http.StatusForbidden)
 }
 
+// isCodeSecurityDisabled reports whether err is the 403 GitHub returns from the
+// code scanning endpoints when Code Security is not enabled for the repository.
+// This is a feature-state answer rather than a permission failure, so callers
+// can record the feature as unconfigured instead of aborting collection.
+func isCodeSecurityDisabled(err error) bool {
+	var response *github.ErrorResponse
+	return errors.As(err, &response) && response.Response != nil &&
+		response.Response.StatusCode == http.StatusForbidden &&
+		strings.Contains(response.Message, "Code Security must be enabled")
+}
+
 // isBranchNotProtected reports whether err means the default branch has no legacy
 // branch protection. GitHub answers the branch-protection endpoint with a 404 for
 // an unprotected branch, but some client transports drop the HTTP response while
@@ -290,6 +301,10 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 
 	if setup, err := gh.GetCodeScanningDefaultSetupConfiguration(ctx, g, repo); err == nil {
 		f.CodeScanningSetup = setup
+	} else if isCodeSecurityDisabled(err) {
+		// Code scanning cannot run while Code Security is disabled, so the
+		// default setup is known to be not configured.
+		f.CodeScanningSetup = &github.DefaultSetupConfiguration{State: github.Ptr("not-configured")}
 	} else if isAccessDenied(err) {
 		return nil, err
 	}
