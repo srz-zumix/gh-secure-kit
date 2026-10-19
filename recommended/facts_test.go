@@ -184,6 +184,59 @@ func TestEvaluateSettingAccessDenied(t *testing.T) {
 	}
 }
 
+func TestCollectRepositoryFactsCodeScanningDefaultSetupForbidden(t *testing.T) {
+	rule, ok := RuleByID("GSK105")
+	if !ok {
+		t.Fatal("GSK105 not found")
+	}
+	tests := []struct {
+		name       string
+		message    string
+		wantErr    bool
+		wantStatus Status
+	}{
+		{
+			name:       "code security disabled",
+			message:    "Code Security must be enabled for this repository to use code scanning.",
+			wantStatus: StatusFail,
+		},
+		{
+			name:    "other forbidden",
+			message: "Resource not accessible by integration",
+			wantErr: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				switch request.URL.Path {
+				case "/repos/fixture_org/fixture_repo":
+					return rulesetResponse(request, 200, `{"default_branch":"main","name":"fixture_repo","owner":{"login":"fixture_org"}}`), nil
+				case "/repos/fixture_org/fixture_repo/code-scanning/default-setup":
+					return rulesetResponse(request, http.StatusForbidden, fmt.Sprintf(`{"message":%q}`, test.message)), nil
+				default:
+					return rulesetResponse(request, 404, `{"message":"Not Found"}`), nil
+				}
+			}))
+			target := repository.Repository{Host: "github.com", Owner: "fixture_org", Name: "fixture_repo"}
+			facts, err := CollectRepositoryFacts(context.Background(), client, target, []Rule{rule})
+			if test.wantErr {
+				var response *github.ErrorResponse
+				if !errors.As(err, &response) || response.Response.StatusCode != http.StatusForbidden {
+					t.Fatalf("error = %v, want HTTP 403", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := ruleOutcome(t, "GSK105", facts); got != test.wantStatus {
+				t.Errorf("GSK105 = %s, want %s", got, test.wantStatus)
+			}
+		})
+	}
+}
+
 func TestCollectSuspendedUsersAccessDenied(t *testing.T) {
 	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return rulesetResponse(request, http.StatusForbidden, `{"message":"Access denied"}`), nil
