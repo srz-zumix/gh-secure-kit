@@ -127,7 +127,7 @@ func TestCopilotSessionNameRedaction(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		findings := scanner.ScanFragment(Fragment{Content: testGitHubToken, SessionName: "Investigate " + testGitHubToken})
+		findings := scanner.ScanFragment(Fragment{Content: testGitHubToken, SessionName: "Investigate " + testGitHubToken, Workspace: "/work/" + testGitHubToken})
 		if len(findings) != 1 {
 			t.Fatalf("got %d findings, want 1", len(findings))
 		}
@@ -137,6 +137,13 @@ func TestCopilotSessionNameRedaction(t *testing.T) {
 		}
 		if findings[0].SessionName != want {
 			t.Fatalf("incorrect session name redaction with showSecret=%v", showSecret)
+		}
+		wantWorkspace := "/work/" + redact(testGitHubToken)
+		if showSecret {
+			wantWorkspace = "/work/" + testGitHubToken
+		}
+		if findings[0].Workspace != wantWorkspace {
+			t.Fatalf("incorrect workspace redaction with showSecret=%v", showSecret)
 		}
 	}
 }

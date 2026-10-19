@@ -84,6 +84,7 @@ func streamJSONFragments(content string, jsonl bool, base Fragment, yield func(F
 // not valid JSON.
 func jsonStrings(text string, firstLine int) ([]jsonString, error) {
 	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
 	var out []jsonString
 	line := firstLine
 	var prev int64
@@ -153,6 +154,17 @@ func jsonStrings(text string, firstLine int) ([]jsonString, error) {
 				out = append(out, jsonString{Value: `"` + key + `": "` + v + `"`, Line: line})
 			case v != "":
 				out = append(out, jsonString{Value: v, Line: line})
+			}
+		case json.Number:
+			// Numeric values may hold credentials such as numeric codes,
+			// so scan their literal text with the key context.
+			if skip {
+				continue
+			}
+			if member && key != "" {
+				out = append(out, jsonString{Value: `"` + key + `": ` + v.String(), Line: line})
+			} else {
+				out = append(out, jsonString{Value: v.String(), Line: line})
 			}
 		default:
 			if member && key != "" && !skip {

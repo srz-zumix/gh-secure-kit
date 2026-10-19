@@ -83,17 +83,25 @@ func replaceOrAppendPattern(patterns []Pattern, p Pattern) []Pattern {
 	return append(patterns, p)
 }
 
+// redactMetadata redacts matches of all enabled patterns in fragment
+// metadata (e.g. session name, workspace) unless ShowSecret is set.
+func (s *Scanner) redactMetadata(v string) string {
+	if v == "" || s.ShowSecret {
+		return v
+	}
+	for _, pattern := range s.Patterns {
+		if pattern.Enabled {
+			v = pattern.Regex.ReplaceAllStringFunc(v, redact)
+		}
+	}
+	return v
+}
+
 // ScanFragment scans a single fragment against all enabled patterns and
 // returns any findings that are not covered by the allowlist.
 func (s *Scanner) ScanFragment(frag Fragment) []Finding {
-	name := frag.SessionName
-	if name != "" && !s.ShowSecret {
-		for _, pattern := range s.Patterns {
-			if pattern.Enabled {
-				name = pattern.Regex.ReplaceAllStringFunc(name, redact)
-			}
-		}
-	}
+	name := s.redactMetadata(frag.SessionName)
+	workspace := s.redactMetadata(frag.Workspace)
 	var findings []Finding
 	for _, p := range s.Patterns {
 		if !p.Enabled {
@@ -126,7 +134,7 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				Source:      frag.Source,
 				SessionID:   frag.SessionID,
 				SessionName: name,
-				Workspace:   frag.Workspace,
+				Workspace:   workspace,
 			}
 			if frag.Line > 0 {
 				f.StartLine = frag.Line

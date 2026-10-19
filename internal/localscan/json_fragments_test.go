@@ -157,3 +157,14 @@ func TestStreamJSONFragmentsKeepsKeyContext(t *testing.T) {
 		}
 	}
 }
+
+func TestStreamJSONFragmentsKeepsNumericValues(t *testing.T) {
+	content := `{"access_code":123456789012345678901234567890}`
+	for _, jsonl := range []bool{false, true} {
+		got := collectJSONFragments(t, content, jsonl)
+		want := `"access_code": 123456789012345678901234567890`
+		if len(got) != 1 || got[0].Content != want {
+			t.Fatalf("jsonl=%v: fragments = %+v, want one %q", jsonl, got, want)
+		}
+	}
+}
