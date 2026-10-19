@@ -68,7 +68,7 @@ func TestStreamJSONFragmentsReportsJSONLineFromOffset(t *testing.T) {
 	frags := collectJSONFragments(t, content, false)
 	var line int
 	for _, f := range frags {
-		if f.Content == testGitHubToken {
+		if strings.Contains(f.Content, testGitHubToken) {
 			line = f.Line
 		}
 	}
@@ -133,6 +133,27 @@ func TestStreamJSONFragmentsSkipsEncryptedContent(t *testing.T) {
 			if len(findings) != want {
 				t.Fatalf("jsonl=%v, plaintext=%v: got %d findings, want %d", jsonl, plaintext, len(findings), want)
 			}
+		}
+	}
+}
+
+func TestStreamJSONFragmentsKeepsKeyContext(t *testing.T) {
+	secret := "0123456789abcdefghijABCDEFGHIJ0123456789"
+	content := "{\"AWS_SECRET_ACCESS_KEY\":\"" + secret + "\"}"
+	for _, jsonl := range []bool{false, true} {
+		s, err := NewScanner(nil, true)
+		if err != nil {
+			t.Fatalf("NewScanner() error = %v", err)
+		}
+		var findings []Finding
+		for _, f := range collectJSONFragments(t, content, jsonl) {
+			findings = append(findings, s.ScanFragment(f)...)
+		}
+		if len(findings) != 1 || findings[0].PatternID != "aws_secret_access_key" {
+			t.Fatalf("jsonl=%v: findings = %+v, want one aws_secret_access_key", jsonl, findings)
+		}
+		if findings[0].StartLine != 1 {
+			t.Errorf("jsonl=%v: StartLine = %d, want 1", jsonl, findings[0].StartLine)
 		}
 	}
 }

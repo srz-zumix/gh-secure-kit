@@ -1,12 +1,12 @@
 package localscan
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/srz-zumix/go-gh-extension/pkg/copilotext"
-	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 // CopilotSource scans GitHub Copilot session logs on disk.
@@ -37,8 +37,7 @@ func (s *CopilotSource) StreamFragments(yield func(Fragment) error) error {
 	return copilotext.WalkLogFiles(s.Options, func(file copilotext.LogFile) error {
 		data, err := os.ReadFile(file.Path)
 		if err != nil {
-			logger.Warn("skipping file", "path", file.Path, "error", err)
-			return nil
+			return fmt.Errorf("failed to read file %q: %w", file.Path, err)
 		}
 		content := string(data)
 		if isBinaryString(content) {

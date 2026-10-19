@@ -37,7 +37,7 @@ func TestCopilotSourceDecodesJSONAndReadsRawLogs(t *testing.T) {
 	var jsonFrag, rawFrag *Fragment
 	for i := range frags {
 		switch {
-		case frags[i].Content == testGitHubToken:
+		case frags[i].Content == `"text": "`+testGitHubToken+`"`:
 			jsonFrag = &frags[i]
 		case frags[i].Source == copilotext.LogSourceCLILogs:
 			rawFrag = &frags[i]
