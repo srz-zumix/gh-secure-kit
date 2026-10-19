@@ -14,6 +14,14 @@ type Fragment struct {
 	// for commit diff fragments that hold only an added hunk; zero means the
 	// content starts at file line 1.
 	BaseLine int
+	// Line, when positive, is reported as the line of every finding in this
+	// fragment (e.g. the JSONL line a decoded string value came from).
+	Line int
+	// Source and SessionID identify the Copilot log a fragment came from.
+	Source      string
+	SessionID   string
+	SessionName string
+	Workspace   string
 }
 
 // Source produces the fragments to be scanned for a given target selection

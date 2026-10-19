@@ -14,4 +14,9 @@ type Finding struct {
 	StartLine   int       `json:"start_line"`
 	Match       string    `json:"match"`
 	Secret      string    `json:"secret"`
+	Source      string    `json:"source,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
+	SessionName string    `json:"session_name,omitempty"`
+	Workspace   string    `json:"workspace,omitempty"`
+	matchHash   [32]byte
 }

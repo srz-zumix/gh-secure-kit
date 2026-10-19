@@ -2,6 +2,7 @@ package localscan
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -85,6 +86,14 @@ func replaceOrAppendPattern(patterns []Pattern, p Pattern) []Pattern {
 // ScanFragment scans a single fragment against all enabled patterns and
 // returns any findings that are not covered by the allowlist.
 func (s *Scanner) ScanFragment(frag Fragment) []Finding {
+	name := frag.SessionName
+	if name != "" && !s.ShowSecret {
+		for _, pattern := range s.Patterns {
+			if pattern.Enabled {
+				name = pattern.Regex.ReplaceAllStringFunc(name, redact)
+			}
+		}
+	}
 	var findings []Finding
 	for _, p := range s.Patterns {
 		if !p.Enabled {
@@ -114,10 +123,18 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				StartLine:   base + lineNumberAt(frag.Content, loc[0]) - 1,
 				Match:       matched,
 				Secret:      matched,
+				Source:      frag.Source,
+				SessionID:   frag.SessionID,
+				SessionName: name,
+				Workspace:   frag.Workspace,
+			}
+			if frag.Line > 0 {
+				f.StartLine = frag.Line
 			}
 			if s.Allowlist.Allowed(f, matched, lineAt(frag.Content, loc[0])) {
 				continue
 			}
+			f.matchHash = sha256.Sum256([]byte(matched))
 			if !s.ShowSecret {
 				// Redact both Match and Secret so JSON output never leaks
 				// the raw value when --show-secret is not set.
@@ -145,6 +162,11 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 		files = make(map[string]struct{})
 	}
 	fragmentCount := 0
+	type findingKey struct {
+		file, commit, pattern string
+		matchHash             [32]byte
+	}
+	seen := make(map[findingKey]struct{})
 	handle := func(frag Fragment) error {
 		fragmentCount++
 		fragFindings := scanner.ScanFragment(frag)
@@ -157,7 +179,14 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 				files[frag.FilePath] = struct{}{}
 			}
 		}
-		findings = append(findings, fragFindings...)
+		for _, finding := range fragFindings {
+			key := findingKey{finding.File, finding.Commit, finding.PatternID, finding.matchHash}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			findings = append(findings, finding)
+		}
 		return nil
 	}
 

@@ -3,6 +3,9 @@ package localscan
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
@@ -77,4 +80,51 @@ func RenderFindings(r *render.Renderer, findings []Finding) error {
 		})
 	}
 	return table.Render()
+}
+
+// RenderCopilotFindings renders Copilot log findings as a table, or through
+// the configured exporter (e.g. JSON) when one is set.
+func RenderCopilotFindings(r *render.Renderer, findings []Finding) error {
+	if r.HasExporter() {
+		return r.RenderExportedData(findings)
+	}
+	if len(findings) == 0 {
+		return nil
+	}
+	home, _ := os.UserHomeDir()
+	headers := []string{"Pattern", "Token Type", "Source", "Session ID", "Session Name", "Workspace", "Log Updated", "File", "Line", "Secret"}
+	table := r.NewTableWriter(headers)
+	for _, f := range findings {
+		updated := ""
+		if !f.Date.IsZero() {
+			updated = f.Date.Format("2006-01-02 15:04:05 MST")
+		}
+		table.Append([]string{
+			f.PatternID,
+			f.TokenType,
+			f.Source,
+			f.SessionID,
+			strings.Join(strings.Fields(f.SessionName), " "),
+			shortenHome(f.Workspace, home),
+			updated,
+			shortenHome(f.File, home),
+			fmt.Sprintf("%d", f.StartLine),
+			f.Secret,
+		})
+	}
+	return table.Render()
+}
+
+// shortenHome replaces a leading home directory in path with "~".
+func shortenHome(path, home string) string {
+	if home == "" {
+		return path
+	}
+	if path == home {
+		return "~"
+	}
+	if strings.HasPrefix(path, home+string(filepath.Separator)) {
+		return "~" + path[len(home):]
+	}
+	return path
 }

@@ -102,3 +102,57 @@ func TestScanReturnsFindingsRegardlessOfDebugLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestScanFragmentUsesFixedLineAndPropagatesMetadata(t *testing.T) {
+	cfg := &Config{Patterns: []ConfigPattern{{ID: "tok", Regex: `secret_[0-9a-f]{10}`}}}
+	s, err := NewScanner(cfg, true)
+	if err != nil {
+		t.Fatalf("NewScanner() error = %v", err)
+	}
+	findings := s.ScanFragment(Fragment{
+		Content:   "x\nsecret_0123456789\n",
+		Line:      7,
+		BaseLine:  100,
+		Source:    "cli-logs",
+		SessionID: "sid",
+	})
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 finding, got %d", len(findings))
+	}
+	if findings[0].StartLine != 7 {
+		t.Errorf("StartLine = %d, want 7 (Line takes precedence)", findings[0].StartLine)
+	}
+	if findings[0].Source != "cli-logs" || findings[0].SessionID != "sid" {
+		t.Errorf("metadata not propagated: %+v", findings[0])
+	}
+}
+
+func TestScanDeduplicatesSameKeyPerFileAndCommit(t *testing.T) {
+	for _, showSecret := range []bool{false, true} {
+		scanner, err := NewScanner(&Config{Patterns: []ConfigPattern{{ID: "tok", Regex: `secret_[0-9a-f]{10}`}}}, showSecret)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := stubSource{frags: []Fragment{
+			{FilePath: "a.jsonl", Line: 2, Content: "secret_0123456789 secret_0123456789"},
+			{FilePath: "a.jsonl", Line: 9, Content: "secret_0123456789"},
+			{FilePath: "a.jsonl", Line: 10, Content: "secret_abcdef6789"},
+			{FilePath: "b.jsonl", Line: 1, Content: "secret_0123456789"},
+			{FilePath: "a.jsonl", CommitSHA: "commit-a", Content: "secret_0123456789"},
+			{FilePath: "a.jsonl", CommitSHA: "commit-b", Content: "secret_0123456789"},
+		}}
+		findings, err := Scan(source, scanner)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(findings) != 5 {
+			t.Fatalf("show-secret=%v: got %d findings, want 5", showSecret, len(findings))
+		}
+		if findings[0].StartLine != 2 {
+			t.Errorf("first occurrence line = %d, want 2", findings[0].StartLine)
+		}
+		if !showSecret && findings[0].Secret != findings[1].Secret {
+			t.Error("test requires different keys with identical redacted output")
+		}
+	}
+}
