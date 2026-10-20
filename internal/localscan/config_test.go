@@ -3,8 +3,51 @@ package localscan
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestRepositoryConfigExcludesOnlyExactFixtures(t *testing.T) {
+	cfg, err := LoadConfig(filepath.Join("..", "..", ConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner, err := NewScanner(cfg, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := NewScanner(nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtures := []string{
+		testGitHubToken,
+		"ghp_" + strings.Repeat("a1B2c3", 6),
+		"AKIA" + strings.Repeat("A", 16),
+		"AKIAIVRN52PLDBP55LBQ",
+		"AKIA123456789EXAMPLE",
+		"AIza" + strings.Repeat("A", 35),
+		"xoxb-1234567890-abcdefghij",
+		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+		"-----BEGIN RSA PRIVATE KEY-----\n" + strings.Repeat("MIIEow", 12),
+		"-----BEGIN RSA PRIVATE KEY-----\n" + strings.Repeat("A", 64),
+	}
+	for index, fixture := range fixtures {
+		fragment := Fragment{Content: fixture, FilePath: "session/main.jsonl"}
+		matches := baseline.ScanFragment(fragment)
+		if len(matches) != 1 {
+			t.Fatalf("fixture %d: expected one baseline finding, got %d", index, len(matches))
+		}
+		if findings := scanner.ScanFragment(fragment); len(findings) != 0 {
+			t.Errorf("fixture %d: expected exclusion, got %d findings", index, len(findings))
+		}
+		changed := fixture[:len(fixture)-1] + "Z"
+		fragment.Content = changed
+		if findings := scanner.ScanFragment(fragment); len(findings) != 1 {
+			t.Errorf("fixture %d: changed value must remain detectable, got %d findings", index, len(findings))
+		}
+	}
+}
 
 func TestLoadConfigMergesPatternsAndAllowlist(t *testing.T) {
 	dir := t.TempDir()

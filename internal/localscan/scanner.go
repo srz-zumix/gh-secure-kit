@@ -2,6 +2,7 @@ package localscan
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -82,9 +83,34 @@ func replaceOrAppendPattern(patterns []Pattern, p Pattern) []Pattern {
 	return append(patterns, p)
 }
 
+// redactMetadata redacts matches of all enabled patterns in fragment
+// metadata (e.g. session name, workspace) unless ShowSecret is set.
+// When a match spans multiple lines (e.g. a PEM block whose pattern covers
+// only the first body line), the whole field is masked so that the rest of
+// the secret is not exposed.
+func (s *Scanner) redactMetadata(v string) string {
+	if v == "" || s.ShowSecret {
+		return v
+	}
+	for _, pattern := range s.Patterns {
+		if !pattern.Enabled {
+			continue
+		}
+		for _, m := range pattern.Regex.FindAllString(v, -1) {
+			if strings.Contains(m, "\n") {
+				return strings.Repeat("*", len(v))
+			}
+		}
+		v = pattern.Regex.ReplaceAllStringFunc(v, redact)
+	}
+	return v
+}
+
 // ScanFragment scans a single fragment against all enabled patterns and
 // returns any findings that are not covered by the allowlist.
 func (s *Scanner) ScanFragment(frag Fragment) []Finding {
+	name := s.redactMetadata(frag.SessionName)
+	workspace := s.redactMetadata(frag.Workspace)
 	var findings []Finding
 	for _, p := range s.Patterns {
 		if !p.Enabled {
@@ -114,10 +140,18 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				StartLine:   base + lineNumberAt(frag.Content, loc[0]) - 1,
 				Match:       matched,
 				Secret:      matched,
+				Source:      frag.Source,
+				SessionID:   frag.SessionID,
+				SessionName: name,
+				Workspace:   workspace,
+			}
+			if frag.Line > 0 {
+				f.StartLine = frag.Line
 			}
 			if s.Allowlist.Allowed(f, matched, lineAt(frag.Content, loc[0])) {
 				continue
 			}
+			f.matchHash = sha256.Sum256([]byte(matched))
 			if !s.ShowSecret {
 				// Redact both Match and Secret so JSON output never leaks
 				// the raw value when --show-secret is not set.
@@ -145,6 +179,11 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 		files = make(map[string]struct{})
 	}
 	fragmentCount := 0
+	type findingKey struct {
+		file, commit, pattern string
+		matchHash             [32]byte
+	}
+	seen := make(map[findingKey]struct{})
 	handle := func(frag Fragment) error {
 		fragmentCount++
 		fragFindings := scanner.ScanFragment(frag)
@@ -157,7 +196,14 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 				files[frag.FilePath] = struct{}{}
 			}
 		}
-		findings = append(findings, fragFindings...)
+		for _, finding := range fragFindings {
+			key := findingKey{finding.File, finding.Commit, finding.PatternID, finding.matchHash}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			findings = append(findings, finding)
+		}
 		return nil
 	}
 

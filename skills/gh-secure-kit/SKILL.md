@@ -125,6 +125,7 @@ gh secure-kit                      # Root command
 │   ├── dangling-commits           # Scan commits that may no longer be reachable from any branch or tag for secrets
 │   ├── local                      # Offline local secret scanning subcommands
 │   │   ├── check                  # Scan local git content for secrets
+│   │   ├── copilot                # Scan GitHub Copilot session logs for secrets
 │   │   ├── hook                   # Manage git hooks running local secret scanning
 │   │   │   ├── install            # Install pre-push (default) or pre-commit hooks
 │   │   │   ├── status             # Show hook installation state
@@ -1899,6 +1900,40 @@ Because missing commits are read through the API, a GitHub Actions workflow does
 
 The API cannot return a complete diff for every commit, so the scan fails instead of reporting a partial result when the comparison exceeds 250 commits, a commit changes 3000 or more files, or a file's diff is too large to be returned. Use a full local checkout for those ranges.
 
+### Scan GitHub Copilot session logs for secrets (gh secure-kit secret-scanning local copilot)
+
+```sh
+gh secure-kit secret-scanning local copilot [flags]
+```
+
+Results include the full session ID, session name, workspace directory, and log
+file modification time (not the session start time). Names use the CLI's saved
+`name` (or `summary` when unnamed) or VS Code's saved `customTitle`. Missing names
+and workspaces are left blank. Detected secrets in names are masked unless
+`--show-secret` is set. JSON includes `session_id`, optional `session_name` and
+`workspace`, and `date`.
+
+For valid JSON and JSON Lines, values of `encryptedContent` and
+`encrypted_content` fields are excluded to avoid accidental matches in encrypted
+data. Other fields are still scanned. Malformed JSON is scanned as raw text
+without field exclusions.
+
+Scan GitHub Copilot session logs on this machine for secrets using built-in and user-defined patterns. By default the Copilot CLI session state (`cli-sessions`) and logs (`cli-logs`), and the VS Code chat sessions (`vscode-chat`) and Copilot Chat debug logs and transcripts (`vscode-debug`) are scanned; select a subset with `--source`. The Copilot CLI directory follows `COPILOT_HOME` (default `~/.copilot`) and VS Code is looked up under the user configuration directory (`Code/User`). Use `--path` to scan other directories or files instead (cannot be combined with `--source`), for example the logs of VS Code Insiders. JSON and JSON Lines files are decoded before scanning, so escaped values such as multi-line private keys are detected; the reported line is the line of the JSON(L) file. Use `--since` to skip files not modified recently and `--session` to keep only sessions whose ID starts with the given prefix. With `--show-secret` the full secret is printed; when this command is run by an agent, that output is recorded in the new session log. Exits with status 1 if any secret is found.
+
+```sh
+# Scan all default Copilot log locations
+gh secure-kit secret-scanning local copilot
+
+# Scan only the Copilot CLI session state modified in the last 7 days
+gh secure-kit secret-scanning local copilot --source cli-sessions --since 7d
+
+# Scan a specific session and output JSON
+gh secure-kit secret-scanning local copilot --session 0a1b2c3d --format json
+
+# Scan the logs of VS Code Insiders
+gh secure-kit secret-scanning local copilot --path "$HOME/Library/Application Support/Code - Insiders/User/workspaceStorage"
+```
+
 ### List local secret scanning patterns (gh secure-kit secret-scanning local patterns)
 
 ```sh
@@ -1970,7 +2005,7 @@ gh secure-kit secret-scanning local hook uninstall pre-commit
 
 ### Local secret scanning configuration file
 
-Both `secret-scanning local check` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory, or specified explicitly with `--config`.
+`secret-scanning local check`, `secret-scanning local copilot` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory (the current directory for `copilot`), or specified explicitly with `--config`.
 
 ```yaml
 patterns:
