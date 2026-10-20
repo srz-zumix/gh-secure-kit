@@ -3,6 +3,7 @@ package localscan
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/srz-zumix/go-gh-extension/pkg/copilotext"
@@ -145,5 +146,22 @@ func TestCopilotSessionNameRedaction(t *testing.T) {
 		if findings[0].Workspace != wantWorkspace {
 			t.Fatalf("incorrect workspace redaction with showSecret=%v", showSecret)
 		}
+	}
+}
+
+func TestCopilotSessionNameMultilineRedaction(t *testing.T) {
+	scanner, err := NewScanner(nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body1 := strings.Repeat("A", 64)
+	body2 := strings.Repeat("B", 64)
+	name := "key -----BEGIN RSA PRIVATE KEY-----\n" + body1 + "\n" + body2 + "\n-----END RSA PRIVATE KEY-----"
+	findings := scanner.ScanFragment(Fragment{Content: testGitHubToken, SessionName: name})
+	if len(findings) != 1 {
+		t.Fatalf("got %d findings, want 1", len(findings))
+	}
+	if got := findings[0].SessionName; strings.Contains(got, body1) || strings.Contains(got, body2) || strings.Contains(got, "PRIVATE KEY") {
+		t.Fatalf("multiline key material leaked in session name: %q", got)
 	}
 }

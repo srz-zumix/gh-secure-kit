@@ -85,14 +85,23 @@ func replaceOrAppendPattern(patterns []Pattern, p Pattern) []Pattern {
 
 // redactMetadata redacts matches of all enabled patterns in fragment
 // metadata (e.g. session name, workspace) unless ShowSecret is set.
+// When a match spans multiple lines (e.g. a PEM block whose pattern covers
+// only the first body line), the whole field is masked so that the rest of
+// the secret is not exposed.
 func (s *Scanner) redactMetadata(v string) string {
 	if v == "" || s.ShowSecret {
 		return v
 	}
 	for _, pattern := range s.Patterns {
-		if pattern.Enabled {
-			v = pattern.Regex.ReplaceAllStringFunc(v, redact)
+		if !pattern.Enabled {
+			continue
 		}
+		for _, m := range pattern.Regex.FindAllString(v, -1) {
+			if strings.Contains(m, "\n") {
+				return strings.Repeat("*", len(v))
+			}
+		}
+		v = pattern.Regex.ReplaceAllStringFunc(v, redact)
 	}
 	return v
 }
