@@ -22,12 +22,15 @@ type CopilotOptions struct {
 // NewCopilotCmd returns the secret-scanning local copilot command
 func NewCopilotCmd() *cobra.Command {
 	var (
-		sources    []string
-		paths      []string
-		sessions   []string
-		since      string
-		configFile string
-		showSecret bool
+		sources         []string
+		paths           []string
+		sessions        []string
+		since           string
+		configFile      string
+		showSecret      bool
+		verify          bool
+		verifyHost      string
+		excludeInactive bool
 	)
 	opts := &CopilotOptions{}
 
@@ -41,9 +44,15 @@ Use --path to scan other directories or files instead, for example the logs of V
 JSON and JSON Lines files are decoded before scanning, so escaped values such as multi-line private keys are detected; the reported line is the line of the JSON(L) file.
 Use --since to skip files not modified recently and --session to keep only sessions whose ID starts with the given prefix.
 With --show-secret the full secret is printed; when this command is run by an agent, that output is recorded in the new session log.
-Exits with status 1 if any secret is found.`,
+With --verify, supported tokens are sent to their providers' fixed official APIs to check validity; JWT expiry is checked offline. Verification is disabled by default.
+GitHub tokens are always checked on github.com. Use --verify-host HOST with --verify to also check a specific GHES hostname; other providers are unaffected.
+Use --exclude-inactive with --verify to omit inactive findings from output and the exit-status decision. Unknown and unsupported findings are retained.
+Exits with status 1 if any non-excluded secret is found.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := localscan.ValidateVerificationOptions(verify, excludeInactive, verifyHost); err != nil {
+				return err
+			}
 			target := copilotext.LogOptions{
 				Sources:         sources,
 				Paths:           paths,
@@ -61,12 +70,22 @@ Exits with status 1 if any secret is found.`,
 			if err != nil {
 				return err
 			}
+			scanner.Verify = verify
 
 			logger.Debug("scanning copilot session logs for secrets", "sources", sources, "paths", paths, "sessions", sessions, "since", target.Since.Format(time.RFC3339))
 
 			findings, err := localscan.Scan(localscan.NewCopilotSource(target), scanner)
 			if err != nil {
 				return fmt.Errorf("failed to scan copilot session logs: %w", err)
+			}
+			if verify {
+				if err := localscan.VerifyFindings(cmd.Context(), findings, verifyHost); err != nil {
+					return fmt.Errorf("failed to verify detected secrets: %w", err)
+				}
+			}
+
+			if excludeInactive {
+				findings = localscan.ExcludeInactiveFindings(findings)
 			}
 
 			renderer := render.NewRenderer(opts.Exporter)
@@ -88,6 +107,9 @@ Exits with status 1 if any secret is found.`,
 	f.StringVar(&since, "since", "", `Scan only files modified since this time: an RFC3339 timestamp, a date (2006-01-02), or a period such as "7d", "2w", "24h"`)
 	f.StringVar(&configFile, "config", "", "Path to a local secret scanning config file (default: auto-discover .gh-secure-kit-secret-scanning.yml in the current directory)")
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
+	f.BoolVar(&verify, "verify", false, "Check supported tokens using their providers' official APIs (sends tokens externally; JWT expiry is checked offline)")
+	f.StringVar(&verifyHost, "verify-host", "", "Additional GitHub hostname to check alongside github.com, optionally with a port (requires --verify)")
+	f.BoolVar(&excludeInactive, "exclude-inactive", false, "Exclude inactive findings from output and exit status (requires --verify)")
 	cmd.MarkFlagsMutuallyExclusive("source", "path")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 

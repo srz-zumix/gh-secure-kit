@@ -17,6 +17,7 @@ type Scanner struct {
 	Patterns   []Pattern
 	Allowlist  *Allowlist
 	ShowSecret bool
+	Verify     bool
 }
 
 // NewScanner builds a Scanner from the builtin patterns merged with any
@@ -152,6 +153,10 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				continue
 			}
 			f.matchHash = sha256.Sum256([]byte(matched))
+			if s.Verify && p.Source == "builtin" {
+				f.verificationPattern = p.ID
+				f.rawSecret = matched
+			}
 			if !s.ShowSecret {
 				// Redact both Match and Secret so JSON output never leaks
 				// the raw value when --show-secret is not set.

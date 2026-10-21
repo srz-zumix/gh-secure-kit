@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/kballard/go-shellquote"
 )
 
 func TestResolveHookNames(t *testing.T) {
@@ -142,6 +143,114 @@ func TestInstallHookExistingUnmanaged(t *testing.T) {
 	}
 }
 
+func TestInstallHookVerificationIsOptIn(t *testing.T) {
+	for _, name := range HookNames {
+		for _, verify := range []bool{false, true} {
+			path, err := InstallHook(t.TempDir(), name, InstallHookOptions{Verify: verify, LogLevel: "debug"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			script := string(data)
+			want := 0
+			if verify {
+				want = strings.Count(script, "gh secure-kit secret-scanning local check")
+			}
+			if got := strings.Count(script, " --verify"); got != want {
+				t.Fatalf("hook %s verify=%v: got %d flags, want %d", name, verify, got, want)
+			}
+			if !strings.Contains(script, " --log-level debug") {
+				t.Fatal("verification removed the hook log level")
+			}
+		}
+	}
+}
+
+func TestInstallHookExcludeInactive(t *testing.T) {
+	for _, name := range HookNames {
+		for _, verify := range []bool{false, true} {
+			for _, excludeInactive := range []bool{false, true} {
+				dir := t.TempDir()
+				path, err := InstallHook(dir, name, InstallHookOptions{Verify: verify, ExcludeInactive: excludeInactive})
+				if excludeInactive && !verify {
+					if err == nil {
+						t.Fatal("installed an inactive-excluding hook without verification")
+					}
+					if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+						t.Fatal("invalid options wrote a hook")
+					}
+					continue
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				script := string(data)
+				want := 0
+				if excludeInactive {
+					want = strings.Count(script, "gh secure-kit secret-scanning local check")
+				}
+				if got := strings.Count(script, " --exclude-inactive"); got != want {
+					t.Fatalf("hook %s: got %d exclusion flags, want %d", name, got, want)
+				}
+			}
+		}
+	}
+}
+
+func TestInstallHookVerificationHost(t *testing.T) {
+	for _, name := range HookNames {
+		for _, tc := range []struct {
+			host      string
+			verify    bool
+			wantError bool
+		}{
+			{"", false, false},
+			{"github.example.com:8443", true, false},
+			{"[::1]:8443", true, false},
+			{"github.example.com", false, true},
+			{"github.example.com;command", true, true},
+			{"https://github.example.com", true, true},
+		} {
+			dir := t.TempDir()
+			path, err := InstallHook(dir, name, InstallHookOptions{Verify: tc.verify, VerifyHost: tc.host})
+			if tc.wantError {
+				if err == nil {
+					t.Fatal("accepted an invalid verification host or missing verification")
+				}
+				if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
+					t.Fatal("invalid options wrote a hook")
+				}
+				continue
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			script := string(data)
+			want := 0
+			if tc.host != "" {
+				want = strings.Count(script, "gh secure-kit secret-scanning local check")
+				if !strings.Contains(script, "--verify-host "+shellquote.Join(tc.host)) {
+					t.Fatal("verification host was not shell-quoted correctly")
+				}
+			}
+			if strings.Count(script, " --verify-host ") != want {
+				t.Fatal("verification host was not included in every scan command")
+			}
+		}
+	}
+}
+
 func TestUninstallHook(t *testing.T) {
 	dir := t.TempDir()
 
@@ -232,7 +341,7 @@ func TestInstallHookDoesNotFollowSymlink(t *testing.T) {
 }
 
 func TestPrePushHookScansPushedRefs(t *testing.T) {
-	script, err := hookScript("pre-push", "")
+	script, err := hookScript("pre-push", "", false, false)
 	if err != nil {
 		t.Fatalf("hookScript() error = %v", err)
 	}
@@ -255,7 +364,7 @@ func TestPrePushHookScansPushedRefs(t *testing.T) {
 
 func TestHookScriptLogLevel(t *testing.T) {
 	for _, name := range HookNames {
-		script, err := hookScript(name, "debug")
+		script, err := hookScript(name, "debug", false, false)
 		if err != nil {
 			t.Fatalf("hookScript(%q) error = %v", name, err)
 		}
@@ -263,7 +372,7 @@ func TestHookScriptLogLevel(t *testing.T) {
 			t.Errorf("%s hook does not pass the requested log level: %s", name, script)
 		}
 
-		script, err = hookScript(name, "")
+		script, err = hookScript(name, "", false, false)
 		if err != nil {
 			t.Fatalf("hookScript(%q) error = %v", name, err)
 		}
@@ -271,7 +380,7 @@ func TestHookScriptLogLevel(t *testing.T) {
 			t.Errorf("%s hook embeds a log level without being asked to: %s", name, script)
 		}
 
-		if _, err := hookScript(name, "verbose"); err == nil {
+		if _, err := hookScript(name, "verbose", false, false); err == nil {
 			t.Errorf("hookScript(%q) accepted an unsupported log level", name)
 		}
 	}
