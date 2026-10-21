@@ -21,7 +21,7 @@ func BuiltinPatterns() []Pattern {
 		mustPattern("aws_access_key_id", "aws_access_key_id", "AWS Access Key ID", `\b(A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}\b`),
 		mustPattern("aws_secret_access_key", "aws_secret_access_key", "AWS Secret Access Key", `(?i)aws.{0,20}?(secret|access)?_?key.{0,20}?['"]\s*[:=]\s*['"][0-9a-zA-Z/+]{40}['"]`),
 		mustPattern("google_api_key", "google_api_key", "Google API Key", `AIza[0-9A-Za-z\-_]{35}`),
-		mustPattern("slack_token", "slack_token", "Slack Token", `xox[baprs]-[0-9A-Za-z-]{10,48}`),
+		mustPattern("slack_token", "slack_token", "Slack Token", `xox[baprs]-[0-9A-Za-z-]{10,250}`),
 		mustPattern("slack_webhook_url", "slack_webhook_url", "Slack Webhook URL", `https://hooks\.slack\.com/services/T[0-9A-Za-z]{8,10}/B[0-9A-Za-z]{8,10}/[0-9A-Za-z]{24}`),
 		mustPattern("stripe_api_key", "stripe_api_key", "Stripe API Key", `(sk|rk)_(live|test)_[0-9a-zA-Z]{24,247}`),
 		mustPattern("sendgrid_api_key", "sendgrid_api_key", "SendGrid API Key", `SG\.[0-9A-Za-z_-]{22}\.[0-9A-Za-z_-]{43}`),

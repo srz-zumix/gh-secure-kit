@@ -215,7 +215,9 @@ func renderFindingGroups(r *render.Renderer, findings []Finding, copilot bool) e
 			}
 			fmt.Fprintf(&output, "  %s: %s\n", label, metadata.Date.Format("2006-01-02 15:04:05 MST"))
 		}
-		renderFindingFiles(&output, group.findings, home)
+		if err := renderFindingFiles(&output, group.findings, home); err != nil {
+			return fmt.Errorf("failed to render finding files: %w", err)
+		}
 	}
 	unit := "commit"
 	if copilot {
@@ -242,7 +244,7 @@ func renderFindingGroups(r *render.Renderer, findings []Finding, copilot bool) e
 	return err
 }
 
-func renderFindingFiles(output *strings.Builder, findings []Finding, home string) {
+func renderFindingFiles(output *strings.Builder, findings []Finding, home string) error {
 	var files []string
 	byFile := make(map[string][]Finding)
 	for _, finding := range findings {
@@ -265,14 +267,23 @@ func renderFindingFiles(output *strings.Builder, findings []Finding, home string
 		})
 		writer := tabwriter.NewWriter(output, 0, 4, 2, ' ', 0)
 		for _, finding := range rows {
-			fmt.Fprintf(writer, "    %d\t%s\t%s", finding.StartLine, findingText(finding.PatternID), findingText(finding.Secret))
-			if finding.Validity != "" {
-				fmt.Fprintf(writer, "\t[%s]", findingText(finding.Validity))
+			if _, err := fmt.Fprintf(writer, "    %d\t%s\t%s", finding.StartLine, findingText(finding.PatternID), findingText(finding.Secret)); err != nil {
+				return err
 			}
-			fmt.Fprintln(writer)
+			if finding.Validity != "" {
+				if _, err := fmt.Fprintf(writer, "\t[%s]", findingText(finding.Validity)); err != nil {
+					return err
+				}
+			}
+			if _, err := fmt.Fprintln(writer); err != nil {
+				return err
+			}
 		}
-		writer.Flush()
+		if err := writer.Flush(); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func writeFindingHeading(output *strings.Builder, r *render.Renderer, heading string) {
@@ -284,7 +295,22 @@ func writeFindingHeading(output *strings.Builder, r *render.Renderer, heading st
 }
 
 func findingText(value string) string {
-	return strings.NewReplacer("\r", `\r`, "\n", `\n`, "\t", `\t`).Replace(value)
+	var output strings.Builder
+	for _, char := range value {
+		switch {
+		case char == '\r':
+			output.WriteString(`\r`)
+		case char == '\n':
+			output.WriteString(`\n`)
+		case char == '\t':
+			output.WriteString(`\t`)
+		case char < 0x20 || char >= 0x7f && char <= 0x9f:
+			fmt.Fprintf(&output, `\x%02x`, char)
+		default:
+			output.WriteRune(char)
+		}
+	}
+	return output.String()
 }
 
 func findingCount(count int, unit string) string {

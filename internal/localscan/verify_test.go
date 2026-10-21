@@ -23,7 +23,9 @@ func TestGitHubVerificationURL(t *testing.T) {
 		{"github.com", "https://api.github.com/user"},
 		{"api.github.com", "https://api.github.com/user"},
 		{"GITHUB.COM", "https://api.github.com/user"},
-		{"github.com:443", "https://api.github.com:443/user"},
+		{"github.com:443", "https://api.github.com/user"},
+		{"api.github.com:443", "https://api.github.com/user"},
+		{"github.com:8443", "https://api.github.com:8443/user"},
 		{"github.example.com", "https://github.example.com/api/v3/user"},
 		{"github.example.com:8443", "https://github.example.com:8443/api/v3/user"},
 		{"[::1]:8443", "https://[::1]:8443/api/v3/user"},
@@ -72,7 +74,7 @@ func TestVerificationGitHubEnterpriseRouting(t *testing.T) {
 					t.Error("token was routed to an unexpected host or API path")
 				}
 				writer.WriteHeader(http.StatusOK)
-				fmt.Fprint(writer, `{"ok":true}`)
+				writeVerificationResponse(t, writer, `{"ok":true}`)
 			})
 			findings := []Finding{{rawSecret: testGitHubToken, verificationPattern: pattern}}
 			if err := verifyFindings(context.Background(), findings, client, host); err != nil {
@@ -102,7 +104,7 @@ func TestVerificationGitHubEnterpriseAuthenticatedUser(t *testing.T) {
 				switch {
 				case request.Host == "github.example.com" && request.URL.Path == "/api/v3/user":
 					writer.WriteHeader(http.StatusOK)
-					fmt.Fprint(writer, `{"login":"example-user","id":123}`)
+					writeVerificationResponse(t, writer, `{"login":"example-user","id":123}`)
 				case request.Host == "github.example.com" && request.URL.Path == "/api/v3/rate_limit":
 					writer.WriteHeader(http.StatusForbidden)
 				default:
@@ -133,7 +135,7 @@ func TestVerificationGitHubInstallationProbe(t *testing.T) {
 					return
 				}
 				writer.WriteHeader(http.StatusOK)
-				fmt.Fprint(writer, `{"total_count":0,"repositories":[]}`)
+				writeVerificationResponse(t, writer, `{"total_count":0,"repositories":[]}`)
 			})
 			findings := []Finding{{rawSecret: "synthetic-installation-token", verificationPattern: "github_app_token"}}
 			if err := verifyFindings(context.Background(), findings, client, host); err != nil {
@@ -373,6 +375,13 @@ func (transport verificationRoundTripper) RoundTrip(request *http.Request) (*htt
 	return transport(request)
 }
 
+func writeVerificationResponse(t *testing.T, writer http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := fmt.Fprint(writer, body); err != nil {
+		t.Errorf("failed to write verification response: %v", err)
+	}
+}
+
 func localVerificationClient(t *testing.T, handler http.HandlerFunc) *http.Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
@@ -430,7 +439,7 @@ func TestVerificationProviderResponses(t *testing.T) {
 							t.Error("incorrect bearer authentication")
 						}
 						writer.WriteHeader(tc.status)
-						fmt.Fprint(writer, tc.body)
+						writeVerificationResponse(t, writer, tc.body)
 					})
 					findings := []Finding{{rawSecret: testGitHubToken, verificationPattern: pattern}}
 					if err := verifyFindings(context.Background(), findings, client); err != nil {
@@ -462,7 +471,7 @@ func TestVerificationProviderSpecificErrors(t *testing.T) {
 		t.Run(tc.pattern+tc.body, func(t *testing.T) {
 			client := localVerificationClient(t, func(writer http.ResponseWriter, request *http.Request) {
 				writer.WriteHeader(tc.status)
-				fmt.Fprint(writer, tc.body)
+				writeVerificationResponse(t, writer, tc.body)
 			})
 			findings := []Finding{{rawSecret: testGitHubToken, verificationPattern: tc.pattern}}
 			if err := verifyFindings(context.Background(), findings, client); err != nil {

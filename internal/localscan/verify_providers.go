@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 type verificationProvider struct {
@@ -71,7 +73,7 @@ func githubVerificationURL(host string) (string, error) {
 	if hostname == "github.com" || hostname == "api.github.com" {
 		port := endpoint.Port()
 		endpoint.Host = "api.github.com"
-		if port != "" {
+		if port != "" && port != "443" {
 			endpoint.Host = net.JoinHostPort("api.github.com", port)
 		}
 		endpoint.Path = "/user"
@@ -125,7 +127,11 @@ func verifyToken(ctx context.Context, client *http.Client, pattern, secret, gith
 	if err != nil {
 		return ValidityUnknown
 	}
-	defer response.Body.Close()
+	defer func() {
+		if err := response.Body.Close(); err != nil {
+			logger.Warn("failed to close token verification response body", "error", err)
+		}
+	}()
 	if response.StatusCode == http.StatusUnauthorized {
 		return ValidityInactive
 	}
