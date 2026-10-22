@@ -451,6 +451,10 @@ func TestVerificationProviderResponses(t *testing.T) {
 				{"limited", `{}`, ValidityUnknown, 429},
 				{"server error", `{}`, ValidityUnknown, 500},
 			} {
+				// SendGrid 401 stays unknown because IP Access Management can reject valid keys.
+				if pattern == "sendgrid_api_key" && tc.status == http.StatusUnauthorized {
+					tc.want = ValidityUnknown
+				}
 				t.Run(tc.name, func(t *testing.T) {
 					client := localVerificationClient(t, func(writer http.ResponseWriter, request *http.Request) {
 						endpoint, _ := url.Parse(provider.url)
