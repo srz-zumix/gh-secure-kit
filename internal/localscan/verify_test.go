@@ -128,8 +128,8 @@ func TestVerificationGitHubInstallationProbe(t *testing.T) {
 			var requests atomic.Int32
 			client := localVerificationClient(t, func(writer http.ResponseWriter, request *http.Request) {
 				requests.Add(1)
-				if !(request.Host == "api.github.com" && request.URL.Path == "/installation/repositories" ||
-					request.Host == "github.example.com:8443" && request.URL.Path == "/api/v3/installation/repositories") {
+				if (request.Host != "api.github.com" || request.URL.Path != "/installation/repositories") &&
+					(request.Host != "github.example.com:8443" || request.URL.Path != "/api/v3/installation/repositories") {
 					t.Error("installation token was sent to an incorrect authentication endpoint")
 					writer.WriteHeader(http.StatusForbidden)
 					return
@@ -167,8 +167,8 @@ func TestVerificationGitHubEnterpriseRejection(t *testing.T) {
 			var requests atomic.Int32
 			client := localVerificationClient(t, func(writer http.ResponseWriter, request *http.Request) {
 				requests.Add(1)
-				if !(request.Host == "github.example.com" && request.URL.Path == "/api/v3/user" ||
-					request.Host == "api.github.com" && request.URL.Path == "/user") {
+				if (request.Host != "github.example.com" || request.URL.Path != "/api/v3/user") &&
+					(request.Host != "api.github.com" || request.URL.Path != "/user") {
 					t.Error("GitHub token was sent to an unexpected host or path")
 				}
 				writer.Header().Set("Location", "https://api.github.com/user")
