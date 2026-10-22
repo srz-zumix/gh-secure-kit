@@ -1594,7 +1594,7 @@ The API cannot return a complete diff for every commit, so the scan fails instea
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
-| `--exclude-inactive` | | `false` | Exclude inactive findings from output and exit status; requires `--verify` |
+| `--exclude` | | `[]` | Exclude statuses {active\|inactive\|unknown\|unsupported} from output and exit status; comma-separated or repeated; requires `--verify` |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
@@ -1675,19 +1675,28 @@ tokens and response bodies are not logged. Verification alone does not discard
 findings or change the exit status: any detection still exits with status 1,
 including `inactive`, `unknown`, and `unsupported` results.
 
-The optional `--exclude-inactive` flag (default: `false`) requires `--verify`.
-It removes only `inactive` findings from both text and JSON output and from the
+The optional `--exclude STATUS` flag (default: empty, excluding nothing) requires
+`--verify`. Supported statuses are `active`, `inactive`, `unknown`, and
+`unsupported`. Use commas (`--exclude inactive,unknown`) or repeat the flag
+(`--exclude inactive --exclude unknown`) to exclude multiple statuses. Unknown
+status names are rejected before scanning.
+
+Matching findings are removed from both text and JSON output and from the
 exit-status decision. If no findings remain, the command exits with status 0;
-otherwise it exits with status 1. `active`, `unknown`, `unsupported`, and
-unverified findings are retained. Select the correct issuing host before excluding
-inactive GitHub findings.
+otherwise it exits with status 1. Unselected statuses and unverified findings are
+retained. Excluding `active`, `unknown`, or `unsupported` may hide valid or
+unconfirmed credentials. Select the correct issuing host before excluding
+inactive GitHub findings. This replaces the former inactive-only exclusion flag.
 
 ```sh
 # Check validity while retaining masked output
 gh secure-kit secret-scanning local check --staged --verify --format json
 
 # Ignore inactive findings while retaining unknown or unsupported results
-gh secure-kit secret-scanning local check --staged --verify --exclude-inactive
+gh secure-kit secret-scanning local check --staged --verify --exclude inactive
+
+# Ignore both inactive and unknown findings
+gh secure-kit secret-scanning local check --staged --verify --exclude inactive,unknown
 
 # Check GitHub tokens against GitHub.com and one GHES instance
 gh secure-kit secret-scanning local check --staged --verify --verify-host github.example.com
@@ -1739,9 +1748,11 @@ without field exclusions.
 The optional `--verify` flag (default: `false`) enables
 [token validity checks](#token-validity-checks), sending supported tokens to their
 providers' official APIs. Findings remain masked unless `--show-secret` is set,
-and any remaining finding exits with status 1. Add `--exclude-inactive`
-(default: `false`, requires `--verify`) to omit inactive findings from output and
-the exit-status decision; unknown and unsupported findings are retained.
+and any remaining finding exits with status 1. Add `--exclude STATUS`
+(default: empty, requires `--verify`) to omit selected statuses from output and
+the exit-status decision. Accepts `active`, `inactive`, `unknown`, and
+`unsupported`, as comma-separated values or repeated flags; unselected statuses
+are retained.
 
 Scan GitHub Copilot session logs on this machine for secrets using built-in and user-defined patterns. By default the Copilot CLI session state (`cli-sessions`) and logs (`cli-logs`), and the VS Code chat sessions (`vscode-chat`) and Copilot Chat debug logs and transcripts (`vscode-debug`) are scanned; select a subset with `--source`. The Copilot CLI directory follows `COPILOT_HOME` (default `~/.copilot`) and VS Code is looked up under the user configuration directory (`Code/User`). Use `--path` to scan other directories or files instead, for example the logs of VS Code Insiders. JSON and JSON Lines files are decoded before scanning, so escaped values such as multi-line private keys are detected; the reported line is the line of the JSON(L) file. Use `--since` to skip files not modified recently and `--session` to keep only sessions whose ID starts with the given prefix. With `--show-secret` the full secret is printed; when this command is run by an agent, that output is recorded in the new session log. Exits with status 1 if any secret is found.
 
@@ -1759,7 +1770,10 @@ gh secure-kit secret-scanning local copilot --session 0a1b2c3d --format json
 gh secure-kit secret-scanning local copilot --session 0a1b2c3d --verify --format json
 
 # Omit inactive findings from a Copilot log scan
-gh secure-kit secret-scanning local copilot --verify --exclude-inactive
+gh secure-kit secret-scanning local copilot --verify --exclude inactive
+
+# Omit multiple statuses using repeated flags
+gh secure-kit secret-scanning local copilot --verify --exclude inactive --exclude unknown
 
 # Verify GitHub tokens on their issuing GHES instance
 gh secure-kit secret-scanning local copilot --verify --verify-host github.example.com
@@ -1773,7 +1787,7 @@ gh secure-kit secret-scanning local copilot --path "$HOME/Library/Application Su
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml` in the current directory) |
-| `--exclude-inactive` | | `false` | Exclude inactive findings from output and exit status; requires `--verify` |
+| `--exclude` | | `[]` | Exclude statuses {active\|inactive\|unknown\|unsupported} from output and exit status; comma-separated or repeated; requires `--verify` |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--path` | | `[]` | Directory or file to scan instead of the default locations (can be repeated; cannot be combined with `--source`) |
@@ -1838,7 +1852,10 @@ gh secure-kit secret-scanning local hook install --hook-log-level debug
 gh secure-kit secret-scanning local hook install --hook-verify
 
 # Allow commits or pushes when all detected findings are inactive
-gh secure-kit secret-scanning local hook install --hook-verify --hook-exclude-inactive
+gh secure-kit secret-scanning local hook install --hook-verify --hook-exclude inactive
+
+# Exclude multiple statuses in installed hooks
+gh secure-kit secret-scanning local hook install --hook-verify --hook-exclude inactive,unknown
 
 # Verify GitHub tokens against a GHES instance in the installed hook
 gh secure-kit secret-scanning local hook install --hook-verify --hook-verify-host github.example.com
@@ -1849,10 +1866,12 @@ every scan command in the generated hooks, enabling
 [token validity checks](#token-validity-checks). This sends supported tokens to
 official APIs and adds network latency to commits or pushes. Existing hooks are
 unchanged until reinstalled. By default, any detected secret still aborts the
-operation, regardless of its validity. The optional `--hook-exclude-inactive`
-flag (default: `false`) requires `--hook-verify` and embeds `--exclude-inactive`
-in every scan command. Inactive findings are then omitted from output and do not
-block the operation; unknown and unsupported findings still block it.
+operation, regardless of its validity. The optional `--hook-exclude STATUS`
+flag (default: empty, excluding nothing) requires `--hook-verify` and embeds
+`--exclude STATUS` in every scan command. Accepts `active`, `inactive`, `unknown`,
+and `unsupported`, as comma-separated values or repeated flags. Selected statuses
+do not block the operation; unselected statuses still block it. Reinstall hooks
+created with the former inactive-only exclusion flag before using this version.
 
 The optional `--hook-verify-host HOST` (default: empty, which uses `github.com`)
 requires `--hook-verify` and embeds `--verify-host HOST` in every scan command.
@@ -1866,7 +1885,7 @@ hooks containing `--verify-host` use this behavior after upgrading the executabl
 | ------ | ------- | --------- | ------------- |
 | `--backup` | | `false` | Move an existing hook aside to `<hook>.gh-secure-kit.bak` before installing |
 | `--force` | | `false` | Overwrite an existing hook that is not managed by gh-secure-kit |
-| `--hook-exclude-inactive` | | `false` | Embed `--exclude-inactive` in installed hooks; requires `--hook-verify` |
+| `--hook-exclude` | | `[]` | Embed `--exclude STATUS` in installed hooks; statuses {active\|inactive\|unknown\|unsupported}, comma-separated or repeated; requires `--hook-verify` |
 | `--hook-log-level` | | | Set log level: {debug\|info\|warn\|error} of the scan run by the installed hook (omitted from the hook when not given) |
 | `--hook-verify` | | `false` | Embed `--verify` in installed hooks; sends supported tokens to official APIs and adds network latency |
 | `--hook-verify-host` | | `""` (`github.com` only) | Embed `--verify-host HOST` to check both `github.com` and HOST; requires `--hook-verify` |

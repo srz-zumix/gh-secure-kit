@@ -169,15 +169,15 @@ func TestInstallHookVerificationIsOptIn(t *testing.T) {
 	}
 }
 
-func TestInstallHookExcludeInactive(t *testing.T) {
+func TestInstallHookExclude(t *testing.T) {
 	for _, name := range HookNames {
 		for _, verify := range []bool{false, true} {
-			for _, excludeInactive := range []bool{false, true} {
+			for _, excluded := range [][]string{nil, {ValidityInactive}, {ValidityInactive, ValidityUnknown}, {ValidityActive, ValidityUnsupported}, {"invalid"}, {"unknown;command"}} {
 				dir := t.TempDir()
-				path, err := InstallHook(dir, name, InstallHookOptions{Verify: verify, ExcludeInactive: excludeInactive})
-				if excludeInactive && !verify {
+				path, err := InstallHook(dir, name, InstallHookOptions{Verify: verify, Exclude: excluded})
+				if validationErr := ValidateVerificationOptions(verify, excluded); validationErr != nil {
 					if err == nil {
-						t.Fatal("installed an inactive-excluding hook without verification")
+						t.Fatal("installed a hook with invalid exclusion options")
 					}
 					if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
 						t.Fatal("invalid options wrote a hook")
@@ -193,10 +193,13 @@ func TestInstallHookExcludeInactive(t *testing.T) {
 				}
 				script := string(data)
 				want := 0
-				if excludeInactive {
+				if len(excluded) > 0 {
 					want = strings.Count(script, "gh secure-kit secret-scanning local check")
+					if !strings.Contains(script, " --exclude "+shellquote.Join(strings.Join(excluded, ","))) {
+						t.Fatal("excluded statuses were not included in the hook")
+					}
 				}
-				if got := strings.Count(script, " --exclude-inactive"); got != want {
+				if got := strings.Count(script, " --exclude "); got != want {
 					t.Fatalf("hook %s: got %d exclusion flags, want %d", name, got, want)
 				}
 			}
@@ -341,7 +344,7 @@ func TestInstallHookDoesNotFollowSymlink(t *testing.T) {
 }
 
 func TestPrePushHookScansPushedRefs(t *testing.T) {
-	script, err := hookScript("pre-push", "", false, false)
+	script, err := hookScript("pre-push", "", false, nil)
 	if err != nil {
 		t.Fatalf("hookScript() error = %v", err)
 	}
@@ -364,7 +367,7 @@ func TestPrePushHookScansPushedRefs(t *testing.T) {
 
 func TestHookScriptLogLevel(t *testing.T) {
 	for _, name := range HookNames {
-		script, err := hookScript(name, "debug", false, false)
+		script, err := hookScript(name, "debug", false, nil)
 		if err != nil {
 			t.Fatalf("hookScript(%q) error = %v", name, err)
 		}
@@ -372,7 +375,7 @@ func TestHookScriptLogLevel(t *testing.T) {
 			t.Errorf("%s hook does not pass the requested log level: %s", name, script)
 		}
 
-		script, err = hookScript(name, "", false, false)
+		script, err = hookScript(name, "", false, nil)
 		if err != nil {
 			t.Fatalf("hookScript(%q) error = %v", name, err)
 		}
@@ -380,7 +383,7 @@ func TestHookScriptLogLevel(t *testing.T) {
 			t.Errorf("%s hook embeds a log level without being asked to: %s", name, script)
 		}
 
-		if _, err := hookScript(name, "verbose", false, false); err == nil {
+		if _, err := hookScript(name, "verbose", false, nil); err == nil {
 			t.Errorf("hookScript(%q) accepted an unsupported log level", name)
 		}
 	}

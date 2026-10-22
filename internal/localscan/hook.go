@@ -49,11 +49,11 @@ type HookStatus struct {
 
 // InstallHookOptions controls how an existing, unmanaged hook file is handled.
 type InstallHookOptions struct {
-	Force           bool
-	Backup          bool
-	Verify          bool
-	VerifyHost      string
-	ExcludeInactive bool
+	Force      bool
+	Backup     bool
+	Verify     bool
+	VerifyHost string
+	Exclude    []string
 	// LogLevel, when set, is passed as --log-level to the check command the
 	// generated hook runs.
 	LogLevel string
@@ -106,7 +106,7 @@ func HooksDir(repoPath string) (string, error) {
 
 // InstallHook writes the hook script for name into dir and returns its path.
 func InstallHook(dir, name string, opts InstallHookOptions) (string, error) {
-	script, err := hookScript(name, opts.LogLevel, opts.Verify, opts.ExcludeInactive, opts.VerifyHost)
+	script, err := hookScript(name, opts.LogLevel, opts.Verify, opts.Exclude, opts.VerifyHost)
 	if err != nil {
 		return "", err
 	}
@@ -205,8 +205,8 @@ func hookHeader(name string) string {
 
 // hookScript renders the shell script installed for the given hook. logLevel,
 // when not empty, is passed as --log-level to the check command.
-func hookScript(name, logLevel string, verify, excludeInactive bool, githubHosts ...string) (string, error) {
-	if err := ValidateVerificationOptions(verify, excludeInactive, githubHosts...); err != nil {
+func hookScript(name, logLevel string, verify bool, excludedStatuses []string, githubHosts ...string) (string, error) {
+	if err := ValidateVerificationOptions(verify, excludedStatuses, githubHosts...); err != nil {
 		return "", err
 	}
 	logFlag, err := hookLogLevelFlag(logLevel)
@@ -219,8 +219,8 @@ func hookScript(name, logLevel string, verify, excludeInactive bool, githubHosts
 	if len(githubHosts) == 1 && githubHosts[0] != "" {
 		logFlag += " --verify-host " + shellquote.Join(githubHosts[0])
 	}
-	if excludeInactive {
-		logFlag += " --exclude-inactive"
+	if len(excludedStatuses) > 0 {
+		logFlag += " --exclude " + shellquote.Join(strings.Join(excludedStatuses, ","))
 	}
 	switch name {
 	case "pre-commit":

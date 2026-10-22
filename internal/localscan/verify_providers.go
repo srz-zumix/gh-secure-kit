@@ -133,6 +133,10 @@ func verifyToken(ctx context.Context, client *http.Client, pattern, secret, gith
 		}
 	}()
 	if response.StatusCode == http.StatusUnauthorized {
+		// SendGrid returns 401 for valid keys blocked by IP Access Management.
+		if pattern == "sendgrid_api_key" {
+			return ValidityUnknown
+		}
 		return ValidityInactive
 	}
 	if pattern == "slack_token" && response.StatusCode == http.StatusOK {
@@ -147,7 +151,8 @@ func verifyToken(ctx context.Context, client *http.Client, pattern, secret, gith
 			return ValidityActive
 		}
 		switch result.Error {
-		case "invalid_auth", "token_revoked", "account_inactive", "not_authed":
+		// invalid_auth is also returned for valid tokens used from a disallowed IP address.
+		case "token_revoked", "account_inactive", "not_authed":
 			return ValidityInactive
 		default:
 			return ValidityUnknown

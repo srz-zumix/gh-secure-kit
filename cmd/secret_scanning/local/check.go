@@ -23,24 +23,24 @@ type CheckOptions struct {
 // NewCheckCmd returns the secret-scanning local check command
 func NewCheckCmd() *cobra.Command {
 	var (
-		unpushed        bool
-		staged          bool
-		uncommitted     bool
-		revRange        string
-		rev             string
-		remote          string
-		noAPI           bool
-		noGit           bool
-		path            string
-		configFile      string
-		usePatternCfg   bool
-		owner           string
-		repo            string
-		showSecret      bool
-		verify          bool
-		verifyHost      string
-		excludeInactive bool
-		maxCommits      int
+		unpushed      bool
+		staged        bool
+		uncommitted   bool
+		revRange      string
+		rev           string
+		remote        string
+		noAPI         bool
+		noGit         bool
+		path          string
+		configFile    string
+		usePatternCfg bool
+		owner         string
+		repo          string
+		showSecret    bool
+		verify        bool
+		verifyHost    string
+		exclude       []string
+		maxCommits    int
 	)
 	opts := &CheckOptions{}
 
@@ -54,11 +54,11 @@ The repository is taken from --repo, or inferred from the git remotes of --path.
 This is an independent reimplementation and does not use GitHub's official secret scanning patterns.
 With --verify, supported tokens are sent to their providers' fixed official APIs to check validity; JWT expiry is checked offline. Verification is disabled by default.
 GitHub tokens are always checked on github.com. Use --verify-host HOST with --verify to also check a specific GHES hostname; other providers are unaffected.
-Use --exclude-inactive with --verify to omit inactive findings from output and the exit-status decision. Unknown and unsupported findings are retained.
+Use --exclude with --verify to omit findings with selected statuses from output and the exit-status decision. Accepts active, inactive, unknown, and unsupported; separate multiple values with commas or repeat the flag. By default, no statuses are excluded.
 Exits with status 1 if any non-excluded secret is found.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := localscan.ValidateVerificationOptions(verify, excludeInactive, verifyHost); err != nil {
+			if err := localscan.ValidateVerificationOptions(verify, exclude, verifyHost); err != nil {
 				return err
 			}
 			mode := localscan.TargetUnpushed
@@ -159,9 +159,7 @@ Exits with status 1 if any non-excluded secret is found.`,
 				}
 			}
 
-			if excludeInactive {
-				findings = localscan.ExcludeInactiveFindings(findings)
-			}
+			findings = localscan.ExcludeFindings(findings, exclude)
 
 			renderer := render.NewRenderer(opts.Exporter)
 			if err := localscan.RenderLocalFindings(renderer, findings); err != nil {
@@ -195,7 +193,7 @@ Exits with status 1 if any non-excluded secret is found.`,
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
 	f.BoolVar(&verify, "verify", false, "Check supported tokens using their providers' official APIs (sends tokens externally; JWT expiry is checked offline)")
 	f.StringVar(&verifyHost, "verify-host", "", "Additional GitHub hostname to check alongside github.com, optionally with a port (requires --verify)")
-	f.BoolVar(&excludeInactive, "exclude-inactive", false, "Exclude inactive findings from output and exit status (requires --verify)")
+	cmdutil.StringSliceEnumFlag(cmd, &exclude, "exclude", "", nil, localscan.ValidityStatuses, "Exclude findings with these statuses from output and exit status (comma-separated or repeated; requires --verify)")
 	f.IntVar(&maxCommits, "max-commits", 1000, "Maximum number of commits to scan for --unpushed and --rev-range")
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)

@@ -140,3 +140,18 @@ func TestSlackTokenFullLength(t *testing.T) {
 		t.Fatalf("slack token was not captured in full: %+v", findings)
 	}
 }
+
+func TestSlackRotatedTokenFullLength(t *testing.T) {
+	for _, prefix := range []string{"xoxb", "xoxp"} {
+		token := "xoxe." + strings.Join([]string{prefix, "123456789012", "1234567890123", "abcdefghijklmnopqrstuvwx"}, "-")
+		scanner, err := NewScanner(nil, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scanner.Verify = true
+		findings := scanner.ScanFragment(Fragment{Content: "SLACK=" + token, FilePath: "a.txt"})
+		if len(findings) != 1 || findings[0].rawSecret != token {
+			t.Fatalf("rotated slack token was not captured in full: %+v", findings)
+		}
+	}
+}

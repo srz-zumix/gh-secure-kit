@@ -242,7 +242,7 @@ func TestVerificationGitHubCombinedValidity(t *testing.T) {
 			if tc.want == ValidityInactive {
 				wantRemaining = 0
 			}
-			if remaining := len(ExcludeInactiveFindings(findings)); remaining != wantRemaining {
+			if remaining := len(ExcludeFindings(findings, []string{ValidityInactive})); remaining != wantRemaining {
 				t.Fatalf("got %d remaining findings, want %d", remaining, wantRemaining)
 			}
 		})
@@ -283,7 +283,7 @@ func TestVerificationHostValidation(t *testing.T) {
 		{true, []string{"https://github.example.com"}, true},
 		{true, []string{"github.example.com", "other.example.com"}, true},
 	} {
-		if err := ValidateVerificationOptions(tc.verify, false, tc.hosts...); (err != nil) != tc.wantError {
+		if err := ValidateVerificationOptions(tc.verify, nil, tc.hosts...); (err != nil) != tc.wantError {
 			t.Fatal("unexpected verification host validation result")
 		}
 	}
@@ -297,7 +297,39 @@ func TestVerificationHostValidation(t *testing.T) {
 	}
 }
 
-func TestExcludeInactiveFindings(t *testing.T) {
+func TestExcludeFindings(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		excluded []string
+		want     []string
+	}{
+		{"none", nil, []string{ValidityActive, ValidityInactive, ValidityUnknown, ValidityUnsupported, ""}},
+		{"inactive", []string{ValidityInactive}, []string{ValidityActive, ValidityUnknown, ValidityUnsupported, ""}},
+		{"multiple", []string{ValidityInactive, ValidityUnknown}, []string{ValidityActive, ValidityUnsupported, ""}},
+		{"active", []string{ValidityActive}, []string{ValidityInactive, ValidityUnknown, ValidityUnsupported, ""}},
+		{"unsupported", []string{ValidityUnsupported}, []string{ValidityActive, ValidityInactive, ValidityUnknown, ""}},
+		{"duplicate", []string{ValidityInactive, ValidityInactive}, []string{ValidityActive, ValidityUnknown, ValidityUnsupported, ""}},
+		{"all verified", []string{ValidityActive, ValidityInactive, ValidityUnknown, ValidityUnsupported}, []string{""}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var findings []Finding
+			for _, validity := range []string{ValidityActive, ValidityInactive, ValidityUnknown, ValidityUnsupported, ""} {
+				findings = append(findings, Finding{Validity: validity})
+			}
+			got := ExcludeFindings(findings, tc.excluded)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d findings, want %d", len(got), len(tc.want))
+			}
+			for index, validity := range tc.want {
+				if got[index].Validity != validity {
+					t.Fatalf("finding %d: got %q, want %q", index, got[index].Validity, validity)
+				}
+			}
+		})
+	}
+}
+
+func TestExcludeFindingsSingleStatus(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		validities []string
@@ -313,7 +345,7 @@ func TestExcludeInactiveFindings(t *testing.T) {
 			for _, validity := range tc.validities {
 				findings = append(findings, Finding{Validity: validity})
 			}
-			got := ExcludeInactiveFindings(findings)
+			got := ExcludeFindings(findings, []string{ValidityInactive})
 			if len(got) != len(tc.want) {
 				t.Fatalf("got %d findings, want %d", len(got), len(tc.want))
 			}
@@ -328,11 +360,16 @@ func TestExcludeInactiveFindings(t *testing.T) {
 
 func TestValidateVerificationOptions(t *testing.T) {
 	for _, verify := range []bool{false, true} {
-		for _, excludeInactive := range []bool{false, true} {
-			err := ValidateVerificationOptions(verify, excludeInactive)
-			if (err != nil) != (excludeInactive && !verify) {
-				t.Fatalf("verify=%v excludeInactive=%v: unexpected validation result", verify, excludeInactive)
+		for _, excluded := range [][]string{nil, {ValidityInactive}, {ValidityInactive, ValidityUnknown}, {ValidityActive, ValidityUnsupported}} {
+			err := ValidateVerificationOptions(verify, excluded)
+			if (err != nil) != (len(excluded) > 0 && !verify) {
+				t.Fatalf("verify=%v excluded=%v: unexpected validation result", verify, excluded)
 			}
+		}
+	}
+	for _, excluded := range [][]string{{""}, {"invalid"}, {"Inactive"}, {ValidityInactive, "unknown;command"}, {"inactive,unknown"}} {
+		if err := ValidateVerificationOptions(true, excluded); err == nil {
+			t.Fatalf("accepted invalid excluded statuses: %v", excluded)
 		}
 	}
 }
@@ -459,7 +496,7 @@ func TestVerificationProviderSpecificErrors(t *testing.T) {
 		pattern, body, want string
 		status              int
 	}{
-		{"slack_token", `{"ok":false,"error":"invalid_auth"}`, ValidityInactive, 200},
+		{"slack_token", `{"ok":false,"error":"invalid_auth"}`, ValidityUnknown, 200},
 		{"slack_token", `{"ok":false,"error":"token_revoked"}`, ValidityInactive, 200},
 		{"slack_token", `{"ok":false,"error":"account_inactive"}`, ValidityInactive, 200},
 		{"slack_token", `{"ok":false,"error":"not_authed"}`, ValidityInactive, 200},
@@ -467,6 +504,7 @@ func TestVerificationProviderSpecificErrors(t *testing.T) {
 		{"slack_token", `broken`, ValidityUnknown, 200},
 		{"stripe_api_key", `{"error":{"type":"permission_error"}}`, ValidityActive, 403},
 		{"stripe_api_key", `broken`, ValidityUnknown, 403},
+		{"sendgrid_api_key", `{"errors":[{"message":"The requestor's IP Address is not whitelisted"}]}`, ValidityUnknown, 401},
 	} {
 		t.Run(tc.pattern+tc.body, func(t *testing.T) {
 			client := localVerificationClient(t, func(writer http.ResponseWriter, request *http.Request) {
@@ -479,6 +517,9 @@ func TestVerificationProviderSpecificErrors(t *testing.T) {
 			}
 			if findings[0].Validity != tc.want {
 				t.Fatalf("got %q, want %q", findings[0].Validity, tc.want)
+			}
+			if remaining := len(ExcludeFindings(findings, []string{ValidityInactive})); (tc.want == ValidityInactive) != (remaining == 0) {
+				t.Fatalf("unexpected exclusion result for validity %q", tc.want)
 			}
 		})
 	}

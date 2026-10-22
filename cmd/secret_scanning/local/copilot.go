@@ -22,15 +22,15 @@ type CopilotOptions struct {
 // NewCopilotCmd returns the secret-scanning local copilot command
 func NewCopilotCmd() *cobra.Command {
 	var (
-		sources         []string
-		paths           []string
-		sessions        []string
-		since           string
-		configFile      string
-		showSecret      bool
-		verify          bool
-		verifyHost      string
-		excludeInactive bool
+		sources    []string
+		paths      []string
+		sessions   []string
+		since      string
+		configFile string
+		showSecret bool
+		verify     bool
+		verifyHost string
+		exclude    []string
 	)
 	opts := &CopilotOptions{}
 
@@ -46,11 +46,11 @@ Use --since to skip files not modified recently and --session to keep only sessi
 With --show-secret the full secret is printed; when this command is run by an agent, that output is recorded in the new session log.
 With --verify, supported tokens are sent to their providers' fixed official APIs to check validity; JWT expiry is checked offline. Verification is disabled by default.
 GitHub tokens are always checked on github.com. Use --verify-host HOST with --verify to also check a specific GHES hostname; other providers are unaffected.
-Use --exclude-inactive with --verify to omit inactive findings from output and the exit-status decision. Unknown and unsupported findings are retained.
+Use --exclude with --verify to omit findings with selected statuses from output and the exit-status decision. Accepts active, inactive, unknown, and unsupported; separate multiple values with commas or repeat the flag. By default, no statuses are excluded.
 Exits with status 1 if any non-excluded secret is found.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := localscan.ValidateVerificationOptions(verify, excludeInactive, verifyHost); err != nil {
+			if err := localscan.ValidateVerificationOptions(verify, exclude, verifyHost); err != nil {
 				return err
 			}
 			target := copilotext.LogOptions{
@@ -84,9 +84,7 @@ Exits with status 1 if any non-excluded secret is found.`,
 				}
 			}
 
-			if excludeInactive {
-				findings = localscan.ExcludeInactiveFindings(findings)
-			}
+			findings = localscan.ExcludeFindings(findings, exclude)
 
 			renderer := render.NewRenderer(opts.Exporter)
 			if err := localscan.RenderCopilotFindings(renderer, findings); err != nil {
@@ -109,7 +107,7 @@ Exits with status 1 if any non-excluded secret is found.`,
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
 	f.BoolVar(&verify, "verify", false, "Check supported tokens using their providers' official APIs (sends tokens externally; JWT expiry is checked offline)")
 	f.StringVar(&verifyHost, "verify-host", "", "Additional GitHub hostname to check alongside github.com, optionally with a port (requires --verify)")
-	f.BoolVar(&excludeInactive, "exclude-inactive", false, "Exclude inactive findings from output and exit status (requires --verify)")
+	cmdutil.StringSliceEnumFlag(cmd, &exclude, "exclude", "", nil, localscan.ValidityStatuses, "Exclude findings with these statuses from output and exit status (comma-separated or repeated; requires --verify)")
 	cmd.MarkFlagsMutuallyExclusive("source", "path")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)
 
