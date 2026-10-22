@@ -452,7 +452,8 @@ func TestVerificationProviderResponses(t *testing.T) {
 				{"server error", `{}`, ValidityUnknown, 500},
 			} {
 				// SendGrid 401 stays unknown because IP Access Management can reject valid keys.
-				if pattern == "sendgrid_api_key" && tc.status == http.StatusUnauthorized {
+				// OpenAI 401 stays unknown unless the body explicitly reports an invalid key.
+				if (pattern == "sendgrid_api_key" || pattern == "openai_api_key") && tc.status == http.StatusUnauthorized {
 					tc.want = ValidityUnknown
 				}
 				t.Run(tc.name, func(t *testing.T) {
@@ -508,6 +509,10 @@ func TestVerificationProviderSpecificErrors(t *testing.T) {
 		{"slack_token", `broken`, ValidityUnknown, 200},
 		{"stripe_api_key", `{"error":{"type":"permission_error"}}`, ValidityActive, 403},
 		{"stripe_api_key", `broken`, ValidityUnknown, 403},
+		{"openai_api_key", `{"error":{"code":"invalid_api_key"}}`, ValidityInactive, 401},
+		{"openai_api_key", `{"error":{"code":"ip_not_authorized"}}`, ValidityUnknown, 401},
+		{"openai_api_key", `{"error":{"code":"no_organization"}}`, ValidityUnknown, 401},
+		{"openai_api_key", `broken`, ValidityUnknown, 401},
 		{"sendgrid_api_key", `{"errors":[{"message":"The requestor's IP Address is not whitelisted"}]}`, ValidityUnknown, 401},
 	} {
 		t.Run(tc.pattern+tc.body, func(t *testing.T) {

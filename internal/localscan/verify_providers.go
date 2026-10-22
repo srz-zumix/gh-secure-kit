@@ -137,6 +137,19 @@ func verifyToken(ctx context.Context, client *http.Client, pattern, secret, gith
 		if pattern == "sendgrid_api_key" {
 			return ValidityUnknown
 		}
+		// OpenAI also returns 401 for IP allowlist and organization membership restrictions.
+		if pattern == "openai_api_key" {
+			var result struct {
+				Error struct {
+					Code string `json:"code"`
+				} `json:"error"`
+			}
+			if json.NewDecoder(io.LimitReader(response.Body, 65536)).Decode(&result) == nil &&
+				result.Error.Code == "invalid_api_key" {
+				return ValidityInactive
+			}
+			return ValidityUnknown
+		}
 		return ValidityInactive
 	}
 	if pattern == "slack_token" && response.StatusCode == http.StatusOK {
