@@ -137,6 +137,48 @@ func TestStreamJSONFragmentsSkipsEncryptedContent(t *testing.T) {
 	}
 }
 
+func TestStreamJSONFragmentsSkipsVSCodeEncryptedThinking(t *testing.T) {
+	token := "AIza" + strings.Repeat("C", 35)
+	for _, jsonl := range []bool{false, true} {
+		for _, plaintext := range []bool{false, true} {
+			thinking := map[string]string{
+				"encrypted": "prefix" + token + "suffix",
+				"text":      "No credentials here",
+			}
+			if plaintext {
+				thinking["text"] = token
+			}
+			doc := map[string]any{
+				"kind": 1,
+				"v": map[string]any{
+					"metadata": map[string]any{
+						"toolCallRounds": []any{map[string]any{"thinking": thinking}},
+					},
+				},
+			}
+			content, err := json.Marshal(doc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scanner, err := NewScanner(nil, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var findings []Finding
+			for _, fragment := range collectJSONFragments(t, string(content), jsonl) {
+				findings = append(findings, scanner.ScanFragment(fragment)...)
+			}
+			want := 0
+			if plaintext {
+				want = 1
+			}
+			if len(findings) != want {
+				t.Fatalf("jsonl=%v, plaintext=%v: got %d findings, want %d", jsonl, plaintext, len(findings), want)
+			}
+		}
+	}
+}
+
 func TestStreamJSONFragmentsKeepsKeyContext(t *testing.T) {
 	secret := "0123456789abcdefghijABCDEFGHIJ0123456789"
 	content := "{\"AWS_SECRET_ACCESS_KEY\":\"" + secret + "\"}"

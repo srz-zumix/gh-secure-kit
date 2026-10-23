@@ -9,7 +9,7 @@ import (
 
 // ignoredJSONKeys lists object keys whose values (including nested values)
 // are opaque ciphertext and are never scanned.
-var ignoredJSONKeys = []string{"encryptedContent", "encrypted_content"}
+var ignoredJSONKeys = []string{"encryptedContent", "encrypted_content", "encrypted"}
 
 // jsonString is a decoded string from a JSON document and the line it ends on.
 type jsonString struct {

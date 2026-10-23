@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/kballard/go-shellquote"
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
@@ -48,8 +49,11 @@ type HookStatus struct {
 
 // InstallHookOptions controls how an existing, unmanaged hook file is handled.
 type InstallHookOptions struct {
-	Force  bool
-	Backup bool
+	Force      bool
+	Backup     bool
+	Verify     bool
+	VerifyHost string
+	Exclude    []string
 	// LogLevel, when set, is passed as --log-level to the check command the
 	// generated hook runs.
 	LogLevel string
@@ -102,7 +106,7 @@ func HooksDir(repoPath string) (string, error) {
 
 // InstallHook writes the hook script for name into dir and returns its path.
 func InstallHook(dir, name string, opts InstallHookOptions) (string, error) {
-	script, err := hookScript(name, opts.LogLevel)
+	script, err := hookScript(name, opts.LogLevel, opts.Verify, opts.Exclude, opts.VerifyHost)
 	if err != nil {
 		return "", err
 	}
@@ -201,10 +205,22 @@ func hookHeader(name string) string {
 
 // hookScript renders the shell script installed for the given hook. logLevel,
 // when not empty, is passed as --log-level to the check command.
-func hookScript(name, logLevel string) (string, error) {
+func hookScript(name, logLevel string, verify bool, excludedStatuses []string, githubHosts ...string) (string, error) {
+	if err := ValidateVerificationOptions(verify, excludedStatuses, githubHosts...); err != nil {
+		return "", err
+	}
 	logFlag, err := hookLogLevelFlag(logLevel)
 	if err != nil {
 		return "", err
+	}
+	if verify {
+		logFlag += " --verify"
+	}
+	if len(githubHosts) == 1 && githubHosts[0] != "" {
+		logFlag += " --verify-host " + shellquote.Join(githubHosts[0])
+	}
+	if len(excludedStatuses) > 0 {
+		logFlag += " --exclude " + shellquote.Join(strings.Join(excludedStatuses, ","))
 	}
 	switch name {
 	case "pre-commit":
