@@ -37,6 +37,9 @@ func NewCheckCmd() *cobra.Command {
 		owner         string
 		repo          string
 		showSecret    bool
+		verify        bool
+		verifyHost    string
+		exclude       []string
 		maxCommits    int
 	)
 	opts := &CheckOptions{}
@@ -49,9 +52,15 @@ Exactly one target must be selected: --unpushed (default), --staged, --uncommitt
 With --rev-range, commits that are missing from the local repository are read through the GitHub API instead, so a shallow CI checkout can scan a range without cloning the whole history; pass --no-api to disable it.
 The repository is taken from --repo, or inferred from the git remotes of --path.
 This is an independent reimplementation and does not use GitHub's official secret scanning patterns.
-Exits with status 1 if any secret is found.`,
+With --verify, supported tokens are sent to their providers' fixed official APIs to check validity; JWT expiry is checked offline. Verification is disabled by default.
+GitHub tokens are always checked on github.com. Use --verify-host HOST with --verify to also check a specific GHES hostname; other providers are unaffected.
+Use --exclude with --verify to omit findings with selected statuses from output and the exit-status decision. Accepts active, inactive, unknown, and unsupported; separate multiple values with commas or repeat the flag. By default, no statuses are excluded.
+Exits with status 1 if any non-excluded secret is found.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := localscan.ValidateVerificationOptions(verify, exclude, verifyHost); err != nil {
+				return err
+			}
 			mode := localscan.TargetUnpushed
 			switch {
 			case staged:
@@ -127,6 +136,7 @@ Exits with status 1 if any secret is found.`,
 			if err != nil {
 				return err
 			}
+			scanner.Verify = verify
 
 			// --repo is also used to select the repository read through the
 			// API, and --owner/--repo for the pattern configuration, so the
@@ -143,9 +153,16 @@ Exits with status 1 if any secret is found.`,
 			if err != nil {
 				return fmt.Errorf("failed to collect scan targets: %w", err)
 			}
+			if verify {
+				if err := localscan.VerifyFindings(cmd.Context(), findings, verifyHost); err != nil {
+					return fmt.Errorf("failed to verify detected secrets: %w", err)
+				}
+			}
+
+			findings = localscan.ExcludeFindings(findings, exclude)
 
 			renderer := render.NewRenderer(opts.Exporter)
-			if err := localscan.RenderFindings(renderer, findings); err != nil {
+			if err := localscan.RenderLocalFindings(renderer, findings); err != nil {
 				return fmt.Errorf("failed to render findings: %w", err)
 			}
 
@@ -174,6 +191,9 @@ Exits with status 1 if any secret is found.`,
 	f.StringVarP(&owner, "owner", "o", "", "The organization name, used with --pattern-config")
 	f.StringVarP(&repo, "repo", "R", "", "The [HOST/]OWNER/REPO repository, used with --pattern-config and to read commits through the GitHub API")
 	f.BoolVar(&showSecret, "show-secret", false, "Show the full matched secret value instead of a redacted form")
+	f.BoolVar(&verify, "verify", false, "Check supported tokens using their providers' official APIs (sends tokens externally; JWT expiry is checked offline)")
+	f.StringVar(&verifyHost, "verify-host", "", "Additional GitHub hostname to check alongside github.com, optionally with a port (requires --verify)")
+	cmdutil.StringSliceEnumFlag(cmd, &exclude, "exclude", "", nil, localscan.ValidityStatuses, "Exclude findings with these statuses from output and exit status (comma-separated or repeated; requires --verify)")
 	f.IntVar(&maxCommits, "max-commits", 1000, "Maximum number of commits to scan for --unpushed and --rev-range")
 	cmd.MarkFlagsMutuallyExclusive("owner", "repo")
 	cmdutil.AddFormatFlags(cmd, &opts.Exporter)

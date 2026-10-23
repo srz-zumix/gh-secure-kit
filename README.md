@@ -1538,6 +1538,29 @@ gh secure-kit secret-scanning local check [flags]
 
 Scan local git content for secrets using built-in and user-defined patterns. Exactly one target must be selected: `--unpushed` (default), `--staged`, `--uncommitted`, `--rev-range`, or `--no-git`. With `--rev-range`, commits that are missing from the local repository are read through the GitHub API instead, so a shallow CI checkout can scan a range without cloning the whole history; pass `--no-api` to disable it. The repository is taken from `--repo`, or inferred from the git remotes of `--path`. This is an independent reimplementation and does not use GitHub's official secret scanning patterns. Exits with status 1 if any secret is found.
 
+Default text output groups findings by commit, then file, instead of using a table.
+Commit headings show the first 12 characters of the commit ID, author, and date.
+Findings without a commit, such as staged changes or `--no-git` results, are grouped
+directly by file. Files retain their discovery order, and findings within each file
+are sorted by line number. Each finding shows its line, pattern, masked secret,
+and optional verification status, followed by a total count:
+
+```text
+* Commit 0123456789ab
+  Author: Example author
+  Date: 2026-01-01 12:00:00 UTC
+  config.txt
+    12  example_pattern  masked-value  [inactive]
+
+1 finding in 1 commit
+```
+
+Home directory prefixes are shortened to `~`. Embedded carriage returns, newlines,
+and tabs are escaped so each finding stays on one logical line; long paths or
+values can still wrap in narrow terminals. Token types remain available in JSON
+but are omitted from text. `--format json`, `--jq`, and `--template` are unchanged.
+No text is printed when there are no findings. Git hooks use this same format.
+
 ```sh
 # Scan commits reachable from HEAD but not pushed to any remote (default)
 gh secure-kit secret-scanning local check
@@ -1571,6 +1594,7 @@ The API cannot return a complete diff for every commit, so the scan fails instea
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml`) |
+| `--exclude` | | `[]` | Exclude statuses {active\|inactive\|unknown\|unsupported} from output and exit status; comma-separated or repeated; requires `--verify` |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--max-commits` | | `1000` | Maximum number of commits to scan for `--unpushed` and `--rev-range` |
@@ -1588,6 +1612,95 @@ The API cannot return a complete diff for every commit, so the scan fails instea
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
 | `--uncommitted` | | `false` | Scan modified and untracked files in the worktree |
 | `--unpushed` | | `true` | Scan commits reachable from HEAD but not pushed to any remote (default) |
+| `--verify` | | `false` | Check supported tokens using official APIs; sends tokens externally (JWT expiry is checked offline) |
+| `--verify-host` | | `""` (`github.com` only) | Additional GitHub verification hostname checked alongside `github.com`, optionally with a port; requires `--verify` |
+
+#### Token validity checks
+
+Both `local check` and `local copilot` accept the optional `--verify` flag
+(default: `false`). It sends detected, supported tokens to the HTTPS endpoints
+below by default. No validity requests are made without this flag. Only built-in
+patterns are eligible; custom patterns and built-in patterns overridden by
+configuration are not verified. `--show-secret` is not required: output remains
+masked by default.
+
+| Provider | Method | Endpoint |
+| ------ | ------ | ------ |
+| GitHub PAT, fine-grained PAT, OAuth | GET | `https://api.github.com/user` |
+| GitHub App installation token | GET | `https://api.github.com/installation/repositories` |
+| Slack token | POST (no message or payload) | `https://slack.com/api/auth.test` |
+| Stripe | GET | `https://api.stripe.com/v1/balance` |
+| SendGrid | GET | `https://api.sendgrid.com/v3/scopes` |
+| npm | GET | `https://registry.npmjs.org/-/whoami` |
+| OpenAI | GET | `https://api.openai.com/v1/models` |
+
+Text adds a bracketed status to each finding, and JSON adds `validity`, only when verification is
+requested. Results describe the check at that moment:
+
+- `active`: authentication succeeded for the probe, including an explicit Stripe
+  permission error. This does not guarantee access to other operations.
+- `inactive`: the provider rejected authentication, or a JWT's `exp` has passed.
+- `unknown`: timeout, rate limit, unexpected response, or inconclusive permissions.
+  JWTs that have not expired or lack a valid `exp` also return `unknown`; signatures
+  are not verified and JWTs are never declared `active` by this check.
+- `unsupported`: no verifier exists, including custom or overridden patterns.
+
+AWS credentials, Google API keys, Slack webhook URLs, PyPI tokens, Azure storage
+keys, private keys, and GitHub refresh tokens are unsupported. AWS key IDs and
+secret keys are not paired.
+
+To verify GitHub tokens against GitHub Enterprise Server, use the optional
+`--verify-host HOST` with `--verify` (default: empty, which uses `github.com`).
+Specify a hostname such as `github.example.com`, optionally with a port such as
+`github.example.com:8443`, not a URL. GHES PAT and OAuth checks use
+`https://HOST/api/v3/user`; installation token checks use
+`https://HOST/api/v3/installation/repositories`. GitHub.com uses the corresponding
+endpoints listed above. These endpoints require authentication; `/rate_limit`
+is not used as proof of valid authentication. HTTPS certificate validation remains enabled.
+URLs, paths, credentials, query strings, and fragments are rejected.
+
+GitHub tokens are always checked on GitHub.com. With `--verify-host HOST`, each
+GitHub token is sent to both GitHub.com and the specified host, even if one check
+succeeds. Specifying the default endpoint does not add a duplicate check. Other
+providers retain their fixed endpoints. No additional hosts are inferred from
+`gh auth`, `GH_HOST`, or `--repo`.
+
+The combined result is `active` if either host accepts the token, `inactive` only
+if both reject authentication, and `unknown` if neither succeeds and at least one
+check is inconclusive. Without an additional host, the GitHub.com result is used.
+
+Each unique token, verifier, and endpoint is checked once per scan, with at most four
+concurrent checks and a ten-second timeout per request. Redirects are not followed;
+tokens and response bodies are not logged. Verification alone does not discard
+findings or change the exit status: any detection still exits with status 1,
+including `inactive`, `unknown`, and `unsupported` results.
+
+The optional `--exclude STATUS` flag (default: empty, excluding nothing) requires
+`--verify`. Supported statuses are `active`, `inactive`, `unknown`, and
+`unsupported`. Use commas (`--exclude inactive,unknown`) or repeat the flag
+(`--exclude inactive --exclude unknown`) to exclude multiple statuses. Unknown
+status names are rejected before scanning.
+
+Matching findings are removed from both text and JSON output and from the
+exit-status decision. If no findings remain, the command exits with status 0;
+otherwise it exits with status 1. Unselected statuses and unverified findings are
+retained. Excluding `active`, `unknown`, or `unsupported` may hide valid or
+unconfirmed credentials. Select the correct issuing host before excluding
+inactive GitHub findings. This replaces the former inactive-only exclusion flag.
+
+```sh
+# Check validity while retaining masked output
+gh secure-kit secret-scanning local check --staged --verify --format json
+
+# Ignore inactive findings while retaining unknown or unsupported results
+gh secure-kit secret-scanning local check --staged --verify --exclude inactive
+
+# Ignore both inactive and unknown findings
+gh secure-kit secret-scanning local check --staged --verify --exclude inactive,unknown
+
+# Check GitHub tokens against GitHub.com and one GHES instance
+gh secure-kit secret-scanning local check --staged --verify --verify-host github.example.com
+```
 
 ### Scan GitHub Copilot session logs for secrets
 
@@ -1598,14 +1711,48 @@ gh secure-kit secret-scanning local copilot [flags]
 Results include the full session ID, session name, workspace directory, and log
 file modification time (not the session start time). Names use the CLI's saved
 `name` (or `summary` when unnamed) or VS Code's saved `customTitle`. Missing names
-and workspaces are left blank. Detected secrets in names are masked unless
+are shown as `(no name)` in text, and missing workspaces are omitted. Detected secrets in names are masked unless
 `--show-secret` is set. JSON includes `session_id`, optional `session_name` and
 `workspace`, and `date`.
 
-For valid JSON and JSON Lines, values of `encryptedContent` and
-`encrypted_content` fields are excluded to avoid accidental matches in encrypted
-data. Other fields are still scanned. Malformed JSON is scanned as raw text
+Default text output groups findings by full session ID, then file. Session
+metadata appears once per group, with groups ordered by their latest log
+modification time (newest first, then by session ID for ties). Logs without a
+session ID are grouped separately by file under `(no session)`. Files retain
+their discovery order and findings within each file are sorted by line number.
+For example, with verification enabled:
+
+```text
+* Example session
+  Session: 00000000-0000-4000-8000-000000000001
+  Source: cli-sessions
+  Workspace: ~/project
+  Updated: 2026-01-01 12:00:00 UTC
+  ~/logs/events.jsonl
+    12  example_pattern  masked-value  [inactive]
+
+1 finding in 1 session
+```
+
+Paths use `~` for the home directory, and carriage returns, newlines, and tabs
+inside names or values are escaped. Long paths or values may still wrap.
+The final count distinguishes sessions from sessionless files. JSON, `--jq`, and
+`--template` retain their existing fields and order. Empty results print no text.
+
+For valid JSON and JSON Lines, values of `encryptedContent`, `encrypted_content`,
+and `encrypted` fields (including VS Code's `thinking.encrypted`) are excluded to
+avoid accidental matches in encrypted data. Other fields, including adjacent
+plaintext `text`, are still scanned. Malformed JSON is scanned as raw text
 without field exclusions.
+
+The optional `--verify` flag (default: `false`) enables
+[token validity checks](#token-validity-checks), sending supported tokens to their
+providers' official APIs. Findings remain masked unless `--show-secret` is set,
+and any remaining finding exits with status 1. Add `--exclude STATUS`
+(default: empty, requires `--verify`) to omit selected statuses from output and
+the exit-status decision. Accepts `active`, `inactive`, `unknown`, and
+`unsupported`, as comma-separated values or repeated flags; unselected statuses
+are retained.
 
 Scan GitHub Copilot session logs on this machine for secrets using built-in and user-defined patterns. By default the Copilot CLI session state (`cli-sessions`) and logs (`cli-logs`), and the VS Code chat sessions (`vscode-chat`) and Copilot Chat debug logs and transcripts (`vscode-debug`) are scanned; select a subset with `--source`. The Copilot CLI directory follows `COPILOT_HOME` (default `~/.copilot`) and VS Code is looked up under the user configuration directory (`Code/User`). Use `--path` to scan other directories or files instead, for example the logs of VS Code Insiders. JSON and JSON Lines files are decoded before scanning, so escaped values such as multi-line private keys are detected; the reported line is the line of the JSON(L) file. Use `--since` to skip files not modified recently and `--session` to keep only sessions whose ID starts with the given prefix. With `--show-secret` the full secret is printed; when this command is run by an agent, that output is recorded in the new session log. Exits with status 1 if any secret is found.
 
@@ -1619,6 +1766,18 @@ gh secure-kit secret-scanning local copilot --source cli-sessions --since 7d
 # Scan a specific session and output JSON
 gh secure-kit secret-scanning local copilot --session 0a1b2c3d --format json
 
+# Check supported tokens in a specific session without revealing them
+gh secure-kit secret-scanning local copilot --session 0a1b2c3d --verify --format json
+
+# Omit inactive findings from a Copilot log scan
+gh secure-kit secret-scanning local copilot --verify --exclude inactive
+
+# Omit multiple statuses using repeated flags
+gh secure-kit secret-scanning local copilot --verify --exclude inactive --exclude unknown
+
+# Verify GitHub tokens on their issuing GHES instance
+gh secure-kit secret-scanning local copilot --verify --verify-host github.example.com
+
 # Scan the logs of VS Code Insiders
 gh secure-kit secret-scanning local copilot --path "$HOME/Library/Application Support/Code - Insiders/User/workspaceStorage"
 ```
@@ -1628,6 +1787,7 @@ gh secure-kit secret-scanning local copilot --path "$HOME/Library/Application Su
 | Flag | Short | Default | Description |
 | ------ | ------- | --------- | ------------- |
 | `--config` | | `""` | Path to a local secret scanning config file (default: auto-discover `.gh-secure-kit-secret-scanning.yml` in the current directory) |
+| `--exclude` | | `[]` | Exclude statuses {active\|inactive\|unknown\|unsupported} from output and exit status; comma-separated or repeated; requires `--verify` |
 | `--format` | | | Output format: {json} |
 | `--jq` | `-q` | | Filter JSON output using a jq expression |
 | `--path` | | `[]` | Directory or file to scan instead of the default locations (can be repeated; cannot be combined with `--source`) |
@@ -1636,6 +1796,8 @@ gh secure-kit secret-scanning local copilot --path "$HOME/Library/Application Su
 | `--since` | | `""` | Scan only files modified since this time: an RFC3339 timestamp, a date (`2006-01-02`), or a period such as `7d`, `2w`, `24h` |
 | `--source` | | all | Comma-separated log locations to scan: {cli-sessions\|cli-logs\|vscode-chat\|vscode-debug} |
 | `--template` | `-t` | | Format JSON output using a Go template; see "gh help formatting" |
+| `--verify` | | `false` | Check supported tokens using official APIs; sends tokens externally (JWT expiry is checked offline) |
+| `--verify-host` | | `""` (`github.com` only) | Additional GitHub verification hostname checked alongside `github.com`, optionally with a port; requires `--verify` |
 
 ### List local secret scanning patterns
 
@@ -1685,7 +1847,37 @@ gh secure-kit secret-scanning local hook install --backup
 
 # Install a pre-push hook that scans with debug logging
 gh secure-kit secret-scanning local hook install --hook-log-level debug
+
+# Enable token verification in the installed pre-push hook
+gh secure-kit secret-scanning local hook install --hook-verify
+
+# Allow commits or pushes when all detected findings are inactive
+gh secure-kit secret-scanning local hook install --hook-verify --hook-exclude inactive
+
+# Exclude multiple statuses in installed hooks
+gh secure-kit secret-scanning local hook install --hook-verify --hook-exclude inactive,unknown
+
+# Verify GitHub tokens against a GHES instance in the installed hook
+gh secure-kit secret-scanning local hook install --hook-verify --hook-verify-host github.example.com
 ```
+
+`--hook-verify` is optional and defaults to `false`. It embeds `--verify` in
+every scan command in the generated hooks, enabling
+[token validity checks](#token-validity-checks). This sends supported tokens to
+official APIs and adds network latency to commits or pushes. Existing hooks are
+unchanged until reinstalled. By default, any detected secret still aborts the
+operation, regardless of its validity. The optional `--hook-exclude STATUS`
+flag (default: empty, excluding nothing) requires `--hook-verify` and embeds
+`--exclude STATUS` in every scan command. Accepts `active`, `inactive`, `unknown`,
+and `unsupported`, as comma-separated values or repeated flags. Selected statuses
+do not block the operation; unselected statuses still block it. Reinstall hooks
+created with the former inactive-only exclusion flag before using this version.
+
+The optional `--hook-verify-host HOST` (default: empty, which uses `github.com`)
+requires `--hook-verify` and embeds `--verify-host HOST` in every scan command.
+It checks GitHub tokens on both GitHub.com and the specified GHES instance, with
+the same host validation and combined validity rules described above. Existing
+hooks containing `--verify-host` use this behavior after upgrading the executable.
 
 **Flags:**
 
@@ -1693,7 +1885,10 @@ gh secure-kit secret-scanning local hook install --hook-log-level debug
 | ------ | ------- | --------- | ------------- |
 | `--backup` | | `false` | Move an existing hook aside to `<hook>.gh-secure-kit.bak` before installing |
 | `--force` | | `false` | Overwrite an existing hook that is not managed by gh-secure-kit |
+| `--hook-exclude` | | `[]` | Embed `--exclude STATUS` in installed hooks; statuses {active\|inactive\|unknown\|unsupported}, comma-separated or repeated; requires `--hook-verify` |
 | `--hook-log-level` | | | Set log level: {debug\|info\|warn\|error} of the scan run by the installed hook (omitted from the hook when not given) |
+| `--hook-verify` | | `false` | Embed `--verify` in installed hooks; sends supported tokens to official APIs and adds network latency |
+| `--hook-verify-host` | | `""` (`github.com` only) | Embed `--verify-host HOST` to check both `github.com` and HOST; requires `--hook-verify` |
 | `--path` | | `"."` | The repository path to install the hooks into |
 
 ### Show the local secret scanning git hook status

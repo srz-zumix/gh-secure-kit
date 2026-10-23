@@ -1,6 +1,7 @@
 package localscan
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/go-github/v90/github"
@@ -118,6 +119,39 @@ func TestBuiltinClassicPATHonorsGithubTokenOverride(t *testing.T) {
 	for _, rp := range ApplyPatternConfigs(patterns, configs) {
 		if rp.ID == "github_personal_access_token" && rp.Enabled {
 			t.Error("github_token=disabled did not disable the builtin classic PAT detector")
+		}
+	}
+}
+
+func TestSlackTokenFullLength(t *testing.T) {
+	token := strings.Join([]string{
+		"xoxb",
+		"123456789012",
+		"1234567890123",
+		"abcdefghijklmnopqrstuvwx",
+	}, "-")
+	scanner, err := NewScanner(nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scanner.Verify = true
+	findings := scanner.ScanFragment(Fragment{Content: "SLACK=" + token, FilePath: "a.txt"})
+	if len(findings) != 1 || findings[0].rawSecret != token {
+		t.Fatalf("slack token was not captured in full: %+v", findings)
+	}
+}
+
+func TestSlackRotatedTokenFullLength(t *testing.T) {
+	for _, prefix := range []string{"xoxb", "xoxp"} {
+		token := "xoxe." + strings.Join([]string{prefix, "123456789012", "1234567890123", "abcdefghijklmnopqrstuvwx"}, "-")
+		scanner, err := NewScanner(nil, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		scanner.Verify = true
+		findings := scanner.ScanFragment(Fragment{Content: "SLACK=" + token, FilePath: "a.txt"})
+		if len(findings) != 1 || findings[0].rawSecret != token {
+			t.Fatalf("rotated slack token was not captured in full: %+v", findings)
 		}
 	}
 }
