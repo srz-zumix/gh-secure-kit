@@ -1,6 +1,6 @@
 package localscan
 
-import "github.com/google/go-github/v90/github"
+import "github.com/google/go-github/v93/github"
 
 // ApplyPatternConfigs filters and enables/disables patterns according to an
 // organization's secret scanning pattern configuration, matching on token

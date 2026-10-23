@@ -15,7 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/filesystem/dotgit"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 	"github.com/srz-zumix/gh-diet-kit/pkg/dangling"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/gitutil"

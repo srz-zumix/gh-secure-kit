@@ -3,7 +3,7 @@ package localscan
 import (
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 )
 
 func TestApplyPatternConfigs(t *testing.T) {
