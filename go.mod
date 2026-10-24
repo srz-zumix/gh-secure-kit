@@ -10,7 +10,7 @@ require (
 	github.com/google/go-github/v93 v93.0.0
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/spf13/cobra v1.10.2
-	github.com/srz-zumix/gh-diet-kit v0.5.0
+	github.com/srz-zumix/gh-diet-kit v0.6.0
 	github.com/srz-zumix/go-gh-extension v0.7.1
 )
 
@@ -58,7 +58,6 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/google/go-github/v88 v88.0.0 // indirect
-	github.com/google/go-github/v90 v90.0.0 // indirect
 	github.com/google/go-querystring v1.2.0 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
