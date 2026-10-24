@@ -3,7 +3,7 @@ package recommended
 import (
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 )
 
 func TestGSK132DefaultWorkflowPermissionsWrite(t *testing.T) {
@@ -73,9 +73,9 @@ func TestGSK138SHAPinningRequired(t *testing.T) {
 		want Status
 	}{
 		{"unknown permissions", nil, StatusSkip},
-		{"actions disabled", &github.ActionsPermissionsRepository{Enabled: github.Ptr(false)}, StatusSkip},
-		{"not required", &github.ActionsPermissionsRepository{Enabled: github.Ptr(true)}, StatusFail},
-		{"required", &github.ActionsPermissionsRepository{Enabled: github.Ptr(true), SHAPinningRequired: github.Ptr(true)}, StatusPass},
+		{"actions disabled", &github.ActionsPermissionsRepository{Enabled: false}, StatusSkip},
+		{"not required", &github.ActionsPermissionsRepository{Enabled: true}, StatusFail},
+		{"required", &github.ActionsPermissionsRepository{Enabled: true, SHAPinningRequired: github.Ptr(true)}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

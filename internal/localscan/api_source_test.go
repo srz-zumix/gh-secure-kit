@@ -10,7 +10,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 )
 
 func TestFragmentsFromPatchKeepsNewFileLineNumbers(t *testing.T) {

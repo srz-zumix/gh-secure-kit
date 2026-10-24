@@ -3,7 +3,7 @@ package recommended
 import (
 	"testing"
 
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 )
 
 func orgRuleOutcome(t *testing.T, id string, f *OrganizationFacts) Status {
@@ -73,12 +73,12 @@ func TestGSK508ActionsEnabledRepositories(t *testing.T) {
 		t.Errorf("unknown permissions: got %v, want skip", got)
 	}
 
-	f := &OrganizationFacts{ActionsPermissions: &github.ActionsPermissions{EnabledRepositories: github.Ptr("all")}}
+	f := &OrganizationFacts{ActionsPermissions: &github.ActionsPermissions{EnabledRepositories: "all"}}
 	if got := orgRuleOutcome(t, "GSK508", f); got != StatusFail {
 		t.Errorf("all repositories: got %v, want fail", got)
 	}
 
-	f = &OrganizationFacts{ActionsPermissions: &github.ActionsPermissions{EnabledRepositories: github.Ptr("selected")}}
+	f = &OrganizationFacts{ActionsPermissions: &github.ActionsPermissions{EnabledRepositories: "selected"}}
 	if got := orgRuleOutcome(t, "GSK508", f); got != StatusPass {
 		t.Errorf("selected repositories: got %v, want pass", got)
 	}
@@ -211,9 +211,9 @@ func TestGSK517OrgSHAPinningRequired(t *testing.T) {
 		want Status
 	}{
 		{"unknown permissions", nil, StatusSkip},
-		{"actions disabled", &github.ActionsPermissions{EnabledRepositories: github.Ptr("none")}, StatusSkip},
-		{"not required", &github.ActionsPermissions{EnabledRepositories: github.Ptr("all")}, StatusFail},
-		{"required", &github.ActionsPermissions{EnabledRepositories: github.Ptr("all"), SHAPinningRequired: github.Ptr(true)}, StatusPass},
+		{"actions disabled", &github.ActionsPermissions{EnabledRepositories: "none"}, StatusSkip},
+		{"not required", &github.ActionsPermissions{EnabledRepositories: "all"}, StatusFail},
+		{"required", &github.ActionsPermissions{EnabledRepositories: "all", SHAPinningRequired: github.Ptr(true)}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

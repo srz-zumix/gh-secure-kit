@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
-	"github.com/google/go-github/v90/github"
+	"github.com/google/go-github/v93/github"
 )
 
 func TestSuspendedUserRules(t *testing.T) {
@@ -128,14 +128,14 @@ func TestRunnerGroupApply(t *testing.T) {
 		if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 			t.Fatal(err)
 		}
-		if len(body) != 1 || body["allows_public_repositories"] != false {
+		if len(body) != 2 || body["name"] != "fixture" || body["allows_public_repositories"] != false {
 			t.Fatalf("unexpected settings: %v", body)
 		}
 		return rulesetResponse(request, 200, `{"id":1,"allows_public_repositories":false}`), nil
 	}))
 	facts := &OrganizationFacts{RunnerGroupsKnown: true, RunnerGroups: []*github.RunnerGroup{
-		{ID: github.Ptr(int64(1)), AllowsPublicRepositories: github.Ptr(true)},
-		{ID: github.Ptr(int64(2)), AllowsPublicRepositories: github.Ptr(false)},
+		{ID: github.Ptr(int64(1)), Name: github.Ptr("fixture"), AllowsPublicRepositories: github.Ptr(true)},
+		{ID: github.Ptr(int64(2)), Name: github.Ptr("other"), AllowsPublicRepositories: github.Ptr(false)},
 	}}
 	repo := repository.Repository{Owner: "fixture_org"}
 	if err := rule.ApplyOrg(context.Background(), client, repo, facts); err != nil || requests != 1 {
