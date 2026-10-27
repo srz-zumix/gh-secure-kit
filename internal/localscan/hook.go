@@ -193,8 +193,8 @@ func mergeIntoHook(dir, name, path string, flags string) error {
 		return err
 	}
 	merged := content[:newline+1] + block + content[newline+1:]
-	// Keep the original permissions but make sure git can execute the hook.
-	return writeHookFile(dir, name, path, merged, mode|0o111)
+	// Keep the original permissions but make sure the owner (git) can execute the hook.
+	return writeHookFile(dir, name, path, merged, mode|0o100)
 }
 
 // updateMergedHook replaces the scan block already merged into the hook at
@@ -212,7 +212,7 @@ func updateMergedHook(dir, name, path string, flags string) error {
 	if err != nil {
 		return err
 	}
-	return writeHookFile(dir, name, path, content[:start]+block+content[end:], mode|0o111)
+	return writeHookFile(dir, name, path, content[:start]+block+content[end:], mode|0o100)
 }
 
 // readHookFile returns the content and permission bits of the hook at path.

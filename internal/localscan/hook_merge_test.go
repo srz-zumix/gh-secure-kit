@@ -39,7 +39,7 @@ func TestInstallHookMergeInsertsBlockAfterShebang(t *testing.T) {
 	for _, name := range HookNames {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			path := writeTestHook(t, dir, name, lfsLikeHook, 0o750)
+			path := writeTestHook(t, dir, name, lfsLikeHook, 0o640)
 
 			if _, err := InstallHook(dir, name, InstallHookOptions{Merge: true, LogLevel: "debug"}); err != nil {
 				t.Fatalf("InstallHook(Merge) error = %v", err)
@@ -62,8 +62,8 @@ func TestInstallHookMergeInsertsBlockAfterShebang(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if info.Mode().Perm() != 0o751 {
-					t.Errorf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(0o751))
+				if info.Mode().Perm() != 0o740 {
+					t.Errorf("mode = %v, want %v", info.Mode().Perm(), os.FileMode(0o740))
 				}
 			}
 
