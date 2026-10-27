@@ -444,11 +444,17 @@ func isMergeableShebang(line string) bool {
 	interpreter := filepath.Base(fields[0])
 	if interpreter == "env" {
 		interpreter = ""
+		// Only -S (split string) and "--" are accepted: other env options
+		// such as -u or -C take an operand that would otherwise be mistaken
+		// for the interpreter.
 		for _, f := range fields[1:] {
+			if f == "-S" || f == "--" {
+				continue
+			}
 			if !strings.HasPrefix(f, "-") {
 				interpreter = filepath.Base(f)
-				break
 			}
+			break
 		}
 	}
 	return slices.Contains(mergeableShells, interpreter)
