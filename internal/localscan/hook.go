@@ -442,22 +442,38 @@ func isMergeableShebang(line string) bool {
 		return false
 	}
 	interpreter := filepath.Base(fields[0])
+	args := fields[1:]
 	if interpreter == "env" {
 		interpreter = ""
 		// Only -S (split string) and "--" are accepted: other env options
 		// such as -u or -C take an operand that would otherwise be mistaken
 		// for the interpreter.
-		for _, f := range fields[1:] {
+		for i, f := range args {
 			if f == "-S" || f == "--" {
 				continue
 			}
 			if !strings.HasPrefix(f, "-") {
 				interpreter = filepath.Base(f)
+				args = args[i+1:]
 			}
 			break
 		}
 	}
-	return slices.Contains(mergeableShells, interpreter)
+	if !slices.Contains(mergeableShells, interpreter) {
+		return false
+	}
+	// Reject shell options that make the shell run something other than the
+	// hook file: -c executes a command string and -s reads commands from
+	// stdin, in either case skipping the merged scan block.
+	for _, a := range args {
+		if a == "--" || !strings.HasPrefix(a, "-") || strings.HasPrefix(a, "--") {
+			continue
+		}
+		if strings.ContainsAny(a[1:], "cs") {
+			return false
+		}
+	}
+	return true
 }
 
 // findMergeBlock locates the merged scan block in content and returns the

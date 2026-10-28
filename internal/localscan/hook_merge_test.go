@@ -203,18 +203,22 @@ func TestInstallHookMergeWithoutExistingHook(t *testing.T) {
 
 func TestIsMergeableShebang(t *testing.T) {
 	cases := map[string]bool{
-		"#!/bin/sh":                      true,
-		"#!/bin/sh -e":                   true,
-		"#! /bin/bash":                   true,
-		"#!/usr/bin/env sh":              true,
-		"#!/usr/bin/env -S bash -e":      true,
-		"#!/usr/bin/env -S -u sh awk -f": false,
-		"#!/usr/bin/env -i sh":           false,
-		"#!/bin/zsh\r":                   true,
-		"#!/usr/bin/env python3":         false,
-		"#!/usr/bin/env":                 false,
-		"#!":                             false,
-		"echo hi":                        false,
+		"#!/bin/sh":                        true,
+		"#!/bin/sh -e":                     true,
+		"#! /bin/bash":                     true,
+		"#!/usr/bin/env sh":                true,
+		"#!/usr/bin/env -S bash -e":        true,
+		"#!/usr/bin/env -S -u sh awk -f":   false,
+		"#!/usr/bin/env -i sh":             false,
+		"#!/bin/zsh\r":                     true,
+		"#!/usr/bin/env -S sh -c 'echo x'": false,
+		"#!/usr/bin/env -S bash -ec true":  false,
+		"#!/bin/sh -s":                     false,
+		"#!/bin/bash -xc":                  false,
+		"#!/usr/bin/env python3":           false,
+		"#!/usr/bin/env":                   false,
+		"#!":                               false,
+		"echo hi":                          false,
 	}
 	for line, want := range cases {
 		if got := isMergeableShebang(line); got != want {
