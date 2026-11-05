@@ -2507,6 +2507,12 @@ GSK524/GSK525 for organizations). Unavailable metadata is skipped rather than
 treated as safe. GSK523 can disable public repository access; inherited groups
 require enterprise-level changes. Suspended user and webhook checks are read-only.
 
+The read-only Require lockfile checks (GSK146 for repositories and GSK526 for
+organizations) require a single active policy covering all workflows and, for
+organizations, all repositories. Applicable inherited policies count; multiple
+partial policies do not. They skip when Actions is disabled or policy coverage
+cannot be determined, and do not inspect or create lockfiles.
+
 `check`, `apply`, and `golden` accept an optional `--config <path>` YAML file.
 When omitted, they load `.gh-secure-kit-recommended.yml` from the current directory
 if present; otherwise, no configured rules are ignored. Explicitly specified

@@ -71,7 +71,7 @@ func (fl Filter) Apply(rules []Rule) []Rule {
 	include := toSet(fl.IDs)
 	ignore := toSet(fl.IgnoreIDs)
 
-	var out []Rule
+	out := make([]Rule, 0)
 	for _, r := range rules {
 		if fl.Scope != "" && r.Scope != fl.Scope {
 			continue
