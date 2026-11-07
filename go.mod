@@ -11,7 +11,7 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/spf13/cobra v1.10.2
 	github.com/srz-zumix/gh-diet-kit v0.6.0
-	github.com/srz-zumix/go-gh-extension v0.7.1
+	github.com/srz-zumix/go-gh-extension v0.7.6
 )
 
 require (

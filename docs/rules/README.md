@@ -87,6 +87,7 @@ target; ignore the whole rule instead.
 | [GSK143](GSK143.md) | Info | No | No push ruleset restricting pushed files |
 | [GSK144](GSK144.md) | High | No | Webhook uses insecure transport |
 | [GSK145](GSK145.md) | Medium | No | Webhook has no secret |
+| [GSK146](GSK146.md) | High | No | Actions lockfile not required for all workflows |
 
 ## Organization rules
 
@@ -117,3 +118,4 @@ target; ignore the whole rule instead.
 | [GSK523](GSK523.md) | High | Yes | Self-hosted runner group allows public repositories |
 | [GSK524](GSK524.md) | High | No | Webhook uses insecure transport |
 | [GSK525](GSK525.md) | Medium | No | Webhook has no secret |
+| [GSK526](GSK526.md) | High | No | Actions lockfile not required for all repositories and workflows |

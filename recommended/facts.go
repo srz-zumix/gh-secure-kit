@@ -2,6 +2,7 @@ package recommended
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"regexp"
@@ -72,6 +73,10 @@ type RepositoryFacts struct {
 	// ActionsPermissions is nil when the Actions permissions policy for the
 	// repository could not be fetched.
 	ActionsPermissions *github.ActionsPermissionsRepository
+	ActionsPolicies    []json.RawMessage
+	// ActionsPoliciesKnown distinguishes a successful empty list from an
+	// unavailable or incomplete Actions policy response.
+	ActionsPoliciesKnown bool
 	// PrivateForkPRWorkflows is nil for public repositories and when the fork
 	// pull request workflow settings could not be fetched.
 	PrivateForkPRWorkflows *github.WorkflowsPermissions
@@ -338,6 +343,16 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	} else if isAccessDenied(err) {
 		return nil, err
 	}
+	if selectedRule(rules, "GSK146") && f.ActionsPermissions != nil && f.ActionsPermissions.Enabled {
+		if policies, err := gh.ListRepositoryActionsPolicies(ctx, g, repo); err == nil {
+			if err := hydrateActionsPolicies(ctx, g, repo, ScopeRepository, policies); err != nil {
+				return nil, err
+			}
+			f.ActionsPolicies, f.ActionsPoliciesKnown = policies, true
+		} else if fatalActionsPolicyError(err) {
+			return nil, err
+		}
+	}
 	if isPrivateOrInternal(repoInfo) {
 		if settings, err := gh.GetRepoPrivateRepoForkPRWorkflowSettings(ctx, g, repo); err == nil {
 			f.PrivateForkPRWorkflows = settings
@@ -450,6 +465,10 @@ type OrganizationFacts struct {
 	EnterpriseManagedUsers bool
 	SecurityManagerTeams   []*github.Team
 	ActionsPermissions     *github.ActionsPermissions
+	ActionsPolicies        []json.RawMessage
+	// ActionsPoliciesKnown distinguishes a successful empty list from an
+	// unavailable or incomplete Actions policy response.
+	ActionsPoliciesKnown   bool
 	DefaultSecurityConfigs []*github.CodeSecurityConfigurationWithDefaultForNewRepos
 	// DefaultSecurityConfigsKnown reports whether the default code security
 	// configurations were successfully fetched. It stays false when the API
@@ -490,7 +509,7 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 	}
 
 	f := &OrganizationFacts{Org: org}
-	if len(rules) == 0 {
+	if rules == nil {
 		rules = AllRules()
 	}
 
@@ -503,6 +522,19 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		f.ActionsPermissions = permissions
 	} else if isAccessDenied(err) {
 		return nil, err
+	}
+	if selectedRule(rules, "GSK526") && f.ActionsPermissions != nil {
+		enabled := f.ActionsPermissions.GetEnabledRepositories()
+		if enabled == "all" || enabled == "selected" {
+			if policies, err := gh.ListOrgActionsPolicies(ctx, g, repo); err == nil {
+				if err := hydrateActionsPolicies(ctx, g, repo, ScopeOrganization, policies); err != nil {
+					return nil, err
+				}
+				f.ActionsPolicies, f.ActionsPoliciesKnown = policies, true
+			} else if fatalActionsPolicyError(err) {
+				return nil, err
+			}
+		}
 	}
 	if configs, err := gh.ListDefaultCodeSecurityConfigurations(ctx, g, repo); err == nil {
 		f.DefaultSecurityConfigs = configs
