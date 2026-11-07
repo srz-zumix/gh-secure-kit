@@ -15,12 +15,12 @@ workflows:
         - 'cli/gh-extension-precompile@v2.2.0'
     '.github/workflows/reviewdog.yml':
         - 'actions/checkout@v7.0.1'
-        - 'reviewdog/action-actionlint@v1.80.4'
+        - 'reviewdog/action-actionlint@v1.80.6'
         - 'reviewdog/action-golangci-lint@v2.10.2'
         - 'reviewdog/action-shellcheck@v1.34.1'
     '.github/workflows/zizmor.yml':
         - 'actions/checkout@v7.0.1'
-        - 'zizmorcore/zizmor-action@v0.7.1'
+        - 'zizmorcore/zizmor-action@v0.8.0'
 dependencies:
     'actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32':
         ref: 'v4.1.0'
@@ -67,9 +67,9 @@ dependencies:
         uses:
             - 'actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32'
             - 'actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c'
-    'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2':
-        ref: 'v4.38.2'
-        commit: 'sha1-2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
+    'github/codeql-action@24c54180a607b1449ed407dd24f251e4e9147c8d':
+        ref: 'v4.38.3'
+        commit: 'sha1-24c54180a607b1449ed407dd24f251e4e9147c8d'
         owner_id: 9919
         repo_id: 259445878
     'release-drafter/release-drafter@v7.10.0':
@@ -77,9 +77,9 @@ dependencies:
         commit: 'sha1-978bb0b30c5ee8cdd332ced253758157150d43f0'
         owner_id: 58292376
         repo_id: 139022359
-    'reviewdog/action-actionlint@v1.80.4':
-        ref: 'v1.80.4'
-        commit: 'sha1-419a49378266e892f40c773b4f2fc6de9aa87499'
+    'reviewdog/action-actionlint@v1.80.6':
+        ref: 'v1.80.6'
+        commit: 'sha1-48e36f54d8da326b83ab061aee2cc5e01b5ca46f'
         owner_id: 48765237
         repo_id: 385059686
     'reviewdog/action-golangci-lint@v2.10.2':
@@ -114,10 +114,10 @@ dependencies:
         uses:
             - 'aquaproj/aqua-installer@11dd79b4e498d471a9385aa9fb7f62bb5f52a73c'
             - 'srz-zumix/aqua-installer-cache@b0c06a58d8c2a2c9a7381c7e722675d1f4b68a5c'
-    'zizmorcore/zizmor-action@v0.7.1':
-        ref: 'v0.7.1'
-        commit: 'sha1-85b2b9fb8e3325e7a23d7d0a9d7ba5ae0f999e3e'
+    'zizmorcore/zizmor-action@v0.8.0':
+        ref: 'v0.8.0'
+        commit: 'sha1-53290badfa369cb0bf7ad16342cb62c2fa47ac7b'
         owner_id: 210636713
         repo_id: 985558803
         uses:
-            - 'github/codeql-action@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2'
+            - 'github/codeql-action@24c54180a607b1449ed407dd24f251e4e9147c8d'
