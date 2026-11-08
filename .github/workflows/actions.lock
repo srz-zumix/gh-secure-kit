@@ -7,7 +7,7 @@ workflows:
         - 'actions/checkout@v7.0.1'
         - 'actions/setup-go@v7.0.0'
     '.github/workflows/labeler.yml':
-        - 'srz-zumix/labeler-action@v0.10.0'
+        - 'srz-zumix/labeler-action@v0.11.0'
     '.github/workflows/release-drafter.yml':
         - 'release-drafter/release-drafter@v7.10.0'
     '.github/workflows/release.yml':
@@ -15,7 +15,7 @@ workflows:
         - 'cli/gh-extension-precompile@v2.2.0'
     '.github/workflows/reviewdog.yml':
         - 'actions/checkout@v7.0.1'
-        - 'reviewdog/action-actionlint@v1.80.6'
+        - 'reviewdog/action-actionlint@v1.81.1'
         - 'reviewdog/action-golangci-lint@v2.10.2'
         - 'reviewdog/action-shellcheck@v1.34.1'
     '.github/workflows/zizmor.yml':
@@ -34,9 +34,9 @@ dependencies:
         commit: 'sha1-59d89421af93a897026c735860bf21b6eb4f7b26'
         owner_id: 44036562
         repo_id: 760701061
-    'actions/cache@v4':
-        ref: 'v4'
-        commit: 'sha1-0057852bfaa89a56745cba8c7296529d2fc39830'
+    'actions/cache@v5':
+        ref: 'v5'
+        commit: 'sha1-caa296126883cff596d87d8935842f9db880ef25'
         owner_id: 44036562
         repo_id: 215566462
     'actions/checkout@v7.0.1':
@@ -54,9 +54,9 @@ dependencies:
         commit: 'sha1-b7ad1dad31e06c5925ef5d2fc7ad053ef454303e'
         owner_id: 44036562
         repo_id: 192624594
-    'aquaproj/aqua-installer@11dd79b4e498d471a9385aa9fb7f62bb5f52a73c':
-        ref: 'v4.0.4'
-        commit: 'sha1-11dd79b4e498d471a9385aa9fb7f62bb5f52a73c'
+    'aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e':
+        ref: 'v4.0.5'
+        commit: 'sha1-96a9bc20066c5bf5e275b41019cfc165b25f4e2e'
         owner_id: 95116411
         repo_id: 400140776
     'cli/gh-extension-precompile@v2.2.0':
@@ -77,9 +77,9 @@ dependencies:
         commit: 'sha1-978bb0b30c5ee8cdd332ced253758157150d43f0'
         owner_id: 58292376
         repo_id: 139022359
-    'reviewdog/action-actionlint@v1.80.6':
-        ref: 'v1.80.6'
-        commit: 'sha1-48e36f54d8da326b83ab061aee2cc5e01b5ca46f'
+    'reviewdog/action-actionlint@v1.81.1':
+        ref: 'v1.81.1'
+        commit: 'sha1-619a81ec64ff8c0211cd6146eb2b21e8f1d7f440'
         owner_id: 48765237
         repo_id: 385059686
     'reviewdog/action-golangci-lint@v2.10.2':
@@ -99,21 +99,21 @@ dependencies:
         repo_id: 211116201
         uses:
             - 'reviewdog/action-setup@d8a7baabd7f3e8544ee4dbde3ee41d0011c3a93f'
-    'srz-zumix/aqua-installer-cache@b0c06a58d8c2a2c9a7381c7e722675d1f4b68a5c':
-        ref: 'v0.2.0'
-        commit: 'sha1-b0c06a58d8c2a2c9a7381c7e722675d1f4b68a5c'
+    'srz-zumix/aqua-installer-cache@ac75fd8ae6d84e379f31f58bea79c04e24fe80cc':
+        ref: 'v1.0.0'
+        commit: 'sha1-ac75fd8ae6d84e379f31f58bea79c04e24fe80cc'
         owner_id: 1439172
         repo_id: 1122986566
         uses:
-            - 'actions/cache@v4'
-    'srz-zumix/labeler-action@v0.10.0':
-        ref: 'v0.10.0'
-        commit: 'sha1-1b79cc935fc4ae393f5ecc2b8f0a7cd10cae75eb'
+            - 'actions/cache@v5'
+    'srz-zumix/labeler-action@v0.11.0':
+        ref: 'v0.11.0'
+        commit: 'sha1-850b114f641f00a443731e54ca269c12a18112ce'
         owner_id: 1439172
         repo_id: 1043746088
         uses:
-            - 'aquaproj/aqua-installer@11dd79b4e498d471a9385aa9fb7f62bb5f52a73c'
-            - 'srz-zumix/aqua-installer-cache@b0c06a58d8c2a2c9a7381c7e722675d1f4b68a5c'
+            - 'aquaproj/aqua-installer@96a9bc20066c5bf5e275b41019cfc165b25f4e2e'
+            - 'srz-zumix/aqua-installer-cache@ac75fd8ae6d84e379f31f58bea79c04e24fe80cc'
     'zizmorcore/zizmor-action@v0.8.0':
         ref: 'v0.8.0'
         commit: 'sha1-53290badfa369cb0bf7ad16342cb62c2fa47ac7b'
