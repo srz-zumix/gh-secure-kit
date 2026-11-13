@@ -11,7 +11,7 @@ require (
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/spf13/cobra v1.10.2
 	github.com/srz-zumix/gh-diet-kit v0.6.0
-	github.com/srz-zumix/go-gh-extension v0.7.6
+	github.com/srz-zumix/go-gh-extension v0.7.10
 )
 
 require (
@@ -92,7 +92,7 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20240915155400-7ee5256398cf // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/spf13/pflag v1.1.0 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/thlib/go-timezone-local v0.0.9 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect

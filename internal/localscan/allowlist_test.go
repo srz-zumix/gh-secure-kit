@@ -39,7 +39,7 @@ func TestAllowlistNilIsNeverAllowed(t *testing.T) {
 	}
 }
 
-func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
+func TestAllowlistDefaultsAllowKnownDummyCredentials(t *testing.T) {
 	al := &Allowlist{}
 
 	tests := []struct {
@@ -56,6 +56,10 @@ func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
 		{"noncanonical valid secret ending in EXAMPLEKEY is a finding", "aws_secret_access_key", `aws_secret_access_key = "0000000000000000000000000000000EXAMPLEKEY"`, false},
 		{"custom pattern ending in EXAMPLE is not suppressed", "custom_token", "SECRET_EXAMPLE", false},
 		{"other provider ending in EXAMPLE is not suppressed", "github_personal_access_token", "ghp_EXAMPLE", false},
+		{"agent placeholder github token", "github_personal_access_token", "ghp_invalidinvalidinvalidinvalidinvalid00", true},
+		{"agent placeholder github token in assignment", "github_personal_access_token", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00", true},
+		{"similar github token is a finding", "github_personal_access_token", "ghp_invalidinvalidinvalidinvalidinvalid01", false},
+		{"agent placeholder under another pattern is not suppressed", "custom_token", "ghp_invalidinvalidinvalidinvalidinvalid00", false},
 	}
 
 	for _, tt := range tests {
@@ -65,5 +69,32 @@ func TestAllowlistDefaultsAllowAWSDocumentationExamples(t *testing.T) {
 				t.Errorf("Allowed() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAllowlistDefaultsMatchPrefixOfOverlongSample(t *testing.T) {
+	al := &Allowlist{}
+	f := Finding{PatternID: "github_personal_access_token"}
+	prefix := "ghp_invalidinvalidinvalidinvalidinvalid0"
+
+	tests := []struct {
+		name string
+		line string
+		want bool
+	}{
+		{"complete placeholder on line", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00", true},
+		{"different trailing character", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid01", false},
+		{"truncated placeholder", "GH_TOKEN=" + prefix, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := al.Allowed(f, prefix, tt.line); got != tt.want {
+				t.Errorf("Allowed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+	if al.Allowed(f, "", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00") {
+		t.Error("empty match should not be allowed")
 	}
 }

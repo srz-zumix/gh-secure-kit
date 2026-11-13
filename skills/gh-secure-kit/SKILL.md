@@ -1,12 +1,14 @@
 ---
 name: gh-secure-kit
-description: gh-secure-kit is a GitHub CLI extension for security-related dependency management and workflow analysis. Use it to lint GitHub Actions workflows, analyze workflow dependencies, list SBOM packages, Git submodules, and Unity package manifests, and check/apply recommended GitHub security settings — all directly from the command line via `gh secure-kit`.
+description: gh-secure-kit is a GitHub CLI extension for security-related dependency management and workflow analysis. Use it to scan GitHub Actions job logs for secrets, lint workflows, analyze workflow dependencies, list SBOM packages, Git submodules, and Unity package manifests, and check/apply recommended GitHub security settings — all directly from the command line via `gh secure-kit`.
 ---
 
 # gh-secure-kit
 
 A GitHub CLI extension (`gh secure-kit`) to manage and inspect GitHub security-related dependencies and workflows.
-It supports GitHub Actions workflow linting and dependency analysis, SBOM-based package listing, Git submodule listing, Unity package inspection, and checking/applying a catalog of recommended GitHub security settings.
+It supports secret scanning of GitHub Actions job logs, workflow linting and
+dependency analysis, SBOM-based package listing, Git submodule listing, Unity
+package inspection, and checking/applying recommended GitHub security settings.
 
 ## Prerequisites
 
@@ -117,6 +119,7 @@ gh secure-kit                      # Root command
 ├── secret-scanning                # Secret scanning subcommands
 │   ├── disable                    # Disable secret scanning for an org
 │   ├── enable                     # Enable secret scanning for an org
+│   ├── actions                    # Scan GitHub Actions job logs for secrets
 │   ├── alerts                     # Secret scanning alerts subcommands
 │   │   ├── get                    # Get a single secret scanning alert
 │   │   ├── list                   # List secret scanning alerts
@@ -1837,6 +1840,261 @@ gh secure-kit secret-scanning push-protection update \
   --custom-pattern "other_pattern:2=not_set"
 ```
 
+### Scan GitHub Actions job logs (gh secure-kit secret-scanning actions)
+
+```sh
+gh secure-kit secret-scanning actions [flags]
+```
+
+Scan job logs from one repository using the local scanner's built-in and custom
+patterns. By default, the latest completed run of each workflow is selected,
+and jobs are scanned round-robin across workflows before older runs are
+considered. This is an independent implementation, not GitHub's official
+secret scanning. GitHub may already have masked values in the logs, so a scan
+cannot recover those values or prove that no secret was exposed.
+
+All flags are optional. `--workflow` accepts an ID, a case-insensitive name,
+or a case-sensitive workflow path or filename. Each selector must identify
+one workflow. `--job` accepts an ID or an exact, case-sensitive job name; a
+name matches every such job in the selected runs. Repeat either flag to select
+multiple values. Numeric selectors must be positive IDs. With `--run` or only
+job IDs, workflow names and paths come from the resolved runs' metadata.
+
+`--run` accepts positive run IDs or HTTPS GitHub Actions URLs. Repeat the flag
+for multiple targets; numeric IDs may also be comma-separated. A run ID or run
+URL selects the latest attempt, an `/attempts/<number>` URL selects that exact
+attempt, and a `/job/<id>` URL selects only that job. A job URL may also include
+`/attempts/<number>` before `/job/<id>`; its run and attempt must match the job.
+Query strings and fragments are ignored. Multiple targets are combined per run:
+for example, a run URL and an older job URL select both the latest attempt and
+that older job. Duplicate jobs are scanned once.
+
+The URL supplies the repository unless `--repo` is given. All URLs must name
+the same host and repository, and an explicit `--repo` must match them.
+Without a host in `--repo`, the default `gh` host is used. A URL host must be
+GitHub.com, configured in `gh` (including through `GH_HOST`), or explicitly
+named in a matching `--repo HOST/OWNER/REPO`. Credentials for a different
+default host are never used as a fallback for an inferred URL host. For GitHub
+App authentication without a host-specific token, set `GH_HOST` to the URL host.
+
+When `--run` is specified, only its selected targets are scanned; `--workflow`
+and `--job` further restrict them. An explicit `--job` ID can select an older
+attempt or a run outside the normal history limit. With `--run`, it must match
+the selected targets, except that a plain run ID or run URL also permits an
+older job from that run. Each requested job name must match; conflicting or
+unknown selectors are errors. `--run` cannot be combined with
+`--runs-per-workflow`, which must be a positive integer.
+
+The latest attempt is fixed when each run is selected. A partial rerun includes
+only jobs belonging to that attempt; earlier attempts are not merged unless
+explicitly selected. Skipped jobs that did not run are not downloaded.
+Completed jobs are scanned regardless of conclusion.
+
+`--max-jobs-per-hour` limits job-log acquisition starts in this process over
+the preceding 60 minutes. The command waits when the limit is reached, and
+failed acquisitions count. `0` disables the limit; negative values are invalid.
+Metadata API requests and storage transfers are not separately rate-limited.
+Other processes and earlier invocations are not counted or coordinated. The
+limit does not guarantee avoidance of GitHub API rate limits.
+The default of `1000` keeps a scan at roughly 1000 to 2000 REST requests per
+hour, including run and job listing, which leaves headroom within the
+5000-requests-per-hour limit of a personal access token or `gh auth login`
+token. Use a lower value such as `300` with a workflow `GITHUB_TOKEN`, which is
+limited to 1000 requests per hour per repository.
+
+With `--location-url` (default: `false`), findings include a link to their
+verified step and line, in the form `#step:<number>:<line>`. Text output shows
+the link with each finding, and JSON adds `location_url` when available. The
+existing `start_line` remains the line in the complete job log.
+
+After scanning, the command downloads the exact run-attempt log ZIP once for
+each attempt with findings. It makes no archive request when no secrets are
+found. The ZIP can include other jobs' logs, but only selected job logs are
+secret-scanned. Archive and additional step-log requests and downloads are not
+covered by `--max-jobs-per-hour` and consume additional API requests and bandwidth.
+Archives are processed in memory and are limited to 256 MiB compressed,
+100000 entries, 128 MiB per extracted entry, 1 GiB of total extraction work
+per archive, and a 1 GiB fallback-search budget per job. Exceeding a limit is
+an error.
+
+If the ZIP has a verified complete job log but lacks usable step logs, the
+command also downloads each non-skipped step's log once for that selected job.
+This fallback runs only for jobs with unresolved findings and consumes up to
+one additional API request and download per step. Steps are not secret-scanned
+again. Step downloads are limited to 128 MiB each and 1 GiB total per job,
+with a separate 1 GiB matching-search budget per job.
+
+The command verifies job-log contents and step boundaries before creating a
+line link. The fallback removes initial UTF-8 BOMs and timestamp prefixes,
+preserves line numbers, and requires a unique complete step-log match; it never
+infers line locations from step timestamps alone.
+Missing, changed, or ambiguous log data produces a warning and
+retains the job URL instead of guessing. If scanning stops with an error,
+already collected findings are reported without fetching additional archives.
+
+Repository Actions read permission is required. Missing or expired job logs
+(HTTP 404 or 410) produce warnings. Unavailable run archives or step logs
+(HTTP 404 or 410) also produce warnings. GitHub may also return 404 to hide a
+permission problem, so unavailable logs must not be interpreted as clean.
+
+Transient failures are retried before they are treated as errors: HTTP 502,
+503, and 504 responses and network failures up to 3 times, and HTTP 500 once,
+waiting 2, 4, and 8 seconds (plus a small random delay) or the `Retry-After`
+period. A `Retry-After` longer than one minute is not waited for. Each retry is
+reported on stderr, can be interrupted with Ctrl-C, and is not counted against
+`--max-jobs-per-hour`.
+
+Other errors for an individual workflow, run, job, or location lookup, and
+transient failures that persist after retrying, do not stop the scan: the
+affected target is skipped, counted in the coverage line as a failed job, run
+(job listing), or workflow (run listing), and the scan continues with the
+remaining targets. All such errors are printed together
+at the end, after the findings and the coverage line. Authentication,
+permission, and rate-limit failures (HTTP 401, 403, 429, or a GitHub rate-limit
+response) stop the scan immediately, as do 10 consecutive errors, which usually
+indicate a GitHub outage. Errors while resolving explicit `--run` or `--job`
+targets or listing workflows also stop the scan. Findings already collected
+are output even if a later error stops the scan. Findings are grouped by
+workflow, run, attempt, and job; `--format json` includes this metadata.
+`--jq` and `--template` require `--format json`. Coverage and warnings are
+written to stderr; filtered counts refer to listed jobs. A finding or any
+error causes a nonzero exit; otherwise the exit status is 0, even when logs were
+unavailable.
+
+Interrupting the scan (Ctrl-C) stops job log acquisition, including a wait for
+`--max-jobs-per-hour`, and outputs the findings from the job logs scanned so far
+instead of an error. The coverage line is preceded by a note that the results
+are partial. A log whose download was interrupted is not scanned, and
+`--location-url` links are not resolved after an interruption; rerun with
+`--run <job URL> --location-url` to resolve them. An interrupted scan exits with
+status 1 if any secret was found and 130 otherwise.
+
+Detected values and matching metadata are masked by default. `--show-secret`
+reveals them and can place secrets in terminal or workflow logs. Recognized
+Actions timestamp prefixes are removed before scanning without changing line
+numbers. The configuration is auto-discovered in the current directory or
+specified with `--config`; see
+[local configuration](#local-secret-scanning-configuration-file).
+For allowlist paths, each job log has the virtual path
+`actions/jobs/<job-id>.log`; allowlist commits match the run's head SHA.
+Logs are processed in memory and are not saved to disk.
+
+```sh
+# Scan the latest completed run of each workflow
+gh secure-kit secret-scanning actions
+
+# Select workflows and jobs by name
+gh secure-kit secret-scanning actions \
+  --workflow build.yml --workflow Release --job build
+
+# Scan only two specified runs
+gh secure-kit secret-scanning actions --run 123456 --run 123457
+
+# Scan a particular job using its URL (the repository is inferred)
+gh secure-kit secret-scanning actions \
+  --run 'https://github.com/example-owner/example-repo/actions/runs/123456/job/234567'
+
+# Include verified links to the detected step and log line
+gh secure-kit secret-scanning actions \
+  --location-url \
+  --run 'https://github.com/example-owner/example-repo/actions/runs/123456/job/234567'
+
+# Scan exactly the second attempt of a run
+gh secure-kit secret-scanning actions \
+  --run 'https://github.com/example-owner/example-repo/actions/runs/123456/attempts/2'
+
+# Include three runs per workflow and start at most 50 log requests per hour
+gh secure-kit secret-scanning actions \
+  --runs-per-workflow 3 --max-jobs-per-hour 50
+
+# Scan a specific job and produce JSON
+gh secure-kit secret-scanning actions --job 234567 --format json
+```
+
+Explicitly selected attempts must be completed unless `--allow-in-progress` is
+set. A completed older attempt can be selected even while a later attempt is
+running. That flag requires `--run`, scans only completed jobs, and warns about
+unfinished jobs. It does not wait for them. A job scanning its own run cannot
+download its own log before it completes. For example, this post-processing job
+can scan `build` but not itself:
+
+```yaml
+name: Build
+on: workflow_dispatch
+permissions:
+  actions: read
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Build complete"
+  scan:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install the extension
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install srz-zumix/gh-secure-kit
+      - name: Scan completed jobs in this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh secure-kit secret-scanning actions \
+            --repo "$GITHUB_REPOSITORY" --run "$GITHUB_RUN_ID" \
+            --allow-in-progress
+```
+
+To include the final job of the target run, use a separate workflow triggered
+after it completes. Replace `Build` with the target workflow's name, and ensure
+this listener exists on the default branch:
+
+```yaml
+name: Scan completed workflow logs
+on:
+  workflow_run:
+    workflows: ["Build"]
+    types: [completed]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install the extension
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install srz-zumix/gh-secure-kit
+      - name: Scan the completed run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          gh secure-kit secret-scanning actions \
+            --repo "$GITHUB_REPOSITORY" --run "$TARGET_RUN_ID"
+```
+
+**Flags:**
+
+| Flag | Short | Default | Description |
+| ---- | ----- | ------- | ----------- |
+| `--allow-in-progress` | | `false` | Allow unfinished explicit runs |
+| `--config` | | Auto-discover | Local scanner configuration path |
+| `--format` | | Text | Output format: `json` |
+| `--job` | | All jobs | Job ID or exact name; repeatable |
+| `--jq` | `-q` | None | Filter JSON with a jq expression |
+| `--location-url` | | `false` | Add verified step-line links on findings |
+| `--max-jobs-per-hour` | | `1000` | Starts per rolling hour; `0` is unlimited |
+| `--repo` | `-R` | URL or current repo | `[HOST/]OWNER/REPO` |
+| `--run` | | None | Run ID or URL; repeatable; IDs may be comma-separated |
+| `--runs-per-workflow` | | `1` | Number of completed runs per workflow |
+| `--show-secret` | | `false` | Show full secrets and matching metadata |
+| `--template` | `-t` | None | Format JSON with a Go template |
+| `--workflow` | | All workflows | Workflow ID, name, or path; repeatable |
+
 ### Scan dangling commits for secrets (gh secure-kit secret-scanning dangling-commits)
 
 ```sh
@@ -2207,7 +2465,11 @@ gh secure-kit secret-scanning local hook uninstall pre-commit
 
 ### Local secret scanning configuration file
 
-`secret-scanning local check`, `secret-scanning local copilot` and `secret-scanning local patterns` read an optional YAML configuration file. It is auto-discovered as `.gh-secure-kit-secret-scanning.yml` in the scanned directory (the current directory for `copilot`), or specified explicitly with `--config`.
+`secret-scanning local check`, `secret-scanning local copilot`,
+`secret-scanning local patterns`, and `secret-scanning actions` read an optional
+YAML configuration file. It is auto-discovered as
+`.gh-secure-kit-secret-scanning.yml` in the scanned directory (the current
+directory for `copilot` and `actions`), or specified explicitly with `--config`.
 
 ```yaml
 patterns:
@@ -2238,6 +2500,8 @@ allowlist:
 - `paths`: glob pattern (`filepath.Match`) or substring match against the file path
 - `commits`: full commit SHA, exact match
 - `stopwords`: literal substrings checked against the whole line containing the match
+
+Independently of the configuration, a few well-known dummy credentials are always suppressed by exact value: the AWS documentation sample access keys (for example `AKIAIOSFODNN7EXAMPLE`) and the placeholder GitHub token `ghp_invalidinvalidinvalidinvalidinvalid00` used by coding agents. Similar-looking values are still reported.
 
 ### Get secret scanning scan history for a repository (gh secure-kit secret-scanning scan-history)
 

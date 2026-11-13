@@ -6,8 +6,9 @@ import (
 	"strings"
 )
 
-// defaultAllowlistValues maps a built-in AWS pattern ID to the exact
-// documentation sample credentials AWS publishes throughout its docs. Only
+// defaultAllowlistValues maps a built-in pattern ID to well-known dummy
+// credentials: the documentation sample credentials AWS publishes throughout
+// its docs, and the placeholder GitHub token used by coding agents. Only
 // these exact fixtures are suppressed regardless of user config, so a real
 // credential that merely shares the "EXAMPLE"/"EXAMPLEKEY" suffix is still
 // reported instead of being silently discarded. The list is intentionally not
@@ -24,6 +25,9 @@ var defaultAllowlistValues = map[string][]string{
 	"aws_secret_access_key": {
 		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 		"je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY",
+	},
+	"github_personal_access_token": {
+		"ghp_invalidinvalidinvalidinvalidinvalid00",
 	},
 }
 
@@ -46,6 +50,11 @@ func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
 	if samples, ok := defaultAllowlistValues[f.PatternID]; ok {
 		for _, sample := range samples {
 			if strings.Contains(matchedText, sample) {
+				return true
+			}
+			// A fixed-length pattern may match only a prefix of an overlong
+			// sample, so require the complete sample on the same line.
+			if matchedText != "" && strings.HasPrefix(sample, matchedText) && strings.Contains(lineText, sample) {
 				return true
 			}
 		}
