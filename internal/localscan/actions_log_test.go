@@ -3,7 +3,6 @@ package localscan
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,8 +10,16 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/iotest"
 	"time"
 )
+
+func writeActionsResponse(t *testing.T, w http.ResponseWriter, body string) {
+	t.Helper()
+	if _, err := io.WriteString(w, body); err != nil {
+		t.Errorf("failed to write actions response: %v", err)
+	}
+}
 
 func testActionsOptions() ActionsScanOptions {
 	return ActionsScanOptions{RunsPerWorkflow: 1, MaxJobsPerHour: 100}
@@ -185,7 +192,7 @@ func TestDownloadActionsLogAndStatusClassification(t *testing.T) {
 		case "/redirect":
 			http.Redirect(w, r, "/log?signature=synthetic-value", http.StatusFound)
 		case "/log":
-			fmt.Fprint(w, "example log")
+			writeActionsResponse(t, w, "example log")
 		case "/missing":
 			w.WriteHeader(http.StatusNotFound)
 		case "/gone":
@@ -274,13 +281,100 @@ func TestDownloadActionsLogSanitizesNetworkErrors(t *testing.T) {
 	}
 }
 
+type actionsTestReadCloser struct {
+	reader   io.Reader
+	closeErr error
+	closes   int
+}
+
+func (b *actionsTestReadCloser) Read(p []byte) (int, error) {
+	return b.reader.Read(p)
+}
+
+func (b *actionsTestReadCloser) Close() error {
+	b.closes++
+	return b.closeErr
+}
+
+func TestDownloadActionsContentClosesResponse(t *testing.T) {
+	unsafeErr := errors.New("https://example.invalid/log?signature=synthetic-value")
+	tests := []struct {
+		name        string
+		status      int
+		readErr     error
+		closeErr    error
+		wantIs      error
+		wantBody    string
+		wantStatus  string
+		unavailable bool
+		fatal       bool
+		retries     int
+	}{
+		{name: "success", status: http.StatusOK, wantBody: "example log"},
+		{name: "close failure", status: http.StatusOK, closeErr: unsafeErr},
+		{name: "transient close failure", status: http.StatusOK, closeErr: io.ErrUnexpectedEOF, retries: 3},
+		{name: "close cancellation", status: http.StatusOK, closeErr: context.Canceled, wantIs: context.Canceled},
+		{name: "close deadline", status: http.StatusOK, closeErr: context.DeadlineExceeded, wantIs: context.DeadlineExceeded},
+		{name: "read cancellation and close failure", status: http.StatusOK, readErr: context.Canceled, closeErr: unsafeErr, wantIs: context.Canceled},
+		{name: "missing", status: http.StatusNotFound, closeErr: unsafeErr, wantStatus: "404", unavailable: true},
+		{name: "gone", status: http.StatusGone, closeErr: unsafeErr, wantStatus: "410", unavailable: true},
+		{name: "forbidden", status: http.StatusForbidden, closeErr: unsafeErr, wantStatus: "403", fatal: true},
+		{name: "rate limited", status: http.StatusTooManyRequests, closeErr: unsafeErr, wantStatus: "429", fatal: true},
+		{name: "gateway failure", status: http.StatusBadGateway, closeErr: unsafeErr, wantStatus: "502", retries: 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := io.Reader(strings.NewReader("example log"))
+			if tt.readErr != nil {
+				reader = iotest.ErrReader(tt.readErr)
+			}
+			responseBody := &actionsTestReadCloser{reader: reader, closeErr: tt.closeErr}
+			client := &http.Client{Transport: verificationRoundTripper(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: tt.status,
+					Header:     http.Header{"Retry-After": []string{"2"}},
+					Body:       responseBody,
+					Request:    req,
+				}, nil
+			})}
+			body, err := downloadActionsLog(t.Context(), client, "https://example.invalid/log?signature=synthetic-value")
+			if responseBody.closes != 1 {
+				t.Fatalf("body closed %d times, want 1", responseBody.closes)
+			}
+			if tt.name == "success" {
+				if err != nil || string(body) != tt.wantBody {
+					t.Fatalf("body = %q, err = %v", body, err)
+				}
+				return
+			}
+			if err == nil || body != nil || strings.Contains(err.Error(), "signature") || strings.Contains(err.Error(), "example.invalid") {
+				t.Fatalf("body = %q, unsafe or missing error = %v", body, err)
+			}
+			if !strings.Contains(err.Error(), "closing the job log") ||
+				(tt.wantStatus != "" && !strings.Contains(err.Error(), "HTTP "+tt.wantStatus)) ||
+				(tt.readErr != nil && !strings.Contains(err.Error(), "reading the job log")) {
+				t.Fatalf("missing error context: %v", err)
+			}
+			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
+				t.Fatalf("error %v does not preserve %v", err, tt.wantIs)
+			}
+			if actionsLogUnavailable(err) != tt.unavailable || actionsFatalError(err) != tt.fatal || actionsRetryLimit(err) != tt.retries {
+				t.Fatalf("incorrect classification for %v", err)
+			}
+			if tt.wantStatus != "" && actionsRetryAfter(err) != 2*time.Second {
+				t.Fatalf("retry hint lost: %v", err)
+			}
+		})
+	}
+}
+
 func TestDownloadActionsArchiveLimit(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/at-limit" {
-			fmt.Fprint(w, "12345678")
+			writeActionsResponse(t, w, "12345678")
 			return
 		}
-		fmt.Fprint(w, "123456789")
+		writeActionsResponse(t, w, "123456789")
 	}))
 	defer server.Close()
 	content, err := downloadActionsContent(t.Context(), server.Client(), server.URL+"/at-limit", "run log archive", 8)

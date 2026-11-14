@@ -120,13 +120,13 @@ func TestActionsAPIStepFallbackAndIsolatedStorage(t *testing.T) {
 		mu.Unlock()
 		switch req.URL.Path {
 		case "/log":
-			fmt.Fprint(w, log)
+			writeActionsResponse(t, w, log)
 		case "/archive":
-			_, _ = w.Write(archive)
+			writeActionsResponse(t, w, string(archive))
 		case "/step":
 			http.Redirect(w, req, "/step-body?signature=synthetic-value", http.StatusFound)
 		case "/step-body":
-			fmt.Fprint(w, step)
+			writeActionsResponse(t, w, step)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -156,7 +156,7 @@ func TestActionsAPIStepErrorsAndDownloadLimit(t *testing.T) {
 	const path = "/repos/example-owner/example-repo/actions/jobs/4000/steps/1/logs"
 	storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.(http.Flusher).Flush()
-		fmt.Fprint(w, strings.Repeat("x", 32))
+		writeActionsResponse(t, w, strings.Repeat("x", 32))
 	}))
 	defer storage.Close()
 	for _, status := range []int{404, 410, 401, 403, 429, 500, 0} {
@@ -193,9 +193,9 @@ func TestActionsAPILocationUsesExactAttemptAndIsolatedStorage(t *testing.T) {
 		mu.Unlock()
 		switch req.URL.Path {
 		case "/log":
-			fmt.Fprint(w, log)
+			writeActionsResponse(t, w, log)
 		case "/archive":
-			_, _ = w.Write(archive)
+			writeActionsResponse(t, w, string(archive))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -295,7 +295,7 @@ func TestActionsAPIExactAttemptAndJobURLs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				fmt.Fprint(w, "fixture-token-abcdefghij\n")
+				writeActionsResponse(t, w, "fixture-token-abcdefghij\n")
 			}))
 			defer storage.Close()
 			transport := &actionsFixtureTransport{storageURL: storage.URL}
@@ -338,7 +338,7 @@ func fixtureActionsAPI(t *testing.T, transport *actionsFixtureTransport, downloa
 
 func TestActionsAPIDefaultWorkflowTraversal(t *testing.T) {
 	storage := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, "fixture-token-abcdefghij\n")
+		writeActionsResponse(t, w, "fixture-token-abcdefghij\n")
 	}))
 	defer storage.Close()
 	transport := &actionsFixtureTransport{storageURL: storage.URL}
@@ -373,7 +373,7 @@ func TestActionsAPIExplicitRunPaginationAndStorageAuthentication(t *testing.T) {
 		mu.Lock()
 		storageAuth = append(storageAuth, r.Header.Get("Authorization"))
 		mu.Unlock()
-		fmt.Fprint(w, "fixture-token-abcdefghij\n")
+		writeActionsResponse(t, w, "fixture-token-abcdefghij\n")
 	}))
 	defer storage.Close()
 	transport := &actionsFixtureTransport{storageURL: storage.URL}

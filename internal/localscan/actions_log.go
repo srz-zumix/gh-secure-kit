@@ -14,6 +14,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/repository"
 	"github.com/google/go-github/v93/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
+	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
 
 type actionsAPI interface {
@@ -185,7 +186,7 @@ func downloadActionsLog(ctx context.Context, client *http.Client, location strin
 	return downloadActionsContent(ctx, client, location, "job log", 0)
 }
 
-func downloadActionsContent(ctx context.Context, client *http.Client, location, kind string, limit int64) ([]byte, error) {
+func downloadActionsContent(ctx context.Context, client *http.Client, location, kind string, limit int64) (body []byte, err error) {
 	downloadStage := "downloading the " + kind
 	target, err := url.Parse(location)
 	if err != nil || !validActionsLogURL(target) {
@@ -210,7 +211,16 @@ func downloadActionsContent(ctx context.Context, client *http.Client, location, 
 		return nil, &actionsLogError{stage: downloadStage, cause: safeActionsNetworkError(err),
 			transient: !errors.Is(err, errActionsDownloadRedirect) && actionsTransientNetworkError(err)}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			safeErr := safeActionsNetworkError(closeErr)
+			logger.Warn("failed to close actions download response body", "error", safeErr)
+			body = nil
+			err = errors.Join(err, &actionsLogError{
+				stage: "closing the " + kind, cause: safeErr, transient: actionsTransientNetworkError(closeErr),
+			})
+		}
+	}()
 	if resp.StatusCode != http.StatusOK {
 		return nil, &actionsLogError{stage: downloadStage, status: resp.StatusCode, retryAfter: actionsRetryAfterHeader(resp.Header)}
 	}
@@ -218,7 +228,7 @@ func downloadActionsContent(ctx context.Context, client *http.Client, location, 
 	if limit > 0 {
 		reader = io.LimitReader(reader, limit+1)
 	}
-	body, err := io.ReadAll(reader)
+	body, err = io.ReadAll(reader)
 	if err != nil {
 		return nil, &actionsLogError{stage: "reading the " + kind, cause: safeActionsNetworkError(err), transient: actionsTransientNetworkError(err)}
 	}
