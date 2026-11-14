@@ -46,7 +46,7 @@ func makeActionsArchive(t *testing.T, entries ...actionsArchiveFixture) []byte {
 func actionsJobSteps(numbers ...int64) []*github.TaskStep {
 	steps := make([]*github.TaskStep, 0, len(numbers))
 	for _, number := range numbers {
-		steps = append(steps, &github.TaskStep{Number: github.Ptr(number)})
+		steps = append(steps, &github.TaskStep{Number: new(number)})
 	}
 	return steps
 }
@@ -330,6 +330,13 @@ func TestActionsLocationStepRanges(t *testing.T) {
 			steps:     []actionsArchiveFixture{{"Build/1_a.txt", "same\n"}, {"Build/3_c.txt", "unique\n"}},
 			numbers:   []int64{1, 2, 3},
 			wantLines: map[int]string{3: "3:1"},
+		},
+		{
+			name:      "overlapping repeated partial step remains ambiguous",
+			log:       "a\na\na\nextra\n",
+			steps:     []actionsArchiveFixture{{"Build/1_a.txt", "a\na\n"}},
+			numbers:   []int64{1},
+			wantLines: map[int]string{},
 		},
 		{
 			name:      "overlapping partial matches are ambiguous",

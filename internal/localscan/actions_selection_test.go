@@ -195,14 +195,14 @@ func TestActionsURLSelectionValidatesJobIdentity(t *testing.T) {
 			"attempt metadata has wrong workflow",
 			fakeActionsURL + "100/attempts/1",
 			func(api *fakeActionsAPI) {
-				api.runAttempts[actionsAttemptKey{100, 1}].WorkflowID = github.Ptr(int64(2))
+				api.runAttempts[actionsAttemptKey{100, 1}].WorkflowID = new(int64(2))
 			},
 			"inconsistent metadata",
 		},
 		{
 			"attempt metadata has wrong attempt",
 			fakeActionsURL + "100/attempts/1",
-			func(api *fakeActionsAPI) { api.runAttempts[actionsAttemptKey{100, 1}].RunAttempt = github.Ptr(2) },
+			func(api *fakeActionsAPI) { api.runAttempts[actionsAttemptKey{100, 1}].RunAttempt = new(2) },
 			"inconsistent metadata",
 		},
 		{
@@ -228,7 +228,7 @@ func TestActionsURLSelectionValidatesJobIdentity(t *testing.T) {
 func TestActionsURLSelectionUsesExactAttemptStatus(t *testing.T) {
 	t.Run("completed old attempt while latest is running", func(t *testing.T) {
 		api := fakeURLActionsAPI()
-		api.runs[100].Status = github.Ptr("in_progress")
+		api.runs[100].Status = new("in_progress")
 		opts := urlActionsOptions(t, fakeActionsURL+"100/attempts/1")
 		result, err := fakeScanActions(t, api, opts)
 		if err != nil || !reflect.DeepEqual(api.logIDs, []int64{1001}) || result.Summary.IncompleteRuns != 0 {
@@ -238,7 +238,7 @@ func TestActionsURLSelectionUsesExactAttemptStatus(t *testing.T) {
 	for _, target := range []string{"100/attempts/1", "100/job/1001"} {
 		t.Run(target, func(t *testing.T) {
 			api := fakeURLActionsAPI()
-			api.runAttempts[actionsAttemptKey{100, 1}].Status = github.Ptr("in_progress")
+			api.runAttempts[actionsAttemptKey{100, 1}].Status = new("in_progress")
 			opts := urlActionsOptions(t, fakeActionsURL+target)
 			_, err := fakeScanActions(t, api, opts)
 			if err == nil || !strings.Contains(err.Error(), "not complete") || len(api.logIDs) != 0 {
@@ -256,7 +256,7 @@ func TestActionsURLSelectionUsesExactAttemptStatus(t *testing.T) {
 func TestActionsURLSelectionWorkflowFiltering(t *testing.T) {
 	t.Run("exclude implicit URL job", func(t *testing.T) {
 		api := fakeURLActionsAPI()
-		api.runs[100].Status = github.Ptr("in_progress")
+		api.runs[100].Status = new("in_progress")
 		opts := urlActionsOptions(t, fakeActionsURL+"100/job/1001", "200")
 		opts.Workflows = []string{"release.yml"}
 		result, err := fakeScanActions(t, api, opts)
@@ -323,7 +323,7 @@ func TestActionsURLJobMissingAttemptRequiresMembership(t *testing.T) {
 
 func TestActionsExactAttemptJobAfterLatestSnapshot(t *testing.T) {
 	api := fakeURLActionsAPI()
-	api.runs[100].RunAttempt = github.Ptr(1)
+	api.runs[100].RunAttempt = new(1)
 	api.jobs[1002].RunAttempt = nil
 	opts := urlActionsOptions(t, fakeActionsURL+"100/attempts/2")
 	opts.Jobs = []string{"1002"}
@@ -336,7 +336,7 @@ func TestActionsExactAttemptJobAfterLatestSnapshot(t *testing.T) {
 func TestActionsExactAttemptJobUsesAttemptMetadata(t *testing.T) {
 	api := fakeURLActionsAPI()
 	sha := strings.Repeat("2", 40)
-	api.runAttempts[actionsAttemptKey{100, 2}].HeadSHA = github.Ptr(sha)
+	api.runAttempts[actionsAttemptKey{100, 2}].HeadSHA = new(sha)
 	opts := urlActionsOptions(t, fakeActionsURL+"100/attempts/2")
 	opts.Jobs = []string{"1002"}
 	result, err := fakeScanActions(t, api, opts)

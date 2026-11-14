@@ -27,7 +27,7 @@ func TestSuspendedUserRules(t *testing.T) {
 			t.Run(id+"/"+tc.name, func(t *testing.T) {
 				facts := &OrganizationFacts{SuspendedOwnersKnown: tc.known, SuspendedMembersKnown: tc.known}
 				if tc.suspended {
-					users := []*github.User{{Login: github.Ptr("fixture_suspended")}}
+					users := []*github.User{{Login: new("fixture_suspended")}}
 					facts.SuspendedOwners, facts.SuspendedMembers = users, users
 				}
 				if got := orgRuleOutcome(t, id, facts); got != tc.want {
@@ -49,12 +49,12 @@ func TestCollectSuspendedUsers(t *testing.T) {
 			return rulesetResponse(request, 500, `{"message":"unavailable"}`), nil
 		}
 	}))
-	users := []*github.User{{Login: github.Ptr("fixture_suspended")}, {Login: github.Ptr("fixture_active")}}
+	users := []*github.User{{Login: new("fixture_suspended")}, {Login: new("fixture_active")}}
 	got, known, err := collectSuspendedUsers(context.Background(), client, "github.example.test", users)
 	if err != nil || !known || len(got) != 1 || got[0].GetLogin() != "fixture_suspended" {
 		t.Fatalf("got %v, known %v", got, known)
 	}
-	users = append(users, &github.User{Login: github.Ptr("fixture_unknown")}, nil)
+	users = append(users, &github.User{Login: new("fixture_unknown")}, nil)
 	got, known, err = collectSuspendedUsers(context.Background(), client, "github.example.test", users)
 	if err != nil || known || len(got) != 1 {
 		t.Fatalf("partial results: got %v, known %v", got, known)
@@ -71,9 +71,9 @@ func TestCollectSuspendedUsersFromList(t *testing.T) {
 				return rulesetResponse(request, 200, `{"login":"fixture_active","suspended_at":null}`), nil
 			}))
 			users := []*github.User{
-				{Login: github.Ptr(obfuscatedLogin)},
-				{Login: github.Ptr("fixture_active")},
-				{Login: github.Ptr("fixture_timestamp"), SuspendedAt: &github.Timestamp{}},
+				{Login: new(obfuscatedLogin)},
+				{Login: new("fixture_active")},
+				{Login: new("fixture_timestamp"), SuspendedAt: &github.Timestamp{}},
 			}
 			got, known, err := collectSuspendedUsers(context.Background(), client, host, users)
 			if err != nil || !known || len(got) != 2 || got[0].GetLogin() != obfuscatedLogin || got[1].GetLogin() != "fixture_timestamp" {
@@ -103,10 +103,10 @@ func TestRunnerGroupRule(t *testing.T) {
 	}{
 		{"unknown", false, nil, StatusSkip},
 		{"empty", true, nil, StatusPass},
-		{"restricted", true, []*github.RunnerGroup{{AllowsPublicRepositories: github.Ptr(false)}}, StatusPass},
-		{"public", true, []*github.RunnerGroup{{AllowsPublicRepositories: github.Ptr(true)}}, StatusFail},
+		{"restricted", true, []*github.RunnerGroup{{AllowsPublicRepositories: new(false)}}, StatusPass},
+		{"public", true, []*github.RunnerGroup{{AllowsPublicRepositories: new(true)}}, StatusFail},
 		{"missing setting", true, []*github.RunnerGroup{{}}, StatusSkip},
-		{"partial violation", true, []*github.RunnerGroup{nil, {AllowsPublicRepositories: github.Ptr(true)}}, StatusFail},
+		{"partial violation", true, []*github.RunnerGroup{nil, {AllowsPublicRepositories: new(true)}}, StatusFail},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if got := orgRuleOutcome(t, "GSK523", &OrganizationFacts{RunnerGroupsKnown: tc.known, RunnerGroups: tc.groups}); got != tc.want {
@@ -134,14 +134,14 @@ func TestRunnerGroupApply(t *testing.T) {
 		return rulesetResponse(request, 200, `{"id":1,"allows_public_repositories":false}`), nil
 	}))
 	facts := &OrganizationFacts{RunnerGroupsKnown: true, RunnerGroups: []*github.RunnerGroup{
-		{ID: github.Ptr(int64(1)), Name: github.Ptr("fixture"), AllowsPublicRepositories: github.Ptr(true)},
-		{ID: github.Ptr(int64(2)), Name: github.Ptr("other"), AllowsPublicRepositories: github.Ptr(false)},
+		{ID: new(int64(1)), Name: new("fixture"), AllowsPublicRepositories: new(true)},
+		{ID: new(int64(2)), Name: new("other"), AllowsPublicRepositories: new(false)},
 	}}
 	repo := repository.Repository{Owner: "fixture_org"}
 	if err := rule.ApplyOrg(context.Background(), client, repo, facts); err != nil || requests != 1 {
 		t.Fatalf("requests %d, error %v", requests, err)
 	}
-	facts.RunnerGroups[0].Inherited = github.Ptr(true)
+	facts.RunnerGroups[0].Inherited = new(true)
 	if err := rule.ApplyOrg(context.Background(), client, repo, facts); err == nil || requests != 1 {
 		t.Fatalf("inherited group: requests %d, error %v", requests, err)
 	}
@@ -154,18 +154,18 @@ func TestWebhookRules(t *testing.T) {
 		active              bool
 		transport, signing  Status
 	}{
-		{"secure", "https://example.com/hook", "0", github.Ptr("********"), true, StatusPass, StatusPass},
-		{"http", "http://example.com/hook?token=hidden", "0", github.Ptr("********"), true, StatusFail, StatusPass},
-		{"insecure ssl", "https://example.com", "1", github.Ptr("********"), true, StatusFail, StatusPass},
-		{"no secret", "https://example.com", "0", github.Ptr(""), true, StatusPass, StatusFail},
+		{"secure", "https://example.com/hook", "0", new("********"), true, StatusPass, StatusPass},
+		{"http", "http://example.com/hook?token=hidden", "0", new("********"), true, StatusFail, StatusPass},
+		{"insecure ssl", "https://example.com", "1", new("********"), true, StatusFail, StatusPass},
+		{"no secret", "https://example.com", "0", new(""), true, StatusPass, StatusFail},
 		{"omitted secret", "https://example.com", "0", nil, true, StatusPass, StatusFail},
-		{"invalid url", "%%%hidden", "0", github.Ptr("********"), true, StatusSkip, StatusPass},
-		{"inactive", "http://example.com", "1", github.Ptr(""), false, StatusPass, StatusPass},
-		{"unknown ssl", "https://example.com", "unknown", github.Ptr("********"), true, StatusSkip, StatusPass},
+		{"invalid url", "%%%hidden", "0", new("********"), true, StatusSkip, StatusPass},
+		{"inactive", "http://example.com", "1", new(""), false, StatusPass, StatusPass},
+		{"unknown ssl", "https://example.com", "unknown", new("********"), true, StatusSkip, StatusPass},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			hooks := []*github.Hook{{ID: github.Ptr(int64(7)), Active: github.Ptr(tc.active), Config: &github.HookConfig{
-				URL: github.Ptr(tc.endpoint), InsecureSSL: github.Ptr(tc.ssl), Secret: tc.secret,
+			hooks := []*github.Hook{{ID: new(int64(7)), Active: new(tc.active), Config: &github.HookConfig{
+				URL: new(tc.endpoint), InsecureSSL: new(tc.ssl), Secret: tc.secret,
 			}}}
 			for _, id := range []string{"GSK144", "GSK145", "GSK524", "GSK525"} {
 				rule, _ := RuleByID(id)
@@ -198,8 +198,8 @@ func TestWebhookRules(t *testing.T) {
 			{"failed list", nil, false, StatusSkip},
 			{"empty list", nil, true, StatusPass},
 			{"nil hook", []*github.Hook{nil}, true, StatusSkip},
-			{"missing config", []*github.Hook{{Active: github.Ptr(true)}}, true, StatusSkip},
-			{"partial violation", []*github.Hook{nil, {Active: github.Ptr(true), Config: &github.HookConfig{URL: github.Ptr("http://example.com"), Secret: github.Ptr("")}}}, true, StatusFail},
+			{"missing config", []*github.Hook{{Active: new(true)}}, true, StatusSkip},
+			{"partial violation", []*github.Hook{nil, {Active: new(true), Config: &github.HookConfig{URL: new("http://example.com"), Secret: new("")}}}, true, StatusFail},
 		} {
 			if got := checkWebhooks(nil, "GSK144", tc.hooks, tc.known, secret); got.Status != tc.want {
 				t.Errorf("%s secret=%v: got %+v, want %s", tc.name, secret, got, tc.want)

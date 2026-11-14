@@ -19,7 +19,7 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 
 	if got := ruleOutcome(t, "GSK135", &RepositoryFacts{
 		EnvironmentsKnown: true,
-		Environments:      []*github.Environment{{Name: github.Ptr("production")}},
+		Environments:      []*github.Environment{{Name: new("production")}},
 	}); got != StatusSkip {
 		t.Errorf("unknown environment secrets: got %v, want skip", got)
 	}
@@ -30,7 +30,7 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	}
 
 	f = &RepositoryFacts{EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true}, Environments: []*github.Environment{
-		{Name: github.Ptr("production")},
+		{Name: new("production")},
 	}}
 	if got := ruleOutcome(t, "GSK135", f); got != StatusPass {
 		t.Errorf("environment without secrets: got %v, want pass", got)
@@ -39,7 +39,7 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production")},
+			{Name: new("production")},
 		},
 		EnvironmentSecrets: map[string][]*github.Secret{
 			"production": {{Name: "TOKEN"}},
@@ -54,8 +54,8 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production")},
-			{Name: github.Ptr("staging")},
+			{Name: new("production")},
+			{Name: new("staging")},
 		},
 		EnvironmentSecrets: map[string][]*github.Secret{
 			"production": {{Name: "TOKEN"}},
@@ -68,8 +68,8 @@ func TestGSK135EnvironmentRequiredReviewers(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
-				{Type: github.Ptr("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: github.Ptr("User")}}},
+			{Name: new("production"), ProtectionRules: []*github.ProtectionRule{
+				{Type: new("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: new("User")}}},
 			}},
 		},
 		EnvironmentSecrets: map[string][]*github.Secret{
@@ -115,7 +115,7 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 
 	if got := ruleOutcome(t, "GSK136", &RepositoryFacts{
 		EnvironmentsKnown: true,
-		Environments:      []*github.Environment{{Name: github.Ptr("production")}},
+		Environments:      []*github.Environment{{Name: new("production")}},
 	}); got != StatusSkip {
 		t.Errorf("unknown environment secrets: got %v, want skip", got)
 	}
@@ -123,11 +123,11 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	f := &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
+			{Name: new("production"), ProtectionRules: []*github.ProtectionRule{
 				{
-					Type:              github.Ptr("required_reviewers"),
-					Reviewers:         []*github.RequiredReviewer{{Type: github.Ptr("User")}},
-					PreventSelfReview: github.Ptr(false),
+					Type:              new("required_reviewers"),
+					Reviewers:         []*github.RequiredReviewer{{Type: new("User")}},
+					PreventSelfReview: new(false),
 				},
 			}},
 		},
@@ -139,11 +139,11 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
+			{Name: new("production"), ProtectionRules: []*github.ProtectionRule{
 				{
-					Type:              github.Ptr("required_reviewers"),
-					Reviewers:         []*github.RequiredReviewer{{Type: github.Ptr("User")}},
-					PreventSelfReview: github.Ptr(false),
+					Type:              new("required_reviewers"),
+					Reviewers:         []*github.RequiredReviewer{{Type: new("User")}},
+					PreventSelfReview: new(false),
 				},
 			}},
 		},
@@ -158,11 +158,11 @@ func TestGSK136EnvironmentAllowsSelfReview(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true, EnvironmentSecretsKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), ProtectionRules: []*github.ProtectionRule{
+			{Name: new("production"), ProtectionRules: []*github.ProtectionRule{
 				{
-					Type:              github.Ptr("required_reviewers"),
-					Reviewers:         []*github.RequiredReviewer{{Type: github.Ptr("User")}},
-					PreventSelfReview: github.Ptr(true),
+					Type:              new("required_reviewers"),
+					Reviewers:         []*github.RequiredReviewer{{Type: new("User")}},
+					PreventSelfReview: new(true),
 				},
 			}},
 		},
@@ -181,7 +181,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	}
 
 	f := &RepositoryFacts{EnvironmentsKnown: true, Environments: []*github.Environment{
-		{Name: github.Ptr("production")},
+		{Name: new("production")},
 	}}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
 		t.Errorf("no deployment branch policy: got %v, want fail", got)
@@ -191,7 +191,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	// effectively unrestricted on GitHub, so the outcome is indeterminate rather
 	// than a false pass.
 	f = &RepositoryFacts{EnvironmentsKnown: true, Environments: []*github.Environment{
-		{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+		{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)}},
 	}}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusSkip {
 		t.Errorf("protected branches without confirmed protection: got %v, want skip", got)
@@ -204,7 +204,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		ProtectionKnown:   true,
 		Protection:        &github.Protection{},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)}},
 		},
 	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusPass {
@@ -217,11 +217,11 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true,
 		RulesetsKnown:     true,
-		Repo:              &github.Repository{DefaultBranch: github.Ptr("main")},
+		Repo:              &github.Repository{DefaultBranch: new("main")},
 		Rulesets: []*github.RepositoryRuleset{
 			{
 				Enforcement: "active",
-				Target:      github.Ptr(github.RulesetTargetBranch),
+				Target:      new(github.RulesetTargetBranch),
 				Conditions: &github.RepositoryRulesetConditions{
 					RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~ALL"}},
 				},
@@ -231,7 +231,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 			},
 		},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)}},
 		},
 	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
@@ -244,11 +244,11 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		f = &RepositoryFacts{
 			EnvironmentsKnown: true,
 			RulesetsKnown:     true,
-			Repo:              &github.Repository{DefaultBranch: github.Ptr("main")},
+			Repo:              &github.Repository{DefaultBranch: new("main")},
 			Rulesets: []*github.RepositoryRuleset{
 				{
 					Enforcement: "active",
-					Target:      github.Ptr(github.RulesetTargetBranch),
+					Target:      new(github.RulesetTargetBranch),
 					Conditions: &github.RepositoryRulesetConditions{
 						RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{pattern}},
 					},
@@ -258,7 +258,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 				},
 			},
 			Environments: []*github.Environment{
-				{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
+				{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)}},
 			},
 		}
 		if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
@@ -272,10 +272,10 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		EnvironmentsKnown:              true,
 		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: new(true)}},
 		},
 		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
-			"production": {{Name: github.Ptr("release/*"), Type: github.Ptr("branch")}},
+			"production": {{Name: new("release/*"), Type: new("branch")}},
 		},
 	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusPass {
@@ -288,10 +288,10 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		EnvironmentsKnown:              true,
 		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: new(true)}},
 		},
 		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
-			"production": {{Name: github.Ptr("*"), Type: github.Ptr("branch")}},
+			"production": {{Name: new("*"), Type: new("branch")}},
 		},
 	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
@@ -304,12 +304,12 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 		EnvironmentsKnown:              true,
 		EnvironmentBranchPoliciesKnown: map[string]bool{"production": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: new(true)}},
 		},
 		EnvironmentBranchPolicies: map[string][]*github.DeploymentBranchPolicy{
 			"production": {
-				{Name: github.Ptr("*"), Type: github.Ptr("tag")},
-				{Name: github.Ptr("release/*"), Type: github.Ptr("branch")},
+				{Name: new("*"), Type: new("tag")},
+				{Name: new("release/*"), Type: new("branch")},
 			},
 		},
 	}
@@ -322,7 +322,7 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	f = &RepositoryFacts{
 		EnvironmentsKnown: true,
 		Environments: []*github.Environment{
-			{Name: github.Ptr("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: github.Ptr(true)}},
+			{Name: new("production"), DeploymentBranchPolicy: &github.BranchPolicy{CustomBranchPolicies: new(true)}},
 		},
 	}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusSkip {
@@ -332,8 +332,8 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 	// A definitely-unrestricted environment fails even when another environment
 	// is only indeterminate.
 	f = &RepositoryFacts{EnvironmentsKnown: true, Environments: []*github.Environment{
-		{Name: github.Ptr("staging"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)}},
-		{Name: github.Ptr("production")},
+		{Name: new("staging"), DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)}},
+		{Name: new("production")},
 	}}
 	if got := ruleOutcome(t, "GSK137", f); got != StatusFail {
 		t.Errorf("mixed unrestricted and indeterminate: got %v, want fail", got)
@@ -345,14 +345,14 @@ func TestGSK137EnvironmentDeploymentBranchPolicy(t *testing.T) {
 // remediation must preserve when it enables prevent-self-review.
 func gsk136SecretEnvironment(name string) *github.Environment {
 	return &github.Environment{
-		Name:                   github.Ptr(name),
-		DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: github.Ptr(true)},
+		Name:                   new(name),
+		DeploymentBranchPolicy: &github.BranchPolicy{ProtectedBranches: new(true)},
 		ProtectionRules: []*github.ProtectionRule{
-			{Type: github.Ptr("wait_timer"), WaitTimer: github.Ptr(30)},
+			{Type: new("wait_timer"), WaitTimer: new(30)},
 			{
-				Type:              github.Ptr("required_reviewers"),
-				PreventSelfReview: github.Ptr(false),
-				Reviewers:         []*github.RequiredReviewer{{Type: github.Ptr("User"), Reviewer: &github.User{ID: github.Ptr(int64(42))}}},
+				Type:              new("required_reviewers"),
+				PreventSelfReview: new(false),
+				Reviewers:         []*github.RequiredReviewer{{Type: new("User"), Reviewer: &github.User{ID: new(int64(42))}}},
 			},
 		},
 	}

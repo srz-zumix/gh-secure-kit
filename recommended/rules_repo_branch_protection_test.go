@@ -125,7 +125,7 @@ func branchRuleset(include, exclude []string, noRules bool) *github.RepositoryRu
 
 func factsWithRulesets(rulesets ...*github.RepositoryRuleset) *RepositoryFacts {
 	return &RepositoryFacts{
-		Repo:            &github.Repository{DefaultBranch: github.Ptr("main")},
+		Repo:            &github.Repository{DefaultBranch: new("main")},
 		Rulesets:        rulesets,
 		ProtectionKnown: true,
 		RulesetsKnown:   true,
@@ -507,9 +507,9 @@ func TestNoBranchProtectionFailsEveryBranchProtectionRule(t *testing.T) {
 
 func TestReviewRulesSkipWhenApprovalCountExceedsMembers(t *testing.T) {
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	f.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(1)), Type: new("User")}
 	f.CollaboratorsKnown = true
-	f.Collaborators = []*github.User{{Login: github.Ptr("member"), ID: github.Ptr(int64(2))}}
+	f.Collaborators = []*github.User{{Login: new("member"), ID: new(int64(2))}}
 	if got := ruleStatus(t, "GSK111", f); got != StatusPass && got != StatusFail {
 		t.Errorf("GSK111 with two members: got %v, want an evaluable result", got)
 	}
@@ -520,7 +520,7 @@ func TestReviewRulesSkipWhenApprovalCountExceedsMembers(t *testing.T) {
 
 func TestReviewRulesEvaluateForOrganizationOwnedRepository(t *testing.T) {
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{Login: github.Ptr("org"), ID: github.Ptr(int64(1)), Type: github.Ptr("Organization")}
+	f.Repo.Owner = &github.User{Login: new("org"), ID: new(int64(1)), Type: new("Organization")}
 	f.CollaboratorsKnown = true
 	// The direct-collaborator list omits team members, so an organization repo
 	// must not be classified as single-member: GSK112 must keep evaluating the
@@ -535,7 +535,7 @@ func TestReviewRulesEvaluateForOrganizationOwnedRepository(t *testing.T) {
 
 func TestOneMemberCanUseSingleApprovalRule(t *testing.T) {
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	f.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(1)), Type: new("User")}
 	f.CollaboratorsKnown = true
 	if got := ruleStatus(t, "GSK111", f); got != StatusFail {
 		t.Errorf("GSK111 with one member and no review rule: got %v, want fail", got)
@@ -729,7 +729,7 @@ func TestGSK116DeduplicatesLegacyCheckRepresentations(t *testing.T) {
 	f := &RepositoryFacts{
 		Protection: &github.Protection{
 			RequiredStatusChecks: &github.RequiredStatusChecks{
-				Checks:   &[]*github.RequiredStatusCheck{{Context: "ci", AppID: github.Ptr(int64(42))}},
+				Checks:   &[]*github.RequiredStatusCheck{{Context: "ci", AppID: new(int64(42))}},
 				Contexts: &contexts,
 			},
 		},
@@ -900,7 +900,7 @@ func TestGSK131SkipsSingleMemberRepository(t *testing.T) {
 	rule := gsk131(t)
 
 	f := factsWithRulesets()
-	f.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	f.Repo.Owner = &github.User{ID: new(int64(1)), Type: new("User")}
 	f.CollaboratorsKnown = true
 	f.Protection = &github.Protection{
 		RequiredPullRequestReviews: &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1},
@@ -920,7 +920,7 @@ func TestGSK131SkipsSingleMemberRepository(t *testing.T) {
 
 	// A second collaborator can approve, so the bypass is no longer required.
 	f.Protection.RequiredPullRequestReviews = &github.PullRequestReviewsEnforcement{RequiredApprovingReviewCount: 1}
-	f.Collaborators = []*github.User{{ID: github.Ptr(int64(2)), Type: github.Ptr("User")}}
+	f.Collaborators = []*github.User{{ID: new(int64(2)), Type: new("User")}}
 	if got := rule.CheckRepo(f).Status; got != StatusFail {
 		t.Errorf("two members: got %v, want fail", got)
 	}
@@ -931,7 +931,7 @@ func TestGSK131SingleMemberAdminBypassOnlyExemptsReviewOnlyLegacyShape(t *testin
 
 	singleMember := func(p *github.Protection) *RepositoryFacts {
 		f := factsWithRulesets()
-		f.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+		f.Repo.Owner = &github.User{ID: new(int64(1)), Type: new("User")}
 		f.CollaboratorsKnown = true
 		f.Protection = p
 		return f
@@ -983,7 +983,7 @@ func TestGSK131SingleMemberAdminBypassOnlyExemptsReviewOnlyLegacyShape(t *testin
 	rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
 	rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
 	fRulesetReview := factsWithRulesets(rs)
-	fRulesetReview.Repo.Owner = &github.User{ID: github.Ptr(int64(1)), Type: github.Ptr("User")}
+	fRulesetReview.Repo.Owner = &github.User{ID: new(int64(1)), Type: new("User")}
 	fRulesetReview.CollaboratorsKnown = true
 	fRulesetReview.Protection = &github.Protection{EnforceAdmins: &github.AdminEnforcement{Enabled: false}}
 	if got := rule.CheckRepo(fRulesetReview).Status; got != StatusFail {
@@ -1002,15 +1002,15 @@ func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 		rs.Rules.PullRequest = &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1}
 		rs.BypassActors = actors
 		f := factsWithRulesets(rs)
-		f.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+		f.Repo.Owner = &github.User{ID: new(ownerID), Type: new("User")}
 		f.CollaboratorsKnown = true
 		return f
 	}
 	ownerBypass := func() *github.BypassActor {
 		return &github.BypassActor{
-			ActorID:    github.Ptr(ownerID),
-			ActorType:  github.Ptr(github.BypassActorType("User")),
-			BypassMode: github.Ptr(github.BypassModeExempt),
+			ActorID:    new(ownerID),
+			ActorType:  new(github.BypassActorType("User")),
+			BypassMode: new(github.BypassModeExempt),
 		}
 	}
 
@@ -1022,9 +1022,9 @@ func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 	// An integration can bypass unconditionally; that actor is unrelated to the
 	// owner exemption and must still be reported.
 	integrationBypass := &github.BypassActor{
-		ActorID:    github.Ptr(int64(99)),
-		ActorType:  github.Ptr(github.BypassActorTypeIntegration),
-		BypassMode: github.Ptr(github.BypassModeAlways),
+		ActorID:    new(int64(99)),
+		ActorType:  new(github.BypassActorTypeIntegration),
+		BypassMode: new(github.BypassModeAlways),
 	}
 	if got := rule.CheckRepo(newFacts(integrationBypass)).Status; got != StatusFail {
 		t.Errorf("integration bypass: got %v, want fail", got)
@@ -1038,9 +1038,9 @@ func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 	// A pull-request-only actor is not an unconditional bypass, so an owner-only
 	// full bypass alongside it stays exempt.
 	prOnly := &github.BypassActor{
-		ActorID:    github.Ptr(int64(7)),
-		ActorType:  github.Ptr(github.BypassActorTypeRepositoryRole),
-		BypassMode: github.Ptr(github.BypassModePullRequest),
+		ActorID:    new(int64(7)),
+		ActorType:  new(github.BypassActorTypeRepositoryRole),
+		BypassMode: new(github.BypassModePullRequest),
 	}
 	if got := rule.CheckRepo(newFacts(ownerBypass(), prOnly)).Status; got != StatusSkip {
 		t.Errorf("owner plus pull-request-only actor: got %v, want skip", got)
@@ -1073,7 +1073,7 @@ func TestGSK131SingleMemberExemptionIsOwnerScoped(t *testing.T) {
 		return rs
 	}
 	fBundled := factsWithRulesets(bundled())
-	fBundled.Repo.Owner = &github.User{ID: github.Ptr(ownerID), Type: github.Ptr("User")}
+	fBundled.Repo.Owner = &github.User{ID: new(ownerID), Type: new("User")}
 	fBundled.CollaboratorsKnown = true
 	if got := rule.CheckRepo(fBundled).Status; got != StatusFail {
 		t.Errorf("owner bypass on bundled review ruleset: got %v, want fail", got)
@@ -1110,9 +1110,9 @@ func TestGSK131RulesetBypassActors(t *testing.T) {
 		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
 		rs.Name = name
 		rs.BypassActors = []*github.BypassActor{{
-			ActorID:    github.Ptr(int64(5)),
-			ActorType:  github.Ptr(github.BypassActorTypeRepositoryRole),
-			BypassMode: github.Ptr(mode),
+			ActorID:    new(int64(5)),
+			ActorType:  new(github.BypassActorTypeRepositoryRole),
+			BypassMode: new(mode),
 		}}
 		return rs
 	}

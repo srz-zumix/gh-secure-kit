@@ -41,7 +41,7 @@ func TestCollaboratorRulesSkipWhenDataUnknown(t *testing.T) {
 func TestGSK120FailsWithDirectCollaborators(t *testing.T) {
 	f := &RepositoryFacts{
 		CollaboratorsKnown: true,
-		Collaborators:      []*github.User{{Login: github.Ptr("alice")}},
+		Collaborators:      []*github.User{{Login: new("alice")}},
 	}
 	if got := ruleOutcome(t, "GSK120", f); got != StatusFail {
 		t.Fatalf("GSK120 with a direct collaborator = %s, want %s", got, StatusFail)
@@ -71,10 +71,10 @@ func TestGSK139ImmutableReleases(t *testing.T) {
 		want  Status
 	}{
 		{"unknown tags", &RepositoryFacts{}, StatusSkip},
-		{"no tags", &RepositoryFacts{HasTags: github.Ptr(false)}, StatusSkip},
-		{"status unknown", &RepositoryFacts{HasTags: github.Ptr(true)}, StatusSkip},
-		{"disabled", &RepositoryFacts{HasTags: github.Ptr(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: github.Ptr(false)}}, StatusFail},
-		{"enabled", &RepositoryFacts{HasTags: github.Ptr(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: github.Ptr(true)}}, StatusPass},
+		{"no tags", &RepositoryFacts{HasTags: new(false)}, StatusSkip},
+		{"status unknown", &RepositoryFacts{HasTags: new(true)}, StatusSkip},
+		{"disabled", &RepositoryFacts{HasTags: new(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: new(false)}}, StatusFail},
+		{"enabled", &RepositoryFacts{HasTags: new(true), ImmutableReleases: &github.RepoImmutableReleasesStatus{Enabled: new(true)}}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -91,10 +91,10 @@ func TestGSK142AllowForking(t *testing.T) {
 		repo *github.Repository
 		want Status
 	}{
-		{"public repository", &github.Repository{Visibility: github.Ptr("public"), AllowForking: github.Ptr(true)}, StatusSkip},
-		{"setting unavailable", &github.Repository{Visibility: github.Ptr("private")}, StatusSkip},
-		{"forking allowed", &github.Repository{Visibility: github.Ptr("internal"), AllowForking: github.Ptr(true)}, StatusFail},
-		{"forking disabled", &github.Repository{Visibility: github.Ptr("private"), AllowForking: github.Ptr(false)}, StatusPass},
+		{"public repository", &github.Repository{Visibility: new("public"), AllowForking: new(true)}, StatusSkip},
+		{"setting unavailable", &github.Repository{Visibility: new("private")}, StatusSkip},
+		{"forking allowed", &github.Repository{Visibility: new("internal"), AllowForking: new(true)}, StatusFail},
+		{"forking disabled", &github.Repository{Visibility: new("private"), AllowForking: new(false)}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -113,8 +113,8 @@ func TestGSK102SkipsWhenAlertsUnknownOrDisabled(t *testing.T) {
 	}{
 		{"alerts unknown", &RepositoryFacts{}, StatusSkip},
 		{"alerts disabled", &RepositoryFacts{VulnerabilityAlerts: &gh.RepositorySecurityFeatureStatus{Enabled: false}}, StatusSkip},
-		{"enabled without yml", &RepositoryFacts{VulnerabilityAlerts: &gh.RepositorySecurityFeatureStatus{Enabled: true}, HasDependabotYML: github.Ptr(false)}, StatusFail},
-		{"enabled with yml", &RepositoryFacts{VulnerabilityAlerts: &gh.RepositorySecurityFeatureStatus{Enabled: true}, HasDependabotYML: github.Ptr(true)}, StatusPass},
+		{"enabled without yml", &RepositoryFacts{VulnerabilityAlerts: &gh.RepositorySecurityFeatureStatus{Enabled: true}, HasDependabotYML: new(false)}, StatusFail},
+		{"enabled with yml", &RepositoryFacts{VulnerabilityAlerts: &gh.RepositorySecurityFeatureStatus{Enabled: true}, HasDependabotYML: new(true)}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

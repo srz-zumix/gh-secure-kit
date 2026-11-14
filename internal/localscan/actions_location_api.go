@@ -91,7 +91,7 @@ func uniqueActionsStepRange(log, step []byte, number int64) (actionsStepRange, b
 		return actionsStepRange{}, false
 	}
 	start := bytes.Index(log, step)
-	if start < 0 || bytes.Index(log[start+1:], step) >= 0 || !actionsStepAt(log, step, start) {
+	if start < 0 || bytes.Contains(log[start+1:], step) || !actionsStepAt(log, step, start) {
 		return actionsStepRange{}, false
 	}
 	first := 1 + bytes.Count(log[:start], []byte{'\n'})

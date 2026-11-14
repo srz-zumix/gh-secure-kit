@@ -218,7 +218,7 @@ func anyFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repo
 			return nil, err
 		}
 		if exists {
-			return github.Ptr(true), nil
+			return new(true), nil
 		}
 		if !ok {
 			known = false
@@ -227,7 +227,7 @@ func anyFileExists(ctx context.Context, g *gh.GitHubClient, repo repository.Repo
 	if !known {
 		return nil, nil
 	}
-	return github.Ptr(false), nil
+	return new(false), nil
 }
 
 // CollectRepositoryFacts gathers the data required to evaluate the given repository-scoped
@@ -309,7 +309,7 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 	} else if isCodeSecurityDisabled(err) {
 		// Code scanning cannot run while Code Security is disabled, so the
 		// default setup is known to be not configured.
-		f.CodeScanningSetup = &github.DefaultSetupConfiguration{State: github.Ptr("not-configured")}
+		f.CodeScanningSetup = &github.DefaultSetupConfiguration{State: new("not-configured")}
 	} else if isAccessDenied(err) {
 		return nil, err
 	}
@@ -361,7 +361,7 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		}
 	}
 	if hasTags, err := gh.HasTags(ctx, g, repo); err == nil {
-		f.HasTags = github.Ptr(hasTags)
+		f.HasTags = new(hasTags)
 		if hasTags {
 			if status, err := gh.GetRepoImmutableReleases(ctx, g, repo); err == nil {
 				f.ImmutableReleases = status

@@ -110,9 +110,9 @@ func TestBuiltinClassicPATHonorsGithubTokenOverride(t *testing.T) {
 	configs := &github.SecretScanningPatternConfigs{
 		ProviderPatternOverrides: []*github.SecretScanningPatternOverride{
 			{
-				TokenType:      github.Ptr("github_token"),
-				Setting:        github.Ptr("disabled"),
-				DefaultSetting: github.Ptr("enabled"),
+				TokenType:      new("github_token"),
+				Setting:        new("disabled"),
+				DefaultSetting: new("enabled"),
 			},
 		},
 	}

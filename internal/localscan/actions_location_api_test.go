@@ -36,7 +36,7 @@ func stepFallbackFixture(t *testing.T) (*fakeActionsAPI, ActionsScanOptions) {
 func TestActionsLocationStepAPIFallback(t *testing.T) {
 	api, opts := stepFallbackFixture(t)
 	api.jobs[1001].Steps = append(api.jobs[1001].Steps, &github.TaskStep{
-		Number: github.Ptr(int64(2)), Conclusion: github.Ptr("skipped"),
+		Number: new(int64(2)), Conclusion: new("skipped"),
 	})
 	limiter := newActionsRateLimiter(1, nil)
 	limiter.wait = func(context.Context, time.Duration) error {
@@ -69,7 +69,7 @@ func TestActionsLocationStepAPISearchBudget(t *testing.T) {
 	api := newFakeActionsAPI()
 	job := fakeActionsJob(1001, 100, 1, "completed", "Build")
 	for number := int64(1); number <= 300; number++ {
-		job.Steps = append(job.Steps, &github.TaskStep{Number: github.Ptr(number)})
+		job.Steps = append(job.Steps, &github.TaskStep{Number: new(number)})
 		api.stepLogs[[2]int64{1001, number}] = "target\n"
 	}
 	runner := actionsRunner{api: api}
@@ -142,6 +142,7 @@ func TestNormalizedActionsStepMatching(t *testing.T) {
 		{"malformed timestamp preserved", "2026-99-99T00:00:00Z target\n", "2026-99-99T00:00:00Z target\n", 1},
 		{"malformed timestamp differs", "2026-99-99T00:00:00Z target\n", "target\n", 0},
 		{"repeated content", "target\nmiddle\ntarget\n", "target\n", 0},
+		{"overlapping repeated content", "a\na\na\n", "a\na\n", 0},
 		{"partial line", "not-target\n", "target\n", 0},
 		{"bare CR", "before\rtarget\n", "target\n", 0},
 		{"bare CR in step", "target\n", "tar\rget\n", 0},

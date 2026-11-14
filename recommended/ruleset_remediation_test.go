@@ -47,7 +47,7 @@ func rulesetResponse(request *http.Request, status int, body string) *http.Respo
 }
 
 func remediationFacts() *RepositoryFacts {
-	return &RepositoryFacts{Repo: &github.Repository{DefaultBranch: github.Ptr("main")}}
+	return &RepositoryFacts{Repo: &github.Repository{DefaultBranch: new("main")}}
 }
 
 func TestBranchProtectionRulesetRemediationCreatesMinimalGSK110Ruleset(t *testing.T) {
@@ -83,14 +83,14 @@ func TestBranchProtectionRulesetRemediationCreatesMinimalGSK110Ruleset(t *testin
 func TestBranchProtectionRulesetRemediationPreservesExistingRules(t *testing.T) {
 	target := github.RulesetTargetBranch
 	ruleset := &github.RepositoryRuleset{
-		ID:          github.Ptr(int64(1)),
+		ID:          new(int64(1)),
 		Name:        branchProtectionRulesetName,
 		Target:      &target,
 		Enforcement: "active",
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
 		},
-		BypassActors: []*github.BypassActor{{ActorID: github.Ptr(int64(2))}},
+		BypassActors: []*github.BypassActor{{ActorID: new(int64(2))}},
 		Rules: &github.RepositoryRulesetRules{
 			CommitMessagePattern: &github.PatternRuleParameters{Pattern: "ABC-*"},
 			PullRequest:          &github.PullRequestRuleParameters{RequiredApprovingReviewCount: 1},
@@ -163,13 +163,13 @@ func TestBranchProtectionRulesetRemediationUpdatePayloadStripsServerFields(t *te
 	target := github.RulesetTargetBranch
 	sourceType := github.RulesetSourceTypeRepository
 	existing := &github.RepositoryRuleset{
-		ID:                   github.Ptr(int64(1)),
+		ID:                   new(int64(1)),
 		Name:                 branchProtectionRulesetName,
 		Target:               &target,
 		Source:               "owner/repo",
 		SourceType:           &sourceType,
-		CurrentUserCanBypass: github.Ptr(github.BypassModeAlways),
-		NodeID:               github.Ptr("RRS_1"),
+		CurrentUserCanBypass: new(github.BypassModeAlways),
+		NodeID:               new("RRS_1"),
 		Links:                &github.RepositoryRulesetLinks{},
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
@@ -264,7 +264,7 @@ func TestBranchProtectionRulesetRemediationAddsStrictStatusRuleWithoutChecks(t *
 
 func TestAddOwnerBypassActorUsesExemptMode(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	facts.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(42)), Type: new("User")}
 	ruleset := &github.RepositoryRuleset{}
 	if err := addOwnerBypassActor(ruleset, facts); err != nil {
 		t.Fatalf("addOwnerBypassActor() error = %v", err)
@@ -280,7 +280,7 @@ func TestAddOwnerBypassActorUsesExemptMode(t *testing.T) {
 
 func TestAddOwnerBypassActorRejectsNonUserOwner(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("org"), ID: github.Ptr(int64(7)), Type: github.Ptr("Organization")}
+	facts.Repo.Owner = &github.User{Login: new("org"), ID: new(int64(7)), Type: new("Organization")}
 	if err := addOwnerBypassActor(&github.RepositoryRuleset{}, facts); err == nil {
 		t.Fatal("addOwnerBypassActor() with organization owner: got nil error, want rejection")
 	}
@@ -338,8 +338,8 @@ func TestCanRemediateRulesetRule(t *testing.T) {
 	}
 	known := remediationFacts()
 	known.CollaboratorsKnown = true
-	known.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
-	known.Collaborators = []*github.User{{Login: github.Ptr("reviewer"), ID: github.Ptr(int64(43))}}
+	known.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(42)), Type: new("User")}
+	known.Collaborators = []*github.User{{Login: new("reviewer"), ID: new(int64(43))}}
 	for _, id := range []string{"GSK111", "GSK112"} {
 		if !canRemediateRulesetRule(id, known) {
 			t.Errorf("%s should be allowed when member capacity is known", id)
@@ -349,18 +349,18 @@ func TestCanRemediateRulesetRule(t *testing.T) {
 
 func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	facts.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(42)), Type: new("User")}
 	existing := github.RepositoryRuleset{
-		ID:          github.Ptr(int64(9)),
+		ID:          new(int64(9)),
 		Name:        branchProtectionReviewRulesetName,
-		Target:      github.Ptr(github.RulesetTargetBranch),
+		Target:      new(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
 		},
 		Rules: &github.RepositoryRulesetRules{NonFastForward: &github.EmptyRuleParameters{}},
 	}
-	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: new(int64(9)), Name: branchProtectionReviewRulesetName}})
 	if err != nil {
 		t.Fatalf("marshal list: %v", err)
 	}
@@ -388,18 +388,18 @@ func TestApplyReviewRulesetRefusesExistingForeignRules(t *testing.T) {
 
 func TestApplyReviewRulesetRefusesExtraPullRequestParameters(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	facts.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(42)), Type: new("User")}
 	existing := github.RepositoryRuleset{
-		ID:          github.Ptr(int64(9)),
+		ID:          new(int64(9)),
 		Name:        branchProtectionReviewRulesetName,
-		Target:      github.Ptr(github.RulesetTargetBranch),
+		Target:      new(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
 		},
 		Rules: &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{RequireCodeOwnerReview: true}},
 	}
-	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: new(int64(9)), Name: branchProtectionReviewRulesetName}})
 	if err != nil {
 		t.Fatalf("marshal list: %v", err)
 	}
@@ -427,18 +427,18 @@ func TestApplyReviewRulesetRefusesExtraPullRequestParameters(t *testing.T) {
 
 func TestApplyReviewRulesetRefusesBroaderBranchScope(t *testing.T) {
 	facts := remediationFacts()
-	facts.Repo.Owner = &github.User{Login: github.Ptr("owner"), ID: github.Ptr(int64(42)), Type: github.Ptr("User")}
+	facts.Repo.Owner = &github.User{Login: new("owner"), ID: new(int64(42)), Type: new("User")}
 	existing := github.RepositoryRuleset{
-		ID:          github.Ptr(int64(9)),
+		ID:          new(int64(9)),
 		Name:        branchProtectionReviewRulesetName,
-		Target:      github.Ptr(github.RulesetTargetBranch),
+		Target:      new(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH", "refs/heads/release/*"}},
 		},
 		Rules: &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}},
 	}
-	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: github.Ptr(int64(9)), Name: branchProtectionReviewRulesetName}})
+	listBody, err := json.Marshal([]github.RepositoryRuleset{{ID: new(int64(9)), Name: branchProtectionReviewRulesetName}})
 	if err != nil {
 		t.Fatalf("marshal list: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestRulesetTargetsOnlyDefaultBranch(t *testing.T) {
 
 func TestDefaultBranchHasEnforcedPullRequest(t *testing.T) {
 	base := func() *RepositoryFacts {
-		return &RepositoryFacts{Repo: &github.Repository{DefaultBranch: github.Ptr("main")}, RulesetsKnown: true}
+		return &RepositoryFacts{Repo: &github.Repository{DefaultBranch: new("main")}, RulesetsKnown: true}
 	}
 	if defaultBranchHasEnforcedPullRequest(base()) {
 		t.Error("no protection should not be treated as enforced pull request")
@@ -519,7 +519,7 @@ func TestDefaultBranchHasEnforcedPullRequest(t *testing.T) {
 
 	rulesetNoBypass := base()
 	rulesetNoBypass.Rulesets = []*github.RepositoryRuleset{{
-		Target:      github.Ptr(github.RulesetTargetBranch),
+		Target:      new(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
@@ -532,13 +532,13 @@ func TestDefaultBranchHasEnforcedPullRequest(t *testing.T) {
 
 	rulesetBypass := base()
 	rulesetBypass.Rulesets = []*github.RepositoryRuleset{{
-		Target:      github.Ptr(github.RulesetTargetBranch),
+		Target:      new(github.RulesetTargetBranch),
 		Enforcement: github.RulesetEnforcementActive,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~DEFAULT_BRANCH"}},
 		},
 		Rules:        &github.RepositoryRulesetRules{PullRequest: &github.PullRequestRuleParameters{}},
-		BypassActors: []*github.BypassActor{{ActorID: github.Ptr(int64(42)), ActorType: github.Ptr(github.BypassActorType("User")), BypassMode: github.Ptr(github.BypassModeExempt)}},
+		BypassActors: []*github.BypassActor{{ActorID: new(int64(42)), ActorType: new(github.BypassActorType("User")), BypassMode: new(github.BypassModeExempt)}},
 	}}
 	if defaultBranchHasEnforcedPullRequest(rulesetBypass) {
 		t.Error("PR ruleset with a full bypass actor should not count as enforced")

@@ -166,17 +166,17 @@ func (a *fakeActionsAPI) getStepLog(ctx context.Context, jobID, number, limit in
 
 func fakeActionsRun(id, workflowID int64, attempt int, status, name, workflowPath string) *github.WorkflowRun {
 	return &github.WorkflowRun{
-		ID: github.Ptr(id), WorkflowID: github.Ptr(workflowID), RunAttempt: github.Ptr(attempt),
-		Status: github.Ptr(status), Name: github.Ptr(name), Path: github.Ptr(workflowPath),
-		HeadSHA: github.Ptr(strings.Repeat("1", 40)),
+		ID: new(id), WorkflowID: new(workflowID), RunAttempt: new(attempt),
+		Status: new(status), Name: new(name), Path: new(workflowPath),
+		HeadSHA: new(strings.Repeat("1", 40)),
 	}
 }
 
 func fakeActionsJob(id, runID, attempt int64, status, name string) *github.WorkflowJob {
 	return &github.WorkflowJob{
-		ID: github.Ptr(id), RunID: github.Ptr(runID), RunAttempt: github.Ptr(attempt),
-		Status: github.Ptr(status), Name: github.Ptr(name),
-		HTMLURL: github.Ptr(fmt.Sprintf("https://example.invalid/runs/%d/jobs/%d", runID, id)),
+		ID: new(id), RunID: new(runID), RunAttempt: new(attempt),
+		Status: new(status), Name: new(name),
+		HTMLURL: new(fmt.Sprintf("https://example.invalid/runs/%d/jobs/%d", runID, id)),
 	}
 }
 
@@ -199,8 +199,8 @@ func fakeScanActions(t *testing.T, api *fakeActionsAPI, opts ActionsScanOptions)
 func TestActionsScanRotatesWorkflowsBeforeOlderRuns(t *testing.T) {
 	api := newFakeActionsAPI()
 	api.workflows = []*github.Workflow{
-		{ID: github.Ptr(int64(1)), Name: github.Ptr("Build"), Path: github.Ptr(".github/workflows/build.yml")},
-		{ID: github.Ptr(int64(2)), Name: github.Ptr("Release"), Path: github.Ptr(".github/workflows/release.yml")},
+		{ID: new(int64(1)), Name: new("Build"), Path: new(".github/workflows/build.yml")},
+		{ID: new(int64(2)), Name: new("Release"), Path: new(".github/workflows/release.yml")},
 	}
 	first := fakeActionsRun(110, 1, 1, "completed", "Build", ".github/workflows/build.yml")
 	firstOld := fakeActionsRun(111, 1, 1, "completed", "Build", ".github/workflows/build.yml")
@@ -356,7 +356,7 @@ func TestActionsScanIncompleteRun(t *testing.T) {
 	running := fakeActionsJob(1002, 100, 2, "in_progress", "scan")
 	queued := fakeActionsJob(1003, 100, 2, "queued", "test")
 	skipped := fakeActionsJob(1004, 100, 2, "completed", "skipped")
-	skipped.Conclusion = github.Ptr("skipped")
+	skipped.Conclusion = new("skipped")
 	api.attempts[actionsAttemptKey{100, 2}] = []*github.WorkflowJob{finished, running, queued, skipped}
 	api.logs[1001] = "fixture-token-abcdefghij"
 	opts := testActionsOptions()
@@ -389,8 +389,8 @@ func TestActionsSelectorsAndPartialFindings(t *testing.T) {
 	t.Run("ambiguous workflow names", func(t *testing.T) {
 		api := newFakeActionsAPI()
 		api.workflows = []*github.Workflow{
-			{ID: github.Ptr(int64(1)), Name: github.Ptr("Build"), Path: github.Ptr(".github/workflows/one.yml")},
-			{ID: github.Ptr(int64(2)), Name: github.Ptr("build"), Path: github.Ptr(".github/workflows/two.yml")},
+			{ID: new(int64(1)), Name: new("Build"), Path: new(".github/workflows/one.yml")},
+			{ID: new(int64(2)), Name: new("build"), Path: new(".github/workflows/two.yml")},
 		}
 		opts := testActionsOptions()
 		opts.Workflows = []string{"Build"}
@@ -402,8 +402,8 @@ func TestActionsSelectorsAndPartialFindings(t *testing.T) {
 	t.Run("later metadata failure returns prior findings", func(t *testing.T) {
 		api := newFakeActionsAPI()
 		api.workflows = []*github.Workflow{
-			{ID: github.Ptr(int64(1)), Name: github.Ptr("Build")},
-			{ID: github.Ptr(int64(2)), Name: github.Ptr("Release")},
+			{ID: new(int64(1)), Name: new("Build")},
+			{ID: new(int64(2)), Name: new("Release")},
 		}
 		api.history[1] = []*github.WorkflowRun{fakeActionsRun(100, 1, 1, "completed", "Build", "")}
 		api.history[2] = []*github.WorkflowRun{fakeActionsRun(200, 2, 1, "completed", "Release", "")}
@@ -620,7 +620,7 @@ func TestActionsFindingsMaskMetadataAndRender(t *testing.T) {
 	api := newFakeActionsAPI()
 	api.runs[100] = fakeActionsRun(100, 1, 1, "completed", "workflow\t"+secret, ".github/workflows/"+secret+".yml")
 	job := fakeActionsJob(1001, 100, 1, "completed", "build\n"+secret)
-	job.HTMLURL = github.Ptr("https://example.invalid/" + secret)
+	job.HTMLURL = new("https://example.invalid/" + secret)
 	api.attempts[actionsAttemptKey{100, 1}] = []*github.WorkflowJob{job}
 	api.logs[1001] = "line\n" + secret + "\n" + secret + "\n"
 	opts := testActionsOptions()
@@ -741,9 +741,9 @@ func TestActionsCancelledBeforeDiscovery(t *testing.T) {
 func TestActionsScanContinuesAfterWorkflowErrors(t *testing.T) {
 	api := newFakeActionsAPI()
 	api.workflows = []*github.Workflow{
-		{ID: github.Ptr(int64(1)), Name: github.Ptr("Build"), Path: github.Ptr(".github/workflows/build.yml")},
-		{ID: github.Ptr(int64(2)), Name: github.Ptr("Lint"), Path: github.Ptr(".github/workflows/lint.yml")},
-		{ID: github.Ptr(int64(3)), Name: github.Ptr("Release"), Path: github.Ptr(".github/workflows/release.yml")},
+		{ID: new(int64(1)), Name: new("Build"), Path: new(".github/workflows/build.yml")},
+		{ID: new(int64(2)), Name: new("Lint"), Path: new(".github/workflows/lint.yml")},
+		{ID: new(int64(3)), Name: new("Release"), Path: new(".github/workflows/release.yml")},
 	}
 	api.runErrors[1] = &github.ErrorResponse{Response: &http.Response{StatusCode: http.StatusBadGateway}, Message: "fixture outage"}
 	api.history[2] = []*github.WorkflowRun{fakeActionsRun(200, 2, 1, "completed", "Lint", ".github/workflows/lint.yml")}

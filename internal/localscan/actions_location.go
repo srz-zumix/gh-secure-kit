@@ -602,7 +602,7 @@ func (a *actionsLogArchive) stepRanges(ctx context.Context, log []byte, steps []
 			return nil, err
 		}
 		start := bytes.Index(log, content)
-		if start < 0 || bytes.Index(log[start+1:], content) >= 0 || !actionsStepAt(log, content, start) {
+		if start < 0 || bytes.Contains(log[start+1:], content) || !actionsStepAt(log, content, start) {
 			continue
 		}
 		end := start + len(content)

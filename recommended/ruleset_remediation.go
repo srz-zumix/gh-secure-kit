@@ -365,14 +365,14 @@ func addOwnerBypassActor(ruleset *github.RepositoryRuleset, facts *RepositoryFac
 	const userActorType github.BypassActorType = "User"
 	for _, actor := range ruleset.BypassActors {
 		if actor.GetActorID() == owner.GetID() && actor.GetActorType() != nil && *actor.GetActorType() == userActorType {
-			actor.BypassMode = github.Ptr(github.BypassModeExempt)
+			actor.BypassMode = new(github.BypassModeExempt)
 			return nil
 		}
 	}
 	ruleset.BypassActors = append(ruleset.BypassActors, &github.BypassActor{
-		ActorID:    github.Ptr(owner.GetID()),
-		ActorType:  github.Ptr(userActorType),
-		BypassMode: github.Ptr(github.BypassModeExempt),
+		ActorID:    new(owner.GetID()),
+		ActorType:  new(userActorType),
+		BypassMode: new(github.BypassModeExempt),
 	})
 	return nil
 }
@@ -391,7 +391,7 @@ func branchProtectionStatusChecks(facts *RepositoryFacts) []*github.RuleStatusCh
 		seen[key] = struct{}{}
 		check := &github.RuleStatusCheck{Context: context}
 		if integrationID != 0 {
-			check.IntegrationID = github.Ptr(integrationID)
+			check.IntegrationID = new(integrationID)
 		}
 		checks = append(checks, check)
 	}

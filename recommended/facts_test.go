@@ -18,15 +18,15 @@ func TestIsEnterpriseManagedOrganization(t *testing.T) {
 		owners []*github.User
 		want   bool
 	}{
-		{"managed owner", "github.com", []*github.User{{Login: github.Ptr("fixture-user_acme")}}, true},
-		{"setup owner", "github.com", []*github.User{{Login: github.Ptr("acme_admin")}}, true},
-		{"personal owner", "github.com", []*github.User{{Login: github.Ptr("fixture-user")}}, false},
+		{"managed owner", "github.com", []*github.User{{Login: new("fixture-user_acme")}}, true},
+		{"setup owner", "github.com", []*github.User{{Login: new("acme_admin")}}, true},
+		{"personal owner", "github.com", []*github.User{{Login: new("fixture-user")}}, false},
 		{"owners unavailable", "github.com", nil, false},
 		{"nil owner", "github.com", []*github.User{nil}, false},
 		{"data residency", "fixture.ghe.com", nil, true},
 		{"data residency uppercase", "FIXTURE.GHE.COM", nil, true},
-		{"enterprise server", "github.example.com", []*github.User{{Login: github.Ptr("fixture_user")}}, false},
-		{"lookalike host", "fixture.ghe.com.example.com", []*github.User{{Login: github.Ptr("fixture_user")}}, false},
+		{"enterprise server", "github.example.com", []*github.User{{Login: new("fixture_user")}}, false},
+		{"lookalike host", "fixture.ghe.com.example.com", []*github.User{{Login: new("fixture_user")}}, false},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -241,7 +241,7 @@ func TestCollectSuspendedUsersAccessDenied(t *testing.T) {
 	client := newRulesetTestClient(t, roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		return rulesetResponse(request, http.StatusForbidden, `{"message":"Access denied"}`), nil
 	}))
-	users, known, err := collectSuspendedUsers(context.Background(), client, "github.example.test", []*github.User{{Login: github.Ptr("fixture_user")}})
+	users, known, err := collectSuspendedUsers(context.Background(), client, "github.example.test", []*github.User{{Login: new("fixture_user")}})
 	if err == nil || known || users != nil {
 		t.Fatalf("users=%v, known=%t, error=%v; want access error", users, known, err)
 	}

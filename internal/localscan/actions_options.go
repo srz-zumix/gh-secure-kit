@@ -79,10 +79,7 @@ func (o ActionsScanOptions) Validate() error {
 }
 
 func actionsSelectorID(selector string) (int64, bool, error) {
-	digits := selector
-	if strings.HasPrefix(digits, "-") {
-		digits = digits[1:]
-	}
+	digits := strings.TrimPrefix(selector, "-")
 	if digits == "" {
 		return 0, false, nil
 	}
