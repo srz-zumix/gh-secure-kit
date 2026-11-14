@@ -92,6 +92,11 @@ Exits with status 1 if any secret is found, 130 if interrupted without findings.
 			if err := errors.Join(scanErr, renderErr, summaryErr); err != nil {
 				return err
 			}
+			if len(result.Findings) > 0 {
+				cmd.SilenceUsage = true
+				return fmt.Errorf("found %d secret(s) in Actions logs", len(result.Findings))
+			}
+			// Interruption uses a dedicated exit status that root.go cannot propagate.
 			if code := result.ExitCode(); code != 0 {
 				os.Exit(code)
 			}

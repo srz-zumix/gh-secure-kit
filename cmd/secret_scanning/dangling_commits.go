@@ -120,10 +120,8 @@ Exits with status 1 if any secret is found.`,
 			}
 
 			if len(findings) > 0 {
-				// os.Exit skips deferred calls, so remove the temporary fetch
-				// repository before exiting.
-				source.Close()
-				os.Exit(1)
+				cmd.SilenceUsage = true
+				return fmt.Errorf("found %d secret(s) in dangling commits", len(findings))
 			}
 			return nil
 		},

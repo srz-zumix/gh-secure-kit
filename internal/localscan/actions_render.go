@@ -1,6 +1,7 @@
 package localscan
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"slices"
@@ -85,7 +86,7 @@ func RenderActionsFindings(r *render.Renderer, findings []ActionsFinding) error 
 				}
 				rows := slices.Clone(job.findings)
 				slices.SortStableFunc(rows, func(left, right ActionsFinding) int {
-					return left.StartLine - right.StartLine
+					return cmp.Compare(left.StartLine, right.StartLine)
 				})
 				writer := tabwriter.NewWriter(&output, 0, 4, 2, ' ', 0)
 				for _, finding := range rows {
