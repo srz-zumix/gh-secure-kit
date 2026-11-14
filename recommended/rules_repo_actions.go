@@ -50,8 +50,8 @@ func checkForkPRWorkflowSettings(s *github.WorkflowsPermissions, scope string) O
 func restrictedForkPRWorkflowSettings(s *github.WorkflowsPermissions) github.WorkflowsPermissionsOpt {
 	return github.WorkflowsPermissionsOpt{
 		RunWorkflowsFromForkPullRequests:  s.GetRunWorkflowsFromForkPullRequests(),
-		SendWriteTokensToWorkflows:        github.Ptr(false),
-		SendSecretsAndVariables:           github.Ptr(false),
+		SendWriteTokensToWorkflows:        new(false),
+		SendSecretsAndVariables:           new(false),
 		RequireApprovalForForkPRWorkflows: s.RequireApprovalForForkPRWorkflows,
 	}
 }

@@ -16,14 +16,14 @@ func TestApplyPatternConfigs(t *testing.T) {
 	configs := &github.SecretScanningPatternConfigs{
 		ProviderPatternOverrides: []*github.SecretScanningPatternOverride{
 			{
-				TokenType:      github.Ptr("github_token"),
-				Setting:        github.Ptr("disabled"),
-				DefaultSetting: github.Ptr("enabled"),
+				TokenType:      new("github_token"),
+				Setting:        new("disabled"),
+				DefaultSetting: new("enabled"),
 			},
 			{
-				TokenType:      github.Ptr("aws_access_key_id"),
-				Setting:        github.Ptr("not_set"),
-				DefaultSetting: github.Ptr("enabled"),
+				TokenType:      new("aws_access_key_id"),
+				Setting:        new("not_set"),
+				DefaultSetting: new("enabled"),
 			},
 		},
 	}

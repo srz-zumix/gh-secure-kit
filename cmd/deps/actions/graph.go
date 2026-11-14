@@ -68,7 +68,11 @@ func NewGraphCmd() *cobra.Command {
 	f.StringVarP(&output, "output", "o", "", "Output file path (default: stdout)")
 
 	// Supported formats are the same as 'list' command, but with additional graph formats that visualize workflow and action relationships
-	cmdflags.AddFormatFlags(cmd, &opts.Exporter, &format, "mermaid", []string{"dot", "drawio", "mermaid", "markdown"})
+	if err := cmdflags.AddFormatFlags(cmd, &opts.Exporter, &format, "mermaid", []string{"dot", "drawio", "mermaid", "markdown"}); err != nil {
+		cmd.PreRunE = func(*cobra.Command, []string) error {
+			return fmt.Errorf("failed to configure output format: %w", err)
+		}
+	}
 
 	return cmd
 }

@@ -199,7 +199,7 @@ func registerRepositoryEnvironmentRules() {
 					continue
 				}
 				req := gh.EnvironmentToCreateUpdateRequest(env)
-				req.PreventSelfReview = github.Ptr(true)
+				req.PreventSelfReview = new(true)
 				if _, err := gh.CreateUpdateEnvironment(ctx, g, repo, name, req); err != nil {
 					return fmt.Errorf("failed to enable prevent-self-review for environment %q: %w", name, err)
 				}

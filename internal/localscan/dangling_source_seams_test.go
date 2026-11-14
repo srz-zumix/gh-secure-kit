@@ -164,11 +164,11 @@ func TestDanglingSourceFragmentsNoFetchUsesAPI(t *testing.T) {
 		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, s string) (*github.RepositoryCommit, error) {
 			gotSHA = s
 			return &github.RepositoryCommit{
-				SHA: github.Ptr(sha),
+				SHA: new(sha),
 				Files: []*github.CommitFile{{
-					Filename:  github.Ptr("config.txt"),
-					Additions: github.Ptr(1),
-					Patch:     github.Ptr("@@ -0,0 +1 @@\n+leaked-secret-value"),
+					Filename:  new("config.txt"),
+					Additions: new(1),
+					Patch:     new("@@ -0,0 +1 @@\n+leaked-secret-value"),
 				}},
 			}, nil
 		},
@@ -209,11 +209,11 @@ func TestDanglingSourceStreamFragmentsIsCommitIncremental(t *testing.T) {
 		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
 			requested = append(requested, sha)
 			return &github.RepositoryCommit{
-				SHA: github.Ptr(sha),
+				SHA: new(sha),
 				Files: []*github.CommitFile{{
-					Filename:  github.Ptr("config.txt"),
-					Additions: github.Ptr(1),
-					Patch:     github.Ptr("@@ -0,0 +1 @@\n+leaked-secret-value"),
+					Filename:  new("config.txt"),
+					Additions: new(1),
+					Patch:     new("@@ -0,0 +1 @@\n+leaked-secret-value"),
 				}},
 			}, nil
 		},
@@ -253,11 +253,11 @@ func TestDanglingSourceStreamFragmentsYieldsAllCommits(t *testing.T) {
 		},
 		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
 			return &github.RepositoryCommit{
-				SHA: github.Ptr(sha),
+				SHA: new(sha),
 				Files: []*github.CommitFile{{
-					Filename:  github.Ptr("config.txt"),
-					Additions: github.Ptr(1),
-					Patch:     github.Ptr("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
+					Filename:  new("config.txt"),
+					Additions: new(1),
+					Patch:     new("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
 				}},
 			}, nil
 		},
@@ -391,11 +391,11 @@ func TestDanglingSourceStreamFragmentsFallsBackToAPIWhenFetchFails(t *testing.T)
 		getCommit: func(_ context.Context, _ *gh.GitHubClient, _ repository.Repository, sha string) (*github.RepositoryCommit, error) {
 			requested = append(requested, sha)
 			return &github.RepositoryCommit{
-				SHA: github.Ptr(sha),
+				SHA: new(sha),
 				Files: []*github.CommitFile{{
-					Filename:  github.Ptr("config.txt"),
-					Additions: github.Ptr(1),
-					Patch:     github.Ptr("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
+					Filename:  new("config.txt"),
+					Additions: new(1),
+					Patch:     new("@@ -0,0 +1 @@\n+secret-" + sha[0:4]),
 				}},
 			}, nil
 		},

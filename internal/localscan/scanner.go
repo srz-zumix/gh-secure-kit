@@ -1,12 +1,14 @@
 package localscan
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
@@ -110,6 +112,15 @@ func (s *Scanner) redactMetadata(v string) string {
 // ScanFragment scans a single fragment against all enabled patterns and
 // returns any findings that are not covered by the allowlist.
 func (s *Scanner) ScanFragment(frag Fragment) []Finding {
+	return s.scanFragmentContent(frag, frag.Content, nil)
+}
+
+func (s *Scanner) scanFragmentBytes(frag Fragment, content []byte) []Finding {
+	return s.scanFragmentContent(frag, "", content)
+}
+
+func (s *Scanner) scanFragmentContent(frag Fragment, stringContent string, byteContent []byte) []Finding {
+	byteMode := byteContent != nil
 	name := s.redactMetadata(frag.SessionName)
 	workspace := s.redactMetadata(frag.Workspace)
 	var findings []Finding
@@ -117,12 +128,43 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 		if !p.Enabled {
 			continue
 		}
-		if len(p.Keywords) > 0 && !containsAnyKeyword(frag.Content, p.Keywords) {
-			continue
+		if len(p.Keywords) > 0 {
+			if byteMode {
+				if !containsAnyKeywordBytes(byteContent, p.Keywords) {
+					continue
+				}
+			} else if !containsAnyKeyword(stringContent, p.Keywords) {
+				continue
+			}
 		}
-		locs := p.Regex.FindAllStringIndex(frag.Content, -1)
+		var locs [][]int
+		if byteMode {
+			locs = p.Regex.FindAllIndex(byteContent, -1)
+		} else {
+			locs = p.Regex.FindAllStringIndex(stringContent, -1)
+		}
+		lineNumber, lineCountedTo := 1, 0
 		for _, loc := range locs {
-			matched := frag.Content[loc[0]:loc[1]]
+			for lineCountedTo < loc[0] {
+				var current byte
+				if byteMode {
+					current = byteContent[lineCountedTo]
+				} else {
+					current = stringContent[lineCountedTo]
+				}
+				if current == '\n' {
+					lineNumber++
+				}
+				lineCountedTo++
+			}
+			var matched string
+			var matchedBytes []byte
+			if byteMode {
+				matchedBytes = byteContent[loc[0]:loc[1]]
+				matched = string(matchedBytes)
+			} else {
+				matched = stringContent[loc[0]:loc[1]]
+			}
 			// BaseLine carries the file line of the fragment's first line
 			// (used for commit diff fragments that hold only added hunks);
 			// zero means the fragment content starts at file line 1.
@@ -138,7 +180,7 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 				Author:      frag.Author,
 				Date:        frag.Date,
 				File:        frag.FilePath,
-				StartLine:   base + lineNumberAt(frag.Content, loc[0]) - 1,
+				StartLine:   base + lineNumber - 1,
 				Match:       matched,
 				Secret:      matched,
 				Source:      frag.Source,
@@ -149,10 +191,20 @@ func (s *Scanner) ScanFragment(frag Fragment) []Finding {
 			if frag.Line > 0 {
 				f.StartLine = frag.Line
 			}
-			if s.Allowlist.Allowed(f, matched, lineAt(frag.Content, loc[0])) {
+			allowed := false
+			if byteMode {
+				allowed = s.Allowlist.allowedBytes(f, matchedBytes, lineAtBytes(byteContent, loc[0]), loc[0]-lineStartAtBytes(byteContent, loc[0]))
+			} else {
+				allowed = s.Allowlist.Allowed(f, matched, lineAt(stringContent, loc[0]), loc[0]-lineStartAt(stringContent, loc[0]))
+			}
+			if allowed {
 				continue
 			}
-			f.matchHash = sha256.Sum256([]byte(matched))
+			if byteMode {
+				f.matchHash = sha256.Sum256(matchedBytes)
+			} else {
+				f.matchHash = sha256.Sum256([]byte(matched))
+			}
 			if s.Verify && p.Source == "builtin" {
 				f.verificationPattern = p.ID
 				f.rawSecret = matched
@@ -239,31 +291,84 @@ func Scan(src Source, scanner *Scanner) ([]Finding, error) {
 
 func containsAnyKeyword(content string, keywords []string) bool {
 	lower := strings.ToLower(content)
-	for _, k := range keywords {
-		if strings.Contains(lower, strings.ToLower(k)) {
+	for _, keyword := range keywords {
+		if strings.Contains(lower, strings.ToLower(keyword)) {
 			return true
 		}
 	}
 	return false
 }
 
-func lineNumberAt(content string, idx int) int {
-	line := 1
-	for i := 0; i < idx && i < len(content); i++ {
-		if content[i] == '\n' {
-			line++
+// keywordChunkSize bounds the lowercased copy made by containsAnyKeywordBytes.
+const keywordChunkSize = 1 << 20
+
+// containsAnyKeywordBytes reports whether content contains any keyword,
+// case-insensitively like containsAnyKeyword, while lowercasing only a bounded
+// chunk at a time. Chunks overlap so matches spanning a boundary are found.
+func containsAnyKeywordBytes(content []byte, keywords []string) bool {
+	lowerKeywords := make([][]byte, 0, len(keywords))
+	overlap := 0
+	for _, keyword := range keywords {
+		lk := []byte(strings.ToLower(keyword))
+		if len(lk) == 0 {
+			return true
+		}
+		lowerKeywords = append(lowerKeywords, lk)
+		// Lowercasing can change a rune's encoded length, so allow for the
+		// widest UTF-8 rune per keyword byte when sizing the overlap.
+		if n := len(lk) * utf8.UTFMax; n > overlap {
+			overlap = n
 		}
 	}
-	return line
+	for start := 0; start < len(content); {
+		end := start + keywordChunkSize + overlap
+		if end >= len(content) {
+			end = len(content)
+		} else {
+			for end < len(content) && !utf8.RuneStart(content[end]) {
+				end++
+			}
+		}
+		lower := bytes.ToLower(content[start:end])
+		for _, lk := range lowerKeywords {
+			if bytes.Contains(lower, lk) {
+				return true
+			}
+		}
+		if end == len(content) {
+			break
+		}
+		start += keywordChunkSize
+		for start < len(content) && !utf8.RuneStart(content[start]) {
+			start++
+		}
+	}
+	return false
 }
 
 // lineAt returns the full line of content containing byte offset idx.
-func lineAt(content string, idx int) string {
+// lineStartAt returns the byte offset of the start of the line containing idx.
+func lineStartAt(content string, idx int) int {
+	return lineStartAtBytes([]byte(content), idx)
+}
+
+func lineStartAtBytes(content []byte, idx int) int {
 	if idx < 0 || idx > len(content) {
-		return ""
+		return 0
 	}
-	start := strings.LastIndexByte(content[:idx], '\n') + 1
-	end := strings.IndexByte(content[idx:], '\n')
+	return bytes.LastIndexByte(content[:idx], '\n') + 1
+}
+
+func lineAt(content string, idx int) string {
+	return string(lineAtBytes([]byte(content), idx))
+}
+
+func lineAtBytes(content []byte, idx int) []byte {
+	if idx < 0 || idx > len(content) {
+		return nil
+	}
+	start := lineStartAtBytes(content, idx)
+	end := bytes.IndexByte(content[idx:], '\n')
 	if end < 0 {
 		return content[start:]
 	}

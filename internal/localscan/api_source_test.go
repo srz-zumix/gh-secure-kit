@@ -40,9 +40,9 @@ func TestFragmentsFromPatchKeepsNewFileLineNumbers(t *testing.T) {
 
 func TestFragmentsForAPICommitFailsOnTruncatedDiff(t *testing.T) {
 	commit := &github.RepositoryCommit{
-		SHA: github.Ptr("abc123"),
+		SHA: new("abc123"),
 		Files: []*github.CommitFile{
-			{Filename: github.Ptr("huge.json"), Additions: github.Ptr(5000)},
+			{Filename: new("huge.json"), Additions: new(5000)},
 		},
 	}
 
@@ -54,9 +54,9 @@ func TestFragmentsForAPICommitFailsOnTruncatedDiff(t *testing.T) {
 
 func TestFragmentsForAPICommitSkipsBinaryFile(t *testing.T) {
 	commit := &github.RepositoryCommit{
-		SHA: github.Ptr("abc123"),
+		SHA: new("abc123"),
 		Files: []*github.CommitFile{
-			{Filename: github.Ptr("logo.png"), Additions: github.Ptr(0)},
+			{Filename: new("logo.png"), Additions: new(0)},
 		},
 	}
 

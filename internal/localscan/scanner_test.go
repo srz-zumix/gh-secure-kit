@@ -59,6 +59,21 @@ func TestScanFragmentRedactsMatchWhenSecretHidden(t *testing.T) {
 	}
 }
 
+func TestScanFragmentIgnoresAgentPlaceholderGitHubToken(t *testing.T) {
+	s, err := NewScanner(nil, true)
+	if err != nil {
+		t.Fatalf("NewScanner() error = %v", err)
+	}
+	findings := s.ScanFragment(Fragment{Content: "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00\n"})
+	if len(findings) != 0 {
+		t.Fatalf("expected placeholder token to be ignored, got %d finding(s)", len(findings))
+	}
+	findings = s.ScanFragment(Fragment{Content: "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid01\n"})
+	if len(findings) != 1 {
+		t.Fatalf("expected similar token to be reported, got %d finding(s)", len(findings))
+	}
+}
+
 func TestScanFragmentUsesBaseLineOffset(t *testing.T) {
 	cfg := &Config{Patterns: []ConfigPattern{{ID: "tok", Regex: `secret_[0-9a-f]{10}`}}}
 	s, err := NewScanner(cfg, true)

@@ -4,7 +4,6 @@ package local
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -167,7 +166,8 @@ Exits with status 1 if any non-excluded secret is found.`,
 			}
 
 			if len(findings) > 0 {
-				os.Exit(1)
+				cmd.SilenceUsage = true
+				return fmt.Errorf("found %d secret(s)", len(findings))
 			}
 			return nil
 		},

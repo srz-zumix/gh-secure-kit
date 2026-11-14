@@ -12,14 +12,14 @@ func TestGSK132DefaultWorkflowPermissionsWrite(t *testing.T) {
 	}
 
 	f := &RepositoryFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionRepository{
-		DefaultWorkflowPermissions: github.Ptr("write"),
+		DefaultWorkflowPermissions: new("write"),
 	}}
 	if got := ruleOutcome(t, "GSK132", f); got != StatusFail {
 		t.Errorf("write: got %v, want fail", got)
 	}
 
 	f = &RepositoryFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionRepository{
-		DefaultWorkflowPermissions: github.Ptr("read"),
+		DefaultWorkflowPermissions: new("read"),
 	}}
 	if got := ruleOutcome(t, "GSK132", f); got != StatusPass {
 		t.Errorf("read: got %v, want pass", got)
@@ -32,14 +32,14 @@ func TestGSK133ActionsCanApprovePullRequests(t *testing.T) {
 	}
 
 	f := &RepositoryFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionRepository{
-		CanApprovePullRequestReviews: github.Ptr(true),
+		CanApprovePullRequestReviews: new(true),
 	}}
 	if got := ruleOutcome(t, "GSK133", f); got != StatusFail {
 		t.Errorf("enabled: got %v, want fail", got)
 	}
 
 	f = &RepositoryFacts{DefaultWorkflowPermissions: &github.DefaultWorkflowPermissionRepository{
-		CanApprovePullRequestReviews: github.Ptr(false),
+		CanApprovePullRequestReviews: new(false),
 	}}
 	if got := ruleOutcome(t, "GSK133", f); got != StatusPass {
 		t.Errorf("disabled: got %v, want pass", got)
@@ -75,7 +75,7 @@ func TestGSK138SHAPinningRequired(t *testing.T) {
 		{"unknown permissions", nil, StatusSkip},
 		{"actions disabled", &github.ActionsPermissionsRepository{Enabled: false}, StatusSkip},
 		{"not required", &github.ActionsPermissionsRepository{Enabled: true}, StatusFail},
-		{"required", &github.ActionsPermissionsRepository{Enabled: true, SHAPinningRequired: github.Ptr(true)}, StatusPass},
+		{"required", &github.ActionsPermissionsRepository{Enabled: true, SHAPinningRequired: new(true)}, StatusPass},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,29 +87,29 @@ func TestGSK138SHAPinningRequired(t *testing.T) {
 }
 
 func TestGSK141PrivateForkPRWorkflows(t *testing.T) {
-	private := &github.Repository{Visibility: github.Ptr("private")}
+	private := &github.Repository{Visibility: new("private")}
 	tests := []struct {
 		name  string
 		repo  *github.Repository
 		perms *github.WorkflowsPermissions
 		want  Status
 	}{
-		{"public repository", &github.Repository{Visibility: github.Ptr("public")}, nil, StatusSkip},
+		{"public repository", &github.Repository{Visibility: new("public")}, nil, StatusSkip},
 		{"unknown settings", private, nil, StatusSkip},
 		{"fork workflows disabled", private, &github.WorkflowsPermissions{
-			RunWorkflowsFromForkPullRequests: github.Ptr(false),
-			SendWriteTokensToWorkflows:       github.Ptr(true),
+			RunWorkflowsFromForkPullRequests: new(false),
+			SendWriteTokensToWorkflows:       new(true),
 		}, StatusPass},
 		{"write tokens sent", private, &github.WorkflowsPermissions{
-			RunWorkflowsFromForkPullRequests: github.Ptr(true),
-			SendWriteTokensToWorkflows:       github.Ptr(true),
+			RunWorkflowsFromForkPullRequests: new(true),
+			SendWriteTokensToWorkflows:       new(true),
 		}, StatusFail},
 		{"secrets sent", private, &github.WorkflowsPermissions{
-			RunWorkflowsFromForkPullRequests: github.Ptr(true),
-			SendSecretsAndVariables:          github.Ptr(true),
+			RunWorkflowsFromForkPullRequests: new(true),
+			SendSecretsAndVariables:          new(true),
 		}, StatusFail},
 		{"nothing sensitive sent", private, &github.WorkflowsPermissions{
-			RunWorkflowsFromForkPullRequests: github.Ptr(true),
+			RunWorkflowsFromForkPullRequests: new(true),
 		}, StatusPass},
 	}
 	for _, tt := range tests {
@@ -124,10 +124,10 @@ func TestGSK141PrivateForkPRWorkflows(t *testing.T) {
 
 func TestRestrictedForkPRWorkflowSettingsKeepsOtherSettings(t *testing.T) {
 	got := restrictedForkPRWorkflowSettings(&github.WorkflowsPermissions{
-		RunWorkflowsFromForkPullRequests:  github.Ptr(true),
-		SendWriteTokensToWorkflows:        github.Ptr(true),
-		SendSecretsAndVariables:           github.Ptr(true),
-		RequireApprovalForForkPRWorkflows: github.Ptr(true),
+		RunWorkflowsFromForkPullRequests:  new(true),
+		SendWriteTokensToWorkflows:        new(true),
+		SendSecretsAndVariables:           new(true),
+		RequireApprovalForForkPRWorkflows: new(true),
 	})
 	if !got.RunWorkflowsFromForkPullRequests || got.SendWriteTokensToWorkflows == nil || *got.SendWriteTokensToWorkflows ||
 		got.SendSecretsAndVariables == nil || *got.SendSecretsAndVariables ||

@@ -13,9 +13,10 @@ func init() {
 func NewSecretScanningCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "secret-scanning",
-		Short: "Manage secret scanning configurations",
-		Long:  "Manage secret scanning alerts, scan history, and push protection pattern configurations for organizations and repositories.",
+		Short: "Manage secret scanning and scan content for secrets",
+		Long:  "Manage secret scanning alerts and configurations, and scan local content, dangling commits, and GitHub Actions logs.",
 	}
+	cmd.AddCommand(secretscanning.NewActionsCmd())
 	cmd.AddCommand(secretscanning.NewAlertsCmd())
 	cmd.AddCommand(secretscanning.NewDanglingCommitsCmd())
 	cmd.AddCommand(secretscanning.NewLocalCmd())

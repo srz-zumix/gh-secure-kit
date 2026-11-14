@@ -8,7 +8,7 @@ import (
 )
 
 func tag(name, sha string) *github.RepositoryTag {
-	return &github.RepositoryTag{Name: github.Ptr(name), Commit: &github.Commit{SHA: github.Ptr(sha)}}
+	return &github.RepositoryTag{Name: new(name), Commit: &github.Commit{SHA: new(sha)}}
 }
 
 func TestAbbreviatedTagExcludePatterns(t *testing.T) {
@@ -80,7 +80,7 @@ func TestAbbreviatedTagExcludePatterns(t *testing.T) {
 
 func tagRuleset(enforcement github.RulesetEnforcement, include []string, rules *github.RepositoryRulesetRules) *github.RepositoryRuleset {
 	return &github.RepositoryRuleset{
-		Target:      github.Ptr(github.RulesetTargetTag),
+		Target:      new(github.RulesetTargetTag),
 		Enforcement: enforcement,
 		Conditions: &github.RepositoryRulesetConditions{
 			RefName: &github.RepositoryRulesetRefConditionParameters{Include: include},
@@ -100,19 +100,19 @@ func TestGSK140TagRuleset(t *testing.T) {
 		want  Status
 	}{
 		{"unknown tags", &RepositoryFacts{}, StatusSkip},
-		{"no tags", &RepositoryFacts{HasTags: github.Ptr(false), RulesetsKnown: true}, StatusSkip},
-		{"rulesets unknown", &RepositoryFacts{HasTags: github.Ptr(true)}, StatusSkip},
-		{"no ruleset", &RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true}, StatusFail},
+		{"no tags", &RepositoryFacts{HasTags: new(false), RulesetsKnown: true}, StatusSkip},
+		{"rulesets unknown", &RepositoryFacts{HasTags: new(true)}, StatusSkip},
+		{"no ruleset", &RepositoryFacts{HasTags: new(true), RulesetsKnown: true}, StatusFail},
 		{
 			"active ruleset with deletion and update",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				tagRuleset(github.RulesetEnforcementActive, []string{"~ALL"}, both),
 			}},
 			StatusPass,
 		},
 		{
 			"rules split across two rulesets",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				tagRuleset(github.RulesetEnforcementActive, []string{"~ALL"}, &github.RepositoryRulesetRules{Deletion: &github.EmptyRuleParameters{}}),
 				tagRuleset(github.RulesetEnforcementActive, []string{"refs/tags/**"}, &github.RepositoryRulesetRules{Update: &github.UpdateRuleParameters{}}),
 			}},
@@ -120,30 +120,30 @@ func TestGSK140TagRuleset(t *testing.T) {
 		},
 		{
 			"deletion only",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				tagRuleset(github.RulesetEnforcementActive, []string{"~ALL"}, &github.RepositoryRulesetRules{Deletion: &github.EmptyRuleParameters{}}),
 			}},
 			StatusFail,
 		},
 		{
 			"evaluate-only ruleset",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				tagRuleset(github.RulesetEnforcementEvaluate, []string{"~ALL"}, both),
 			}},
 			StatusFail,
 		},
 		{
 			"ruleset covering a single tag pattern",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				tagRuleset(github.RulesetEnforcementActive, []string{"refs/tags/v1"}, both),
 			}},
 			StatusFail,
 		},
 		{
 			"branch ruleset is ignored",
-			&RepositoryFacts{HasTags: github.Ptr(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
+			&RepositoryFacts{HasTags: new(true), RulesetsKnown: true, Rulesets: []*github.RepositoryRuleset{
 				{
-					Target:      github.Ptr(github.RulesetTargetBranch),
+					Target:      new(github.RulesetTargetBranch),
 					Enforcement: github.RulesetEnforcementActive,
 					Conditions:  &github.RepositoryRulesetConditions{RefName: &github.RepositoryRulesetRefConditionParameters{Include: []string{"~ALL"}}},
 					Rules:       both,
@@ -162,16 +162,16 @@ func TestGSK140TagRuleset(t *testing.T) {
 }
 
 func TestGSK143PushRuleset(t *testing.T) {
-	private := &github.Repository{Visibility: github.Ptr("private")}
+	private := &github.Repository{Visibility: new("private")}
 	pushRuleset := func(enforcement github.RulesetEnforcement, rules *github.RepositoryRulesetRules) *github.RepositoryRuleset {
-		return &github.RepositoryRuleset{Target: github.Ptr(github.RulesetTargetPush), Enforcement: enforcement, Rules: rules}
+		return &github.RepositoryRuleset{Target: new(github.RulesetTargetPush), Enforcement: enforcement, Rules: rules}
 	}
 	tests := []struct {
 		name  string
 		facts *RepositoryFacts
 		want  Status
 	}{
-		{"public repository", &RepositoryFacts{Repo: &github.Repository{Visibility: github.Ptr("public")}, RulesetsKnown: true}, StatusSkip},
+		{"public repository", &RepositoryFacts{Repo: &github.Repository{Visibility: new("public")}, RulesetsKnown: true}, StatusSkip},
 		{"rulesets unknown", &RepositoryFacts{Repo: private}, StatusSkip},
 		{"no ruleset", &RepositoryFacts{Repo: private, RulesetsKnown: true}, StatusFail},
 		{

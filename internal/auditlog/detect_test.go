@@ -10,7 +10,7 @@ import (
 
 func entry(action string, ts time.Time, extra map[string]any) *github.AuditEntry {
 	return &github.AuditEntry{
-		Action:           github.Ptr(action),
+		Action:           new(action),
 		Timestamp:        &github.Timestamp{Time: ts},
 		AdditionalFields: extra,
 	}

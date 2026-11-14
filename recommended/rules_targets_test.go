@@ -57,8 +57,8 @@ func TestGSK131IgnoresRulesetsByName(t *testing.T) {
 			rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
 			rs.Name = name
 			rs.BypassActors = []*github.BypassActor{{
-				ActorType:  github.Ptr(github.BypassActorTypeIntegration),
-				BypassMode: github.Ptr(github.BypassModeAlways),
+				ActorType:  new(github.BypassActorTypeIntegration),
+				BypassMode: new(github.BypassModeAlways),
 			}}
 			rulesets = append(rulesets, rs)
 		}
@@ -99,8 +99,8 @@ func TestGSK131SettingsPathFollowsFindings(t *testing.T) {
 		rs := branchRuleset([]string{"~DEFAULT_BRANCH"}, nil, false)
 		rs.Name = "one"
 		rs.BypassActors = []*github.BypassActor{{
-			ActorType:  github.Ptr(github.BypassActorTypeIntegration),
-			BypassMode: github.Ptr(github.BypassModeAlways),
+			ActorType:  new(github.BypassActorTypeIntegration),
+			BypassMode: new(github.BypassModeAlways),
 		}}
 		return rs
 	}
@@ -125,13 +125,13 @@ func TestGSK131SettingsPathFollowsFindings(t *testing.T) {
 }
 
 func TestEnvironmentRulesIgnoreEnvironmentsByName(t *testing.T) {
-	reviewer := []*github.ProtectionRule{{Type: github.Ptr("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: github.Ptr("User")}}}}
+	reviewer := []*github.ProtectionRule{{Type: new("required_reviewers"), Reviewers: []*github.RequiredReviewer{{Type: new("User")}}}}
 	f := &RepositoryFacts{
 		EnvironmentsKnown:       true,
 		EnvironmentSecretsKnown: map[string]bool{"prod": true, "stage": true},
 		Environments: []*github.Environment{
-			{Name: github.Ptr("prod"), ProtectionRules: reviewer},
-			{Name: github.Ptr("stage"), ProtectionRules: reviewer},
+			{Name: new("prod"), ProtectionRules: reviewer},
+			{Name: new("stage"), ProtectionRules: reviewer},
 		},
 		EnvironmentSecrets: map[string][]*github.Secret{"prod": {{Name: "T"}}, "stage": {{Name: "T"}}},
 	}
@@ -157,9 +157,9 @@ func TestEnvironmentRulesIgnoreEnvironmentsByName(t *testing.T) {
 
 func TestDeployKeyRulesListAndIgnoreKeys(t *testing.T) {
 	f := &RepositoryFacts{DeployKeysKnown: true, DeployKeys: []*github.Key{
-		{ID: github.Ptr(int64(10)), Title: github.Ptr("ci"), ReadOnly: github.Ptr(false), Verified: github.Ptr(true)},
-		{ID: github.Ptr(int64(11)), Title: github.Ptr("bot"), ReadOnly: github.Ptr(false), Verified: github.Ptr(true)},
-		{ID: github.Ptr(int64(12)), Title: github.Ptr("ro"), ReadOnly: github.Ptr(true), Verified: github.Ptr(true)},
+		{ID: new(int64(10)), Title: new("ci"), ReadOnly: new(false), Verified: new(true)},
+		{ID: new(int64(11)), Title: new("bot"), ReadOnly: new(false), Verified: new(true)},
+		{ID: new(int64(12)), Title: new("ro"), ReadOnly: new(true), Verified: new(true)},
 	}}
 	got := repoOutcome(t, "GSK121", f)
 	if got.Status != StatusFail || !reflect.DeepEqual(got.Targets, []string{"10", "11"}) || !strings.Contains(got.Detail, "10 (ci)") {
@@ -180,7 +180,7 @@ func TestDeployKeyRulesListAndIgnoreKeys(t *testing.T) {
 
 func TestCollaboratorRulesIgnoreLogins(t *testing.T) {
 	admin := func(login string) *github.User {
-		return &github.User{Login: github.Ptr(login), Permissions: &github.RepositoryPermissions{Admin: github.Ptr(true)}}
+		return &github.User{Login: new(login), Permissions: &github.RepositoryPermissions{Admin: new(true)}}
 	}
 	f := &RepositoryFacts{CollaboratorsKnown: true, Collaborators: []*github.User{admin("a"), admin("b"), admin("c"), admin("bot-d")}}
 	if got := repoOutcome(t, "GSK119", f); got.Status != StatusFail {
@@ -206,11 +206,11 @@ func TestOrganizationRulesIgnoreTargets(t *testing.T) {
 	f := &OrganizationFacts{
 		RunnerGroupsKnown: true,
 		RunnerGroups: []*github.RunnerGroup{
-			{Name: github.Ptr("legacy"), AllowsPublicRepositories: github.Ptr(true)},
-			{Name: github.Ptr("other"), AllowsPublicRepositories: github.Ptr(true)},
+			{Name: new("legacy"), AllowsPublicRepositories: new(true)},
+			{Name: new("other"), AllowsPublicRepositories: new(true)},
 		},
 		SuspendedMembersKnown: true,
-		SuspendedMembers:      []*github.User{{Login: github.Ptr("zed")}, {Login: github.Ptr("amy")}},
+		SuspendedMembers:      []*github.User{{Login: new("zed")}, {Login: new("amy")}},
 	}
 	check := func(id string) Outcome {
 		rule, _ := RuleByID(id)
@@ -238,7 +238,7 @@ func TestOrganizationRulesIgnoreTargets(t *testing.T) {
 
 func TestWebhookRulesIgnoreHookIDs(t *testing.T) {
 	hook := func(id int64) *github.Hook {
-		return &github.Hook{ID: github.Ptr(id), Active: github.Ptr(true), Config: &github.HookConfig{URL: github.Ptr("https://example.com"), InsecureSSL: github.Ptr("0")}}
+		return &github.Hook{ID: new(id), Active: new(true), Config: &github.HookConfig{URL: new("https://example.com"), InsecureSSL: new("0")}}
 	}
 	f := &RepositoryFacts{HooksKnown: true, Hooks: []*github.Hook{hook(9), hook(10)}}
 	got := repoOutcome(t, "GSK145", f)
@@ -278,8 +278,8 @@ func TestGSK523ApplyOrgSkipsIgnoredRunnerGroups(t *testing.T) {
 	// "legacy" is both ignored and inherited: the preflight must not reject it
 	// and remediation must not touch it, while "other" is still fixed.
 	facts := &OrganizationFacts{RunnerGroupsKnown: true, RunnerGroups: []*github.RunnerGroup{
-		{ID: github.Ptr(int64(1)), Name: github.Ptr("legacy"), Inherited: github.Ptr(true), AllowsPublicRepositories: github.Ptr(true)},
-		{ID: github.Ptr(int64(2)), Name: github.Ptr("other"), AllowsPublicRepositories: github.Ptr(true)},
+		{ID: new(int64(1)), Name: new("legacy"), Inherited: new(true), AllowsPublicRepositories: new(true)},
+		{ID: new(int64(2)), Name: new("other"), AllowsPublicRepositories: new(true)},
 	}}
 	facts.ignores = mustIgnores(t, IgnoreEntry{ID: "GSK523", Targets: []string{"legacy"}})
 

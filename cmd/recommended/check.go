@@ -2,7 +2,6 @@ package recommended
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cli/cli/v2/pkg/cmdutil"
@@ -106,7 +105,8 @@ if present. Configured ignore IDs are combined with explicit --ignore flags.`,
 			if exitCode {
 				for _, res := range results {
 					if res.Status == catalog.StatusFail {
-						os.Exit(1)
+						cmd.SilenceUsage = true
+						return fmt.Errorf("one or more recommended settings checks failed")
 					}
 				}
 			}
