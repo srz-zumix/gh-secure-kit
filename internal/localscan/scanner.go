@@ -346,20 +346,6 @@ func containsAnyKeywordBytes(content []byte, keywords []string) bool {
 	return false
 }
 
-func lineNumberAt(content string, idx int) int {
-	return lineNumberAtBytes([]byte(content), idx)
-}
-
-func lineNumberAtBytes(content []byte, idx int) int {
-	line := 1
-	for i := 0; i < idx && i < len(content); i++ {
-		if content[i] == '\n' {
-			line++
-		}
-	}
-	return line
-}
-
 // lineAt returns the full line of content containing byte offset idx.
 // lineStartAt returns the byte offset of the start of the line containing idx.
 func lineStartAt(content string, idx int) int {

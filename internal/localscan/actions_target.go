@@ -136,7 +136,7 @@ func canonicalActionsHost(u *url.URL) (string, error) {
 		return "", fmt.Errorf("empty host")
 	}
 	for _, c := range host {
-		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == ':') {
+		if (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '.' && c != '-' && c != ':' {
 			return "", fmt.Errorf("invalid host")
 		}
 	}
@@ -169,7 +169,7 @@ func validActionsRepositoryPart(part string) bool {
 		return false
 	}
 	for _, c := range part {
-		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_' || c == '.') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '-' && c != '_' && c != '.' {
 			return false
 		}
 	}
