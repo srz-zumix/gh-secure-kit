@@ -1977,7 +1977,11 @@ specified with `--config`; see
 [local configuration](#local-secret-scanning-configuration-file).
 For allowlist paths, each job log has the virtual path
 `actions/jobs/<job-id>.log`; allowlist commits match the run's head SHA.
-Logs are processed in memory and are not saved to disk.
+Each normalized job log, which may contain unmasked secrets, is written to a
+temporary file in the OS temporary directory and memory-mapped for scanning.
+The file is removed after the job log is scanned, but an abrupt termination
+(for example, a crash or `SIGKILL`) can leave it behind. Run archives and step
+logs are processed in memory and are not saved to disk.
 
 ```sh
 # Scan the latest completed run of each workflow

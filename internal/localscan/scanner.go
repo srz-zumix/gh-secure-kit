@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
 )
@@ -127,9 +128,14 @@ func (s *Scanner) scanFragmentContent(frag Fragment, stringContent string, byteC
 		if !p.Enabled {
 			continue
 		}
-		// Byte-backed scans skip the keyword prefilter to avoid allocating a lowercased copy of the mapped log.
-		if !byteMode && len(p.Keywords) > 0 && !containsAnyKeyword(stringContent, p.Keywords) {
-			continue
+		if len(p.Keywords) > 0 {
+			if byteMode {
+				if !containsAnyKeywordBytes(byteContent, p.Keywords) {
+					continue
+				}
+			} else if !containsAnyKeyword(stringContent, p.Keywords) {
+				continue
+			}
 		}
 		var locs [][]int
 		if byteMode {
@@ -288,6 +294,53 @@ func containsAnyKeyword(content string, keywords []string) bool {
 	for _, keyword := range keywords {
 		if strings.Contains(lower, strings.ToLower(keyword)) {
 			return true
+		}
+	}
+	return false
+}
+
+// keywordChunkSize bounds the lowercased copy made by containsAnyKeywordBytes.
+const keywordChunkSize = 1 << 20
+
+// containsAnyKeywordBytes reports whether content contains any keyword,
+// case-insensitively like containsAnyKeyword, while lowercasing only a bounded
+// chunk at a time. Chunks overlap so matches spanning a boundary are found.
+func containsAnyKeywordBytes(content []byte, keywords []string) bool {
+	lowerKeywords := make([][]byte, 0, len(keywords))
+	overlap := 0
+	for _, keyword := range keywords {
+		lk := []byte(strings.ToLower(keyword))
+		if len(lk) == 0 {
+			return true
+		}
+		lowerKeywords = append(lowerKeywords, lk)
+		// Lowercasing can change a rune's encoded length, so allow for the
+		// widest UTF-8 rune per keyword byte when sizing the overlap.
+		if n := len(lk) * utf8.UTFMax; n > overlap {
+			overlap = n
+		}
+	}
+	for start := 0; start < len(content); {
+		end := start + keywordChunkSize + overlap
+		if end >= len(content) {
+			end = len(content)
+		} else {
+			for end < len(content) && !utf8.RuneStart(content[end]) {
+				end++
+			}
+		}
+		lower := bytes.ToLower(content[start:end])
+		for _, lk := range lowerKeywords {
+			if bytes.Contains(lower, lk) {
+				return true
+			}
+		}
+		if end == len(content) {
+			break
+		}
+		start += keywordChunkSize
+		for start < len(content) && !utf8.RuneStart(content[start]) {
+			start++
 		}
 	}
 	return false
