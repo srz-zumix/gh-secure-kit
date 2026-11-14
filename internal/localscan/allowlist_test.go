@@ -1,6 +1,9 @@
 package localscan
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAllowlistAllowed(t *testing.T) {
 	dir := "vendor/third_party"
@@ -25,7 +28,7 @@ func TestAllowlistAllowed(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := al.Allowed(tt.finding, tt.match, tt.line); got != tt.want {
+			if got := al.Allowed(tt.finding, tt.match, tt.line, strings.Index(tt.line, tt.match)); got != tt.want {
 				t.Errorf("Allowed() = %v, want %v", got, tt.want)
 			}
 		})
@@ -34,7 +37,7 @@ func TestAllowlistAllowed(t *testing.T) {
 
 func TestAllowlistNilIsNeverAllowed(t *testing.T) {
 	var al *Allowlist
-	if al.Allowed(Finding{}, "anything", "anything") {
+	if al.Allowed(Finding{}, "anything", "anything", 0) {
 		t.Error("nil allowlist should never allow")
 	}
 }
@@ -65,7 +68,7 @@ func TestAllowlistDefaultsAllowKnownDummyCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := Finding{PatternID: tt.patternID}
-			if got := al.Allowed(f, tt.match, tt.match); got != tt.want {
+			if got := al.Allowed(f, tt.match, tt.match, 0); got != tt.want {
 				t.Errorf("Allowed() = %v, want %v", got, tt.want)
 			}
 		})
@@ -89,12 +92,30 @@ func TestAllowlistDefaultsMatchPrefixOfOverlongSample(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := al.Allowed(f, prefix, tt.line); got != tt.want {
+			if got := al.Allowed(f, prefix, tt.line, len("GH_TOKEN=")); got != tt.want {
 				t.Errorf("Allowed() = %v, want %v", got, tt.want)
 			}
 		})
 	}
-	if al.Allowed(f, "", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00") {
+	if al.Allowed(f, "", "GH_TOKEN=ghp_invalidinvalidinvalidinvalidinvalid00", len("GH_TOKEN=")) {
 		t.Error("empty match should not be allowed")
+	}
+}
+
+func TestAllowlistDefaultsPrefixRequiresPlaceholderAtMatch(t *testing.T) {
+	al := &Allowlist{}
+	f := Finding{PatternID: "github_personal_access_token"}
+	prefix := "ghp_invalidinvalidinvalidinvalidinvalid0"
+	line := "A=ghp_invalidinvalidinvalidinvalidinvalid01 B=ghp_invalidinvalidinvalidinvalidinvalid00"
+	first := strings.Index(line, prefix)
+	second := strings.LastIndex(line, prefix)
+	if al.Allowed(f, prefix, line, first) {
+		t.Error("non-placeholder token sharing a line with the placeholder should not be allowed")
+	}
+	if !al.Allowed(f, prefix, line, second) {
+		t.Error("placeholder token should be allowed")
+	}
+	if al.Allowed(f, prefix, line, -1) {
+		t.Error("unknown offset should not allow a prefix match")
 	}
 }

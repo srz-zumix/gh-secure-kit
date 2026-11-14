@@ -125,6 +125,14 @@ func (a *fakeActionsAPI) getLog(_ context.Context, id int64) ([]byte, error) {
 	return []byte(log), nil
 }
 
+func (a *fakeActionsAPI) streamLog(ctx context.Context, id int64, consume func(io.Reader) error) error {
+	content, err := a.getLog(ctx, id)
+	if err != nil {
+		return err
+	}
+	return consume(bytes.NewReader(content))
+}
+
 func (a *fakeActionsAPI) getRunLogArchive(ctx context.Context, runID, attempt int64) ([]byte, error) {
 	a.calls = append(a.calls, fmt.Sprintf("archive:%d:%d", runID, attempt))
 	if err := ctx.Err(); err != nil {

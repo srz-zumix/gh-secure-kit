@@ -826,7 +826,17 @@ func (r *actionsRunner) scanJob(ctx context.Context, candidate actionsJob) error
 	if err := r.limiter.acquire(ctx); err != nil {
 		return fmt.Errorf("failed to wait for the job log limit: %w", err)
 	}
-	content, err := r.api.getLog(ctx, job.GetID())
+	fragment := Fragment{
+		FilePath:  fmt.Sprintf("actions/jobs/%d.log", job.GetID()),
+		CommitSHA: candidate.run.GetHeadSHA(),
+	}
+	var logStats actionsLogStats
+	var findings []Finding
+	err := r.api.streamLog(ctx, job.GetID(), func(content io.Reader) error {
+		var scanErr error
+		logStats, findings, scanErr = scanActionsJobLog(content, fragment, r.scanner)
+		return scanErr
+	})
 	if actionsLogUnavailable(err) {
 		r.result.Summary.Unavailable++
 		r.result.Warnings = append(r.result.Warnings, fmt.Sprintf("log for job %d in run %d is unavailable and was not scanned", job.GetID(), candidate.run.GetID()))
@@ -834,15 +844,6 @@ func (r *actionsRunner) scanJob(ctx context.Context, candidate actionsJob) error
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get log for job %d in run %d: %w", job.GetID(), candidate.run.GetID(), err)
-	}
-	fragment := Fragment{
-		Content:   normalizeActionsLog(string(content)),
-		FilePath:  fmt.Sprintf("actions/jobs/%d.log", job.GetID()),
-		CommitSHA: candidate.run.GetHeadSHA(),
-	}
-	findings, err := Scan(actionsLogSource{fragment: fragment}, r.scanner)
-	if err != nil {
-		return fmt.Errorf("failed to scan log for job %d: %w", job.GetID(), err)
 	}
 	r.result.Summary.Scanned++
 	name, workflowPath := candidate.run.GetName(), candidate.run.GetPath()
@@ -882,7 +883,7 @@ func (r *actionsRunner) scanJob(ctx context.Context, candidate actionsJob) error
 				r.result.Findings[index].JobURL = r.scanner.redactMetadata(jobURL.String())
 			}
 		}
-		r.queueLocation(candidate, content, firstFinding, len(r.result.Findings))
+		r.queueLocation(candidate, logStats, firstFinding, len(r.result.Findings))
 	}
 	return nil
 }
@@ -897,12 +898,4 @@ func actionsJobWasNotRun(job *github.WorkflowJob) bool {
 		}
 	}
 	return true
-}
-
-type actionsLogSource struct {
-	fragment Fragment
-}
-
-func (s actionsLogSource) Fragments() ([]Fragment, error) {
-	return []Fragment{s.fragment}, nil
 }

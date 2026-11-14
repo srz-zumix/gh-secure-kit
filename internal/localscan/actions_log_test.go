@@ -1,7 +1,9 @@
 package localscan
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"net/http"
@@ -176,6 +178,61 @@ func TestNormalizeActionsLogPreservesLinesAndMultilineMatches(t *testing.T) {
 	}
 	if lines["rsa_private_key"] != 2 || lines["multiline"] != 5 {
 		t.Fatalf("findings have incorrect multiline locations: %v", lines)
+	}
+}
+
+func TestNormalizeActionsLogToMatchesWholeStringNormalizer(t *testing.T) {
+	tests := []string{
+		"\xef\xbb\xbf2026-01-02T03:04:05.1234567Z prefixed\nplain line\n",
+		"2026-01-02T03:04:05Z without trailing newline",
+		strings.Repeat("x", 1<<20) + "\n2026-01-02T03:04:05Z next\n",
+		"malformed timestamp text\n" + strings.Repeat("y", 64),
+	}
+	for _, input := range tests {
+		var got bytes.Buffer
+		if err := normalizeActionsLogTo(&got, strings.NewReader(input)); err != nil {
+			t.Fatal(err)
+		}
+		if want := normalizeActionsLog(input); got.String() != want {
+			t.Fatalf("stream normalization differs for %d-byte input", len(input))
+		}
+	}
+}
+
+func TestScanActionsJobLogPreservesWholeLogMatches(t *testing.T) {
+	scanner, err := NewScanner(&Config{Patterns: []ConfigPattern{
+		{ID: "multiline", Regex: `fixture-start\nfixture-end`},
+		{ID: "anchored", Regex: `(?m)^TOKEN_[A-Z]+$`},
+		{ID: "unicode", Regex: `秘密-[0-9]+`},
+	}}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "\xef\xbb\xbf2026-01-02T03:04:05Z " + strings.Repeat("x", 1<<20) + "\n" +
+		"2026-01-02T03:04:06Z fixture-start\n2026-01-02T03:04:07Z fixture-end\n" +
+		"TOKEN_SYNTHETIC\n秘密-123\n"
+	fragment := Fragment{FilePath: "actions/jobs/123.log", CommitSHA: "synthetic-commit"}
+	stats, streamed, err := scanActionsJobLog(strings.NewReader(content), fragment, scanner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := scanner.ScanFragment(Fragment{
+		Content:   normalizeActionsLog(content),
+		FilePath:  fragment.FilePath,
+		CommitSHA: fragment.CommitSHA,
+	})
+	if len(streamed) != len(want) {
+		t.Fatalf("streamed findings = %d, want %d: %+v", len(streamed), len(want), streamed)
+	}
+	for i := range want {
+		if streamed[i].PatternID != want[i].PatternID ||
+			streamed[i].StartLine != want[i].StartLine ||
+			streamed[i].Match != want[i].Match {
+			t.Fatalf("streamed finding %d = %+v, want %+v", i, streamed[i], want[i])
+		}
+	}
+	if stats.size != int64(len(content)) || stats.hash != sha256.Sum256([]byte(content)) {
+		t.Fatalf("raw log stats = size %d hash %x", stats.size, stats.hash)
 	}
 }
 

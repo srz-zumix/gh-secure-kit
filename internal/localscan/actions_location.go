@@ -67,7 +67,7 @@ func (r actionsArchiveContextReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (r *actionsRunner) queueLocation(candidate actionsJob, content []byte, first, end int) {
+func (r *actionsRunner) queueLocation(candidate actionsJob, stats actionsLogStats, first, end int) {
 	if r.locations == nil {
 		r.locations = make(map[actionsAttempt][]actionsLocationJob)
 	}
@@ -77,8 +77,8 @@ func (r *actionsRunner) queueLocation(candidate actionsJob, content []byte, firs
 	}
 	r.locations[key] = append(r.locations[key], actionsLocationJob{
 		job:          candidate.job,
-		logSize:      int64(len(content)),
-		logHash:      sha256.Sum256(content),
+		logSize:      stats.size,
+		logHash:      stats.hash,
 		firstFinding: first,
 		endFinding:   end,
 	})

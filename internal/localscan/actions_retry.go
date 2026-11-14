@@ -182,6 +182,13 @@ func (a *retryingActionsAPI) getLog(ctx context.Context, jobID int64) ([]byte, e
 	})
 }
 
+func (a *retryingActionsAPI) streamLog(ctx context.Context, jobID int64, consume func(io.Reader) error) error {
+	_, err := actionsRetry(ctx, a, fmt.Sprintf("getting log for job %d", jobID), func() (struct{}, error) {
+		return struct{}{}, a.api.streamLog(ctx, jobID, consume)
+	})
+	return err
+}
+
 func (a *retryingActionsAPI) getStepLog(ctx context.Context, jobID, stepNumber, limit int64) ([]byte, error) {
 	return actionsRetry(ctx, a, fmt.Sprintf("getting log for job %d step %d", jobID, stepNumber), func() ([]byte, error) {
 		return a.api.getStepLog(ctx, jobID, stepNumber, limit)

@@ -1,17 +1,23 @@
 package localscan
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/cli/go-gh/v2/pkg/repository"
+	"github.com/edsrzf/mmap-go"
 	"github.com/google/go-github/v93/github"
 	"github.com/srz-zumix/go-gh-extension/pkg/gh"
 	"github.com/srz-zumix/go-gh-extension/pkg/logger"
@@ -25,6 +31,7 @@ type actionsAPI interface {
 	listJobs(context.Context, int64, int64) ([]*github.WorkflowJob, error)
 	getJob(context.Context, int64) (*github.WorkflowJob, error)
 	getLog(context.Context, int64) ([]byte, error)
+	streamLog(context.Context, int64, func(io.Reader) error) error
 	getStepLog(context.Context, int64, int64, int64) ([]byte, error)
 	getRunLogArchive(context.Context, int64, int64) ([]byte, error)
 }
@@ -70,6 +77,16 @@ func (a *githubActionsAPI) getLog(ctx context.Context, jobID int64) ([]byte, err
 		return nil, newActionsRequestError("requesting the GitHub job log", err)
 	}
 	return downloadActionsLog(ctx, a.httpClient, location)
+}
+
+func (a *githubActionsAPI) streamLog(ctx context.Context, jobID int64, consume func(io.Reader) error) error {
+	apiCtx, cancel := context.WithTimeout(ctx, gh.DefaultHTTPTimeout)
+	defer cancel()
+	location, err := gh.GetWorkflowJobLogsURL(apiCtx, a.client, a.repo, jobID, 1)
+	if err != nil {
+		return newActionsRequestError("requesting the GitHub job log", err)
+	}
+	return downloadActionsContentStream(ctx, a.httpClient, location, "job log", 0, consume)
 }
 
 func (a *githubActionsAPI) getRunLogArchive(ctx context.Context, runID, attempt int64) ([]byte, error) {
@@ -187,14 +204,40 @@ func downloadActionsLog(ctx context.Context, client *http.Client, location strin
 }
 
 func downloadActionsContent(ctx context.Context, client *http.Client, location, kind string, limit int64) (body []byte, err error) {
+	err = downloadActionsContentStream(ctx, client, location, kind, limit, func(reader io.Reader) error {
+		body, err = io.ReadAll(reader)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+type actionsReadTracker struct {
+	reader io.Reader
+	count  int64
+	err    error
+}
+
+func (r *actionsReadTracker) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.count += int64(n)
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return n, err
+}
+
+func downloadActionsContentStream(ctx context.Context, client *http.Client, location, kind string, limit int64, consume func(io.Reader) error) (err error) {
 	downloadStage := "downloading the " + kind
 	target, err := url.Parse(location)
 	if err != nil || !validActionsLogURL(target) {
-		return nil, &actionsLogError{stage: downloadStage, cause: fmt.Errorf("invalid HTTPS download URL")}
+		return &actionsLogError{stage: downloadStage, cause: fmt.Errorf("invalid HTTPS download URL")}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
-		return nil, &actionsLogError{stage: downloadStage, cause: fmt.Errorf("invalid download request")}
+		return &actionsLogError{stage: downloadStage, cause: fmt.Errorf("invalid download request")}
 	}
 	httpClient := *client
 	httpClient.CheckRedirect = func(req *http.Request, via []*http.Request) error {
@@ -208,34 +251,36 @@ func downloadActionsContent(ctx context.Context, client *http.Client, location, 
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, &actionsLogError{stage: downloadStage, cause: safeActionsNetworkError(err),
+		return &actionsLogError{stage: downloadStage, cause: safeActionsNetworkError(err),
 			transient: !errors.Is(err, errActionsDownloadRedirect) && actionsTransientNetworkError(err)}
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			safeErr := safeActionsNetworkError(closeErr)
 			logger.Warn("failed to close actions download response body", "error", safeErr)
-			body = nil
 			err = errors.Join(err, &actionsLogError{
 				stage: "closing the " + kind, cause: safeErr, transient: actionsTransientNetworkError(closeErr),
 			})
 		}
 	}()
 	if resp.StatusCode != http.StatusOK {
-		return nil, &actionsLogError{stage: downloadStage, status: resp.StatusCode, retryAfter: actionsRetryAfterHeader(resp.Header)}
+		return &actionsLogError{stage: downloadStage, status: resp.StatusCode, retryAfter: actionsRetryAfterHeader(resp.Header)}
 	}
 	reader := io.Reader(resp.Body)
 	if limit > 0 {
 		reader = io.LimitReader(reader, limit+1)
 	}
-	body, err = io.ReadAll(reader)
-	if err != nil {
-		return nil, &actionsLogError{stage: "reading the " + kind, cause: safeActionsNetworkError(err), transient: actionsTransientNetworkError(err)}
+	tracked := &actionsReadTracker{reader: reader}
+	if err := consume(tracked); err != nil {
+		if tracked.err != nil {
+			return &actionsLogError{stage: "reading the " + kind, cause: safeActionsNetworkError(tracked.err), transient: actionsTransientNetworkError(tracked.err)}
+		}
+		return err
 	}
-	if limit > 0 && int64(len(body)) > limit {
-		return nil, &actionsLogError{stage: downloadStage, cause: fmt.Errorf("content exceeds the %d-byte limit", limit)}
+	if limit > 0 && tracked.count > limit {
+		return &actionsLogError{stage: downloadStage, cause: fmt.Errorf("content exceeds the %d-byte limit", limit)}
 	}
-	return body, nil
+	return nil
 }
 
 func normalizeActionsLog(content string) string {
@@ -257,6 +302,238 @@ func normalizeActionsLog(content string) string {
 		content = rest
 	}
 	return output.String()
+}
+
+type actionsLogStats struct {
+	size int64
+	hash [sha256.Size]byte
+}
+
+type actionsLogHashReader struct {
+	reader io.Reader
+	hash   hash.Hash
+	size   int64
+	err    error
+}
+
+func (r *actionsLogHashReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 {
+		_, _ = r.hash.Write(p[:n])
+		r.size += int64(n)
+	}
+	if err != nil && err != io.EOF {
+		r.err = err
+	}
+	return n, err
+}
+
+func scanActionsJobLog(reader io.Reader, fragment Fragment, scanner *Scanner) (stats actionsLogStats, findings []Finding, retErr error) {
+	tempFile, err := os.CreateTemp("", "gh-secure-kit-actions-log-*")
+	if err != nil {
+		return actionsLogStats{}, nil, fmt.Errorf("failed to create temporary job log: %w", err)
+	}
+	name := tempFile.Name()
+	defer func() {
+		if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+			retErr = errors.Join(retErr, fmt.Errorf("failed to remove temporary job log: %w", err))
+			stats, findings = actionsLogStats{}, nil
+		}
+	}()
+	tempOpen := true
+	defer func() {
+		if tempOpen {
+			if err := tempFile.Close(); err != nil {
+				retErr = errors.Join(retErr, fmt.Errorf("failed to close temporary job log: %w", err))
+				stats, findings = actionsLogStats{}, nil
+			}
+		}
+	}()
+
+	hash := sha256.New()
+	tracked := &actionsLogHashReader{reader: reader, hash: hash}
+	if err := normalizeActionsLogTo(tempFile, tracked); err != nil {
+		if tracked.err != nil {
+			return actionsLogStats{}, nil, &actionsLogError{
+				stage: "reading the job log", cause: safeActionsNetworkError(tracked.err), transient: actionsTransientNetworkError(tracked.err),
+			}
+		}
+		return actionsLogStats{}, nil, fmt.Errorf("failed to write temporary job log: %w", err)
+	}
+	if err := tempFile.Close(); err != nil {
+		tempOpen = false
+		return actionsLogStats{}, nil, fmt.Errorf("failed to close temporary job log: %w", err)
+	}
+	tempOpen = false
+	stats = actionsLogStats{size: tracked.size}
+	copy(stats.hash[:], hash.Sum(nil))
+	info, err := os.Stat(name)
+	if err != nil {
+		return actionsLogStats{}, nil, fmt.Errorf("failed to inspect temporary job log: %w", err)
+	}
+	if info.Size() == 0 {
+		return stats, nil, nil
+	}
+
+	logFile, err := os.Open(name)
+	if err != nil {
+		return actionsLogStats{}, nil, fmt.Errorf("failed to open temporary job log: %w", err)
+	}
+	defer func() {
+		if err := logFile.Close(); err != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("failed to close temporary job log: %w", err))
+			stats, findings = actionsLogStats{}, nil
+		}
+	}()
+	mapped, err := mmap.Map(logFile, mmap.RDONLY, 0)
+	if err != nil {
+		return actionsLogStats{}, nil, fmt.Errorf("failed to map temporary job log: %w", err)
+	}
+	defer func() {
+		if err := mapped.Unmap(); err != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("failed to unmap temporary job log: %w", err))
+			stats, findings = actionsLogStats{}, nil
+		}
+	}()
+
+	findings = scanner.scanFragmentBytes(fragment, mapped)
+	type findingKey struct {
+		pattern string
+		hash    [sha256.Size]byte
+	}
+	seen := make(map[findingKey]struct{}, len(findings))
+	unique := findings[:0]
+	for _, finding := range findings {
+		key := findingKey{pattern: finding.PatternID, hash: finding.matchHash}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, finding)
+	}
+	return stats, unique, nil
+}
+
+func normalizeActionsLogTo(writer io.Writer, reader io.Reader) error {
+	buffered := bufio.NewReader(reader)
+	if prefix, _ := buffered.Peek(3); bytes.Equal(prefix, []byte{0xef, 0xbb, 0xbf}) {
+		_, _ = buffered.Discard(3)
+	}
+	normalizer := &actionsLogNormalizer{writer: writer, lineStart: true}
+	if _, err := io.Copy(normalizer, buffered); err != nil {
+		return err
+	}
+	return normalizer.Flush()
+}
+
+type actionsLogNormalizer struct {
+	writer      io.Writer
+	prefix      []byte
+	lineStart   bool
+	passthrough bool
+}
+
+func (n *actionsLogNormalizer) Write(p []byte) (int, error) {
+	written := 0
+	for len(p) > 0 {
+		if !n.lineStart {
+			i := bytes.IndexByte(p, '\n')
+			if i < 0 {
+				if err := writeActionsLogBytes(n.writer, p); err != nil {
+					return written, err
+				}
+				return written + len(p), nil
+			}
+			if err := writeActionsLogBytes(n.writer, p[:i+1]); err != nil {
+				return written, err
+			}
+			written += i + 1
+			p = p[i+1:]
+			n.lineStart = true
+			n.passthrough = false
+			continue
+		}
+
+		if n.passthrough {
+			i := bytes.IndexByte(p, '\n')
+			if i < 0 {
+				if err := writeActionsLogBytes(n.writer, p); err != nil {
+					return written, err
+				}
+				return written + len(p), nil
+			}
+			if err := writeActionsLogBytes(n.writer, p[:i+1]); err != nil {
+				return written, err
+			}
+			written += i + 1
+			p = p[i+1:]
+			n.lineStart = true
+			n.passthrough = false
+			continue
+		}
+
+		b := p[0]
+		n.prefix = append(n.prefix, b)
+		p = p[1:]
+		written++
+		switch {
+		case b == '\n':
+			if err := writeActionsLogBytes(n.writer, n.prefix); err != nil {
+				return written, err
+			}
+			n.prefix = n.prefix[:0]
+			n.lineStart = true
+		case b == ' ':
+			if !actionsTimestampPrefix(n.prefix[:len(n.prefix)-1]) {
+				if err := writeActionsLogBytes(n.writer, n.prefix); err != nil {
+					return written, err
+				}
+			}
+			n.prefix = n.prefix[:0]
+			n.lineStart = false
+			n.passthrough = true
+		case len(n.prefix) == 36:
+			if err := writeActionsLogBytes(n.writer, n.prefix); err != nil {
+				return written, err
+			}
+			n.prefix = n.prefix[:0]
+			n.lineStart = false
+			n.passthrough = true
+		}
+	}
+	return written, nil
+}
+
+func (n *actionsLogNormalizer) Flush() error {
+	if len(n.prefix) > 0 {
+		if err := writeActionsLogBytes(n.writer, n.prefix); err != nil {
+			return err
+		}
+		n.prefix = n.prefix[:0]
+	}
+	return nil
+}
+
+func actionsTimestampPrefix(prefix []byte) bool {
+	if len(prefix) < len("2006-01-02T15:04:05Z") || len(prefix) > 35 {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339Nano, string(prefix))
+	return err == nil
+}
+
+func writeActionsLogBytes(writer io.Writer, content []byte) error {
+	for len(content) > 0 {
+		n, err := writer.Write(content)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		content = content[n:]
+	}
+	return nil
 }
 
 type actionsRateLimiter struct {

@@ -5,6 +5,7 @@ go 1.27.3
 require (
 	github.com/cli/cli/v2 v2.103.0
 	github.com/cli/go-gh/v2 v2.17.0
+	github.com/edsrzf/mmap-go v1.2.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/goccy/go-yaml v1.19.2
 	github.com/google/go-github/v93 v93.0.0

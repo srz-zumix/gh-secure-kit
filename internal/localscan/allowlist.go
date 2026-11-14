@@ -1,6 +1,7 @@
 package localscan
 
 import (
+	"bytes"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -42,8 +43,9 @@ type Allowlist struct {
 
 // Allowed reports whether matchedText, found on lineText in f.File, should
 // be excluded from the scan results. lineText is the full line the match
-// was found on, used for stopword checks.
-func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
+// was found on, used for stopword checks. matchOffset is the byte offset of
+// matchedText within lineText, or a negative value when unknown.
+func (a *Allowlist) Allowed(f Finding, matchedText, lineText string, matchOffset int) bool {
 	if a == nil {
 		return false
 	}
@@ -52,9 +54,8 @@ func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
 			if strings.Contains(matchedText, sample) {
 				return true
 			}
-			// A fixed-length pattern may match only a prefix of an overlong
-			// sample, so require the complete sample on the same line.
-			if matchedText != "" && strings.HasPrefix(sample, matchedText) && strings.Contains(lineText, sample) {
+			if matchedText != "" && strings.HasPrefix(sample, matchedText) &&
+				matchOffset >= 0 && matchOffset <= len(lineText) && strings.HasPrefix(lineText[matchOffset:], sample) {
 				return true
 			}
 		}
@@ -79,6 +80,49 @@ func (a *Allowlist) Allowed(f Finding, matchedText, lineText string) bool {
 	}
 	for _, sw := range a.StopWords {
 		if strings.Contains(lineText, sw) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *Allowlist) allowedBytes(f Finding, matchedText, lineText []byte, matchOffset int) bool {
+	if a == nil {
+		return false
+	}
+	if samples, ok := defaultAllowlistValues[f.PatternID]; ok {
+		for _, sample := range samples {
+			if bytes.Contains(matchedText, []byte(sample)) {
+				return true
+			}
+			// A fixed-length pattern may match only a prefix of an overlong
+			// sample, so require the complete sample starting at the match.
+			if len(matchedText) > 0 && bytes.HasPrefix([]byte(sample), matchedText) &&
+				matchOffset >= 0 && matchOffset <= len(lineText) && bytes.HasPrefix(lineText[matchOffset:], []byte(sample)) {
+				return true
+			}
+		}
+	}
+	for _, re := range a.Regexes {
+		if re.Match(matchedText) {
+			return true
+		}
+	}
+	for _, p := range a.Paths {
+		if matched, _ := filepath.Match(p, f.File); matched {
+			return true
+		}
+		if strings.Contains(f.File, p) {
+			return true
+		}
+	}
+	for _, c := range a.Commits {
+		if f.Commit != "" && f.Commit == c {
+			return true
+		}
+	}
+	for _, sw := range a.StopWords {
+		if bytes.Contains(lineText, []byte(sw)) {
 			return true
 		}
 	}
