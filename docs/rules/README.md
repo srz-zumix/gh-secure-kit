@@ -25,7 +25,7 @@ ignore:
 ```
 
 | Rule | Target |
-|---|---|
+| --- | --- |
 | GSK119, GSK120 | Collaborator login |
 | GSK121, GSK122 | Deploy key ID |
 | GSK131 | Ruleset name |
@@ -33,15 +33,41 @@ ignore:
 | GSK144, GSK145, GSK524, GSK525 | Webhook ID |
 | GSK521, GSK522 | User login |
 | GSK523 | Runner group name |
+| GSK527-GSK548 | Default security configuration name |
 
 A rule whose findings are all ignored is reported as `skip`. The classic
 "not enforced for administrators" finding of GSK131 cannot be ignored per
 target; ignore the whole rule instead.
 
+## Organization security configuration checks
+
+GSK527-GSK548 inspect the organization's default code security configurations
+for newly created repositories. They do not verify settings on existing
+repositories, actual product licensing, or whether every visibility has a
+default; GSK507 separately checks whether any default exists. GSK544 considers
+public repository defaults, and GSK545-GSK547 consider private/internal
+defaults. A configuration applying to `all` is considered for both.
+
+An explicitly disabled setting fails, unless a known prerequisite is disabled
+and the check is inapplicable. If the prerequisite is unknown, the disabled
+setting still fails and the uncertainty is reported. Missing, unsupported,
+or `not_set` values are skipped rather than treated as enabled or disabled.
+When one configuration fails and another cannot be evaluated, the rule fails
+and identifies the uncertainty. Otherwise, an unknown or ignored configuration,
+or one with a disabled prerequisite, makes the aggregate result `skip`.
+Configurations outside the relevant visibility are excluded. `golden --prune`
+retains existing target patterns when a failing rule has incompletely evaluated
+configurations.
+
+These rules report settings only and do not automatically change them. Enabling
+products may require licenses, automatic dependency submission can run
+workflows, and AI-based features can consume credits. Validity checks send
+supported detected credentials to their issuers.
+
 ## Repository rules
 
 | Rule | Severity | Fixable | Title |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [GSK101](GSK101.md) | High | Yes | Dependabot alerts not enabled |
 | [GSK102](GSK102.md) | Medium | No | Dependabot enabled but no dependabot.yml found |
 | [GSK103](GSK103.md) | Low | Yes | No SECURITY.md file found |
@@ -88,11 +114,20 @@ target; ignore the whole rule instead.
 | [GSK144](GSK144.md) | High | No | Webhook uses insecure transport |
 | [GSK145](GSK145.md) | Medium | No | Webhook has no secret |
 | [GSK146](GSK146.md) | High | No | Actions lockfile not required for all workflows |
+| [GSK147](GSK147.md) | Medium | No | Secret scanning validity checks not enabled |
+| [GSK148](GSK148.md) | Medium | No | Secret scanning generic patterns not enabled |
+| [GSK149](GSK149.md) | Medium | No | AI detection of secrets not enabled |
+| [GSK150](GSK150.md) | Medium | No | Secret scanning delegated bypass not enabled |
+| [GSK151](GSK151.md) | Medium | No | Secret scanning delegated alert dismissal not enabled |
+| [GSK152](GSK152.md) | Medium | No | GitHub Code Security not enabled |
+| [GSK153](GSK153.md) | Info | No | GitHub Advanced Security bundle not enabled |
+| [GSK154](GSK154.md) | Medium | No | AI Scan for pull requests not enabled |
+| [GSK155](GSK155.md) | Medium | No | AI Scan for repositories not enabled |
 
 ## Organization rules
 
 | Rule | Severity | Fixable | Title |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [GSK501](GSK501.md) | Critical | No | Two-factor authentication not required for members |
 | [GSK502](GSK502.md) | Medium | Yes | Web commit signoff not required |
 | [GSK503](GSK503.md) | High | Yes | Default repository permission is admin or write |
@@ -119,3 +154,27 @@ target; ignore the whole rule instead.
 | [GSK524](GSK524.md) | High | No | Webhook uses insecure transport |
 | [GSK525](GSK525.md) | Medium | No | Webhook has no secret |
 | [GSK526](GSK526.md) | High | No | Actions lockfile not required for all repositories and workflows |
+| [GSK527](GSK527.md) | High | No | Default configurations do not enable dependency graph |
+| [GSK528](GSK528.md) | Medium | No | Default configurations do not enable automatic dependency submission |
+| [GSK529](GSK529.md) | High | No | Default configurations do not enable Dependabot alerts |
+| [GSK530](GSK530.md) | Medium | No | Default configurations do not enable Dependabot security updates |
+| [GSK531](GSK531.md) | Medium | No | Default configurations do not enable Dependabot delegated alert dismissal |
+| [GSK532](GSK532.md) | Medium | No | Default configurations do not enable Dependabot reachability analysis |
+| [GSK533](GSK533.md) | High | No | Default configurations do not enable code scanning default setup |
+| [GSK534](GSK534.md) | Medium | No | Default configurations do not enable code scanning delegated alert dismissal |
+| [GSK535](GSK535.md) | High | No | Default configurations do not enable secret scanning |
+| [GSK536](GSK536.md) | High | No | Default configurations do not enable secret scanning push protection |
+| [GSK537](GSK537.md) | Medium | No | Default configurations do not enable secret scanning delegated bypass |
+| [GSK538](GSK538.md) | Medium | No | Default configurations do not enable secret scanning validity checks |
+| [GSK539](GSK539.md) | Medium | No | Default configurations do not enable secret scanning generic patterns |
+| [GSK540](GSK540.md) | Medium | No | Default configurations do not enable AI detection of secrets |
+| [GSK541](GSK541.md) | Medium | No | Default configurations do not block AI-detected secrets |
+| [GSK542](GSK542.md) | Medium | No | Default configurations do not enable secret scanning delegated alert dismissal |
+| [GSK543](GSK543.md) | Medium | No | Default configurations do not enable secret scanning extended metadata |
+| [GSK544](GSK544.md) | Medium | No | Default configurations do not enable private vulnerability reporting |
+| [GSK545](GSK545.md) | Info | No | Default configurations do not enable the GitHub Advanced Security bundle |
+| [GSK546](GSK546.md) | Medium | No | Default configurations do not enable GitHub Code Security |
+| [GSK547](GSK547.md) | Medium | No | Default configurations do not enable GitHub Secret Protection |
+| [GSK548](GSK548.md) | Medium | No | Default security configurations are not enforced |
+| [GSK549](GSK549.md) | Medium | No | AI Scan for pull requests not enabled |
+| [GSK550](GSK550.md) | Medium | No | AI Scan for repositories not enabled |

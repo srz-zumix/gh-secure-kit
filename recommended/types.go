@@ -93,6 +93,9 @@ type Outcome struct {
 	// Targets lists the failing targets when every finding of a failing rule
 	// is attributable to an individual target; it is nil otherwise.
 	Targets []string
+	// TargetsIncomplete prevents pruning target ignores when other targets
+	// could not be evaluated.
+	TargetsIncomplete bool
 	// SettingsPath overrides Rule.SettingsPath when the settings page that fixes
 	// the finding depends on the outcome; empty keeps the rule's path.
 	SettingsPath string
@@ -143,6 +146,8 @@ type Result struct {
 	SettingsURL string
 	// Targets is Outcome.Targets of the evaluation.
 	Targets []string
+	// TargetsIncomplete is Outcome.TargetsIncomplete of the evaluation.
+	TargetsIncomplete bool
 }
 
 func (r Rule) settingsURL(repo repository.Repository) string {

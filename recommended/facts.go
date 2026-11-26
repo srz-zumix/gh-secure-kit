@@ -62,6 +62,8 @@ type RepositoryFacts struct {
 	VulnerabilityAlerts           *gh.RepositorySecurityFeatureStatus
 	AutomatedSecurityFixes        *gh.RepositorySecurityFeatureStatus
 	PrivateVulnerabilityReporting *gh.RepositorySecurityFeatureStatus
+	securityAnalysis              map[string]json.RawMessage
+	aiScanSettings                map[string]json.RawMessage
 
 	// DefaultWorkflowPermissions is nil when the GITHUB_TOKEN default workflow
 	// permissions for the repository could not be fetched.
@@ -304,14 +306,30 @@ func CollectRepositoryFacts(ctx context.Context, g *gh.GitHubClient, repo reposi
 		return nil, err
 	}
 
+	codeSecurityDisabled := false
 	if setup, err := gh.GetCodeScanningDefaultSetupConfiguration(ctx, g, repo); err == nil {
 		f.CodeScanningSetup = setup
 	} else if isCodeSecurityDisabled(err) {
 		// Code scanning cannot run while Code Security is disabled, so the
 		// default setup is known to be not configured.
 		f.CodeScanningSetup = &github.DefaultSetupConfiguration{State: new("not-configured")}
+		codeSecurityDisabled = true
 	} else if isAccessDenied(err) {
 		return nil, err
+	}
+	if needsRepositorySecurityAnalysis(rules) {
+		if analysis, err := getRepositorySecurityAnalysis(ctx, g, repo); err == nil {
+			f.securityAnalysis = analysis
+		} else if fatalSecuritySettingsError(err) {
+			return nil, err
+		}
+	}
+	if selectedRule(rules, "GSK154", "GSK155") && !codeSecurityDisabled {
+		if settings, err := getAIScanSettings(ctx, g, repo, ScopeRepository); err == nil {
+			f.aiScanSettings = settings
+		} else if !isCodeSecurityDisabled(err) && fatalSecuritySettingsError(err) {
+			return nil, err
+		}
 	}
 	if status, err := gh.GetVulnerabilityAlerts(ctx, g, repo); err == nil {
 		f.VulnerabilityAlerts = status
@@ -474,6 +492,9 @@ type OrganizationFacts struct {
 	// configurations were successfully fetched. It stays false when the API
 	// call fails so rules can distinguish "unknown" from "empty".
 	DefaultSecurityConfigsKnown bool
+	securityDefaults            []securityDefaultConfiguration
+	securityDefaultsKnown       bool
+	aiScanSettings              map[string]json.RawMessage
 	// DefaultWorkflowPermissions is nil when the GITHUB_TOKEN default workflow
 	// permissions for the organization could not be fetched.
 	DefaultWorkflowPermissions *github.DefaultWorkflowPermissionOrganization
@@ -541,6 +562,21 @@ func CollectOrganizationFacts(ctx context.Context, g *gh.GitHubClient, repo repo
 		f.DefaultSecurityConfigsKnown = true
 	} else if isAccessDenied(err) {
 		return nil, err
+	}
+	if needsOrganizationSecurityDefaults(rules) {
+		if configs, err := getSecurityDefaults(ctx, g, repo); err == nil {
+			f.securityDefaults = configs
+			f.securityDefaultsKnown = configs != nil
+		} else if fatalSecuritySettingsError(err) {
+			return nil, err
+		}
+	}
+	if selectedRule(rules, "GSK549", "GSK550") {
+		if settings, err := getAIScanSettings(ctx, g, repo, ScopeOrganization); err == nil {
+			f.aiScanSettings = settings
+		} else if fatalSecuritySettingsError(err) {
+			return nil, err
+		}
 	}
 	if permissions, err := gh.GetOrgDefaultWorkflowPermissions(ctx, g, repo); err == nil {
 		f.DefaultWorkflowPermissions = permissions

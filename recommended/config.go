@@ -180,8 +180,8 @@ func GoldenTargetIgnores(cfg *Config, prune bool) (TargetIgnores, error) {
 // and adds the failing results: a failing rule whose findings are all attributed
 // to targets adds one pattern per target, any other failing rule is ignored as a
 // whole. With prune, entries of passing results are removed and target patterns
-// that match no failing target are dropped; skipped and unevaluated rules always
-// keep their entries.
+// that match no failing target are dropped only when target evaluation was
+// complete; skipped and unevaluated rules always keep their entries.
 func GoldenConfig(base *Config, results []Result, prune bool) *Config {
 	whole := map[string]bool{}
 	patterns := map[string]map[string]bool{}
@@ -210,7 +210,7 @@ func GoldenConfig(base *Config, results []Result, prune bool) *Config {
 			whole[id] = true
 			delete(patterns, id)
 		default:
-			patterns[id] = reconcileTargetPatterns(patterns[id], result.Targets, prune)
+			patterns[id] = reconcileTargetPatterns(patterns[id], result.Targets, prune && !result.TargetsIncomplete)
 		}
 	}
 
