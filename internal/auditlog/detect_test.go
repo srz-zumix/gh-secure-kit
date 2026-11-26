@@ -27,6 +27,11 @@ func TestClassify(t *testing.T) {
 		"integration.create":                   CategoryGitHubApp,
 		"integration_installation.create":      CategoryGitHubApp,
 		"org.integration_manager_added":        CategoryGitHubApp,
+		"repo.update_actions_secret":           CategorySecret,
+		"repo.create_integration_secret":       CategorySecret,
+		"environment.remove_actions_secret":    CategorySecret,
+		"repo.update_actions_variable":         "",
+		"org.update_actions_secret":            "",
 		"org.create":                           "",
 		"repo.create":                          "",
 		"integrationx.create":                  "",
@@ -111,11 +116,15 @@ func TestFilter(t *testing.T) {
 		entry("repo.create", base.Add(time.Hour), nil),
 		entry("personal_access_token.access_granted", base.Add(2*time.Hour), nil),
 		entry("public_key.delete", base.Add(-48*time.Hour), nil),
+		entry("repo.update_actions_secret", base.Add(-72*time.Hour), map[string]any{"key": "EXAMPLE_SECRET"}),
 	}
 
 	got := Filter(entries, nil, time.Time{}, time.Time{})
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
+	if len(got) != 4 {
+		t.Fatalf("len = %d, want 4", len(got))
+	}
+	if got[3].Category != CategorySecret || got[3].Target != "EXAMPLE_SECRET" {
+		t.Errorf("secret detection = %+v, want category %q and target EXAMPLE_SECRET", got[3], CategorySecret)
 	}
 	if *got[0].Entry.Action != "personal_access_token.access_granted" || *got[2].Entry.Action != "public_key.delete" {
 		t.Errorf("entries are not sorted newest first: %v", got)
@@ -130,8 +139,8 @@ func TestFilter(t *testing.T) {
 	}
 
 	got = Filter(entries, nil, time.Time{}, base.Add(30*time.Minute))
-	if len(got) != 2 {
-		t.Errorf("until filter len = %d, want 2", len(got))
+	if len(got) != 3 {
+		t.Errorf("until filter len = %d, want 3", len(got))
 	}
 }
 
