@@ -1,5 +1,6 @@
 // Package auditlog detects credential-related operations (SSH keys, PATs,
-// SSO credential authorizations, OAuth apps, GitHub Apps) in organization audit logs.
+// SSO credential authorizations, OAuth apps, GitHub Apps, repository and environment
+// secrets) in organization audit logs.
 package auditlog
 
 import (
@@ -16,6 +17,7 @@ const (
 	CategorySSOCredential = "sso-credential"
 	CategoryOAuthApp      = "oauth-app"
 	CategoryGitHubApp     = "github-app"
+	CategorySecret        = "secret"
 )
 
 // Categories lists every supported category in display order.
@@ -25,6 +27,7 @@ var Categories = []string{
 	CategorySSOCredential,
 	CategoryOAuthApp,
 	CategoryGitHubApp,
+	CategorySecret,
 }
 
 type categoryDef struct {
@@ -73,6 +76,22 @@ var categoryDefs = []categoryDef{
 			"org.integration_manager_removed",
 		},
 		targetKeys: []string{"integration", "name", "manager"},
+	},
+	{
+		name: CategorySecret,
+		// repo.*_integration_secret covers both Codespaces and Dependabot secrets.
+		actions: []string{
+			"repo.create_actions_secret",
+			"repo.update_actions_secret",
+			"repo.remove_actions_secret",
+			"repo.create_integration_secret",
+			"repo.update_integration_secret",
+			"repo.remove_integration_secret",
+			"environment.create_actions_secret",
+			"environment.update_actions_secret",
+			"environment.remove_actions_secret",
+		},
+		targetKeys: []string{"key"},
 	},
 }
 

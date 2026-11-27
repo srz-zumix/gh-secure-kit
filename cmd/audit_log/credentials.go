@@ -30,7 +30,7 @@ func NewCredentialsCmd() *cobra.Command {
 		Short: "Detect credential-related operations in the organization audit log",
 		Long: `Detect operations on credentials in the organization audit log:
 SSH keys and deploy keys, personal access tokens, SSO credential authorizations,
-OAuth apps, and GitHub Apps.
+OAuth apps, GitHub Apps, and repository/environment secrets.
 
 Use --category to limit the detected categories (default: all).
 Use --since and --until to limit the period. Both accept RFC3339 timestamps,
