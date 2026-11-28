@@ -2503,18 +2503,37 @@ organizations, all repositories. Applicable inherited policies count; multiple
 partial policies do not. They skip when Actions is disabled or policy coverage
 cannot be determined, and do not inspect or create lockfiles.
 
+The read-only Advanced Security checks (GSK147-GSK155, GSK527-GSK550) inspect
+repository security settings, organization default security configurations for
+new repositories, and AI Scan settings. Disabled applicable settings fail;
+unavailable, unsupported, or `not_set` settings skip. GSK147-GSK151 skip for
+user-owned repositories because GitHub reports those settings as `disabled`
+even though they cannot be configured there. Organization defaults
+do not establish the effective settings of existing repositories; organization
+AI Scan checks report the stored organization setting, while enterprise policy
+and repository opt-outs can affect actual use. Review license costs, AI credit
+budgets, and runner usage before enabling features. Secret validity checks send
+supported detected credentials to their issuers. These checks do not change
+settings automatically.
+
+Dependabot malware alert enablement is not exposed by a supported public API,
+so it cannot be checked here; verify it in the repository's Advanced Security
+settings. See [GitHub's malware alert instructions](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-malware-alerts).
+
 `check`, `apply`, and `golden` accept an optional `--config <path>` YAML file.
-When omitted, they load `.gh-secure-kit-recommended.yml` from the current directory
-if present; otherwise, no configured rules are ignored. Explicitly specified
-missing files, invalid YAML, unknown rule IDs, and invalid target patterns cause an error.
+When omitted, they load `.gh-secure-kit-recommended.yml` from the current
+directory if present; otherwise, no configured rules are ignored. Explicitly
+specified missing files, invalid YAML, unknown rule IDs, and invalid target
+patterns cause an error.
 Configured ignore IDs are combined with repeated `--ignore` flags for evaluation.
 Rule IDs are case-insensitive. The configuration currently supports `ignore`.
-An entry is either a rule ID, which ignores the whole rule, or a rule ID mapped to
-a list of regular expressions, which ignores only the targets (for example, ruleset
-or environment names) whose whole name matches one of them. A rule whose findings
-are all ignored is reported as `skip`. Per-target ignores are available for
-GSK119-GSK122, GSK131, GSK135-GSK137, GSK144, GSK145, and GSK521-GSK525; the target
-of each rule is listed in [docs/rules/README.md](docs/rules/README.md).
+An entry is either a rule ID, which ignores the whole rule, or a rule ID mapped
+to a list of regular expressions, which ignores only the targets (for example,
+ruleset or environment names) whose whole name matches one of them. A rule
+whose findings are all ignored is reported as `skip`. Per-target ignores
+are available for GSK119-GSK122, GSK131, GSK135-GSK137, GSK144, GSK145,
+GSK521-GSK525, and GSK527-GSK548; the target of each rule is listed in
+[docs/rules/README.md](docs/rules/README.md).
 
 ```yaml
 ignore:
@@ -2542,10 +2561,12 @@ additional API requests. If owner data is unavailable on GitHub.com, the
 normal 2FA check is retained. GitHub Enterprise Server is excluded from
 EMU detection.
 
-If the target cannot be retrieved, or any settings request returns HTTP 401
-or 403, the command exits with an error without reporting check results,
-regardless of `--exit-code`. Verify the active account with `gh auth status`
-and its permissions for the target host, repository, or organization.
+If the target cannot be retrieved, or a settings request returns HTTP 401
+or 403, the command normally exits with an error without reporting check
+results, regardless of `--exit-code`. A repository code scanning response
+explicitly indicating that Code Security is disabled is treated as feature
+state instead. Verify the active account with `gh auth status` and its
+permissions for the target host, repository, or organization.
 
 Table output always includes a `Settings URL` column; the cell is filled only
 when a rule has a known GitHub settings page and is empty otherwise. Links use
@@ -2619,11 +2640,14 @@ Existing IDs that are failing, skipped, unevaluated, out of scope, or excluded
 from evaluation by filters or `--ignore` remain in the configuration. New skip
 results are not added. `--ignore` only skips evaluation; it does not add IDs that
 are not already in the configuration.
-Output IDs are uppercase, deduplicated, and sorted; no ignores produces `ignore: []`.
+Output IDs are uppercase, deduplicated, and sorted; no ignores produces
+`ignore: []`.
 For rules that support per-target ignores, a failing rule whose findings are all
 attributable to targets adds one exact-match pattern per new target instead of
 ignoring the whole rule. With `--prune`, patterns that match no failing target
-are removed.
+are removed when target evaluation is complete. For default security
+configuration rules, existing patterns are retained if any relevant
+configuration is unknown or has a disabled prerequisite.
 Each ignored ID includes the rule's title as an inline YAML comment.
 
 ```sh
