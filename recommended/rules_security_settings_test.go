@@ -89,7 +89,7 @@ func TestRepositorySecuritySettings(t *testing.T) {
 					fields[test.field] = state.value
 				}
 				facts := &RepositoryFacts{
-					Repo:             &github.Repository{Visibility: new("private")},
+					Repo:             &github.Repository{Visibility: new("private"), Owner: &github.User{Type: new("Organization")}},
 					securityAnalysis: testSecurityAnalysis(t, fields),
 				}
 				if got := rule.CheckRepo(facts).Status; got != state.want {
@@ -112,12 +112,22 @@ func TestRepositorySecurityApplicability(t *testing.T) {
 		{map[string]string{"secret_scanning": "enabled", "secret_scanning_delegated_bypass": "enabled"}, StatusSkip},
 		{map[string]string{"secret_scanning_push_protection": "enabled", "secret_scanning_delegated_bypass": "disabled"}, StatusFail},
 	} {
-		outcome := rule.CheckRepo(&RepositoryFacts{securityAnalysis: testSecurityAnalysis(t, test.fields)})
+		outcome := rule.CheckRepo(&RepositoryFacts{
+			Repo:             &github.Repository{Owner: &github.User{Type: new("Organization")}},
+			securityAnalysis: testSecurityAnalysis(t, test.fields),
+		})
 		if outcome.Status != test.want {
 			t.Errorf("%v: got %s, want %s", test.fields, outcome.Status, test.want)
 		}
 		if test.want == StatusFail && !strings.Contains(outcome.Detail, "prerequisite status") {
 			t.Errorf("unknown prerequisite missing from failure detail: %s", outcome.Detail)
+		}
+	}
+
+	for _, repo := range []*github.Repository{nil, {}, {Owner: &github.User{Type: new("User")}}} {
+		facts := &RepositoryFacts{Repo: repo, securityAnalysis: testSecurityAnalysis(t, map[string]string{"secret_scanning": "enabled", "secret_scanning_validity_checks": "disabled"})}
+		if got := securityRule(t, "GSK147").CheckRepo(facts).Status; got != StatusSkip {
+			t.Errorf("repository owner %v: got %s, want skip", repo, got)
 		}
 	}
 
@@ -379,7 +389,7 @@ func TestRepositorySecurityCollectionIsSelective(t *testing.T) {
 				switch request.URL.Path {
 				case "/repos/fixture-org/fixture-repo":
 					rootCalls++
-					return rulesetResponse(request, 200, `{"default_branch":"main","private":true,"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_non_provider_patterns":{"status":"disabled"}}}`), nil
+					return rulesetResponse(request, 200, `{"default_branch":"main","private":true,"owner":{"type":"Organization"},"security_and_analysis":{"secret_scanning":{"status":"enabled"},"secret_scanning_non_provider_patterns":{"status":"disabled"}}}`), nil
 				case "/repos/fixture-org/fixture-repo/code-scanning/ai-scan":
 					aiCalls++
 					return rulesetResponse(request, 200, `{"pr_scan":"enabled"}`), nil

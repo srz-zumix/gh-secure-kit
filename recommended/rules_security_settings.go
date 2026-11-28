@@ -18,17 +18,18 @@ type repositorySecurityRule struct {
 	name          string
 	severity      Severity
 	privateOnly   bool
+	orgOwnedOnly  bool
 	prerequisites []securityPrerequisite
 }
 
 var repositorySecurityRules = []repositorySecurityRule{
-	{"GSK147", "Secret scanning validity checks not enabled", "secret_scanning_validity_checks", "secret scanning validity checks", SeverityMedium, false, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
-	{"GSK148", "Secret scanning generic patterns not enabled", "secret_scanning_non_provider_patterns", "secret scanning generic patterns", SeverityMedium, false, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
-	{"GSK149", "AI detection of secrets not enabled", "secret_scanning_ai_detection", "AI detection of secrets", SeverityMedium, false, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
-	{"GSK150", "Secret scanning delegated bypass not enabled", "secret_scanning_delegated_bypass", "secret scanning delegated bypass", SeverityMedium, false, []securityPrerequisite{{"secret_scanning", "secret scanning"}, {"secret_scanning_push_protection", "secret scanning push protection"}}},
-	{"GSK151", "Secret scanning delegated alert dismissal not enabled", "secret_scanning_delegated_alert_dismissal", "secret scanning delegated alert dismissal", SeverityMedium, false, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
-	{"GSK152", "GitHub Code Security not enabled", "code_security", "GitHub Code Security", SeverityMedium, true, nil},
-	{"GSK153", "GitHub Advanced Security bundle not enabled", "advanced_security", "GitHub Advanced Security bundle", SeverityInfo, true, nil},
+	{"GSK147", "Secret scanning validity checks not enabled", "secret_scanning_validity_checks", "secret scanning validity checks", SeverityMedium, false, true, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
+	{"GSK148", "Secret scanning generic patterns not enabled", "secret_scanning_non_provider_patterns", "secret scanning generic patterns", SeverityMedium, false, true, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
+	{"GSK149", "AI detection of secrets not enabled", "secret_scanning_ai_detection", "AI detection of secrets", SeverityMedium, false, true, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
+	{"GSK150", "Secret scanning delegated bypass not enabled", "secret_scanning_delegated_bypass", "secret scanning delegated bypass", SeverityMedium, false, true, []securityPrerequisite{{"secret_scanning", "secret scanning"}, {"secret_scanning_push_protection", "secret scanning push protection"}}},
+	{"GSK151", "Secret scanning delegated alert dismissal not enabled", "secret_scanning_delegated_alert_dismissal", "secret scanning delegated alert dismissal", SeverityMedium, false, true, []securityPrerequisite{{"secret_scanning", "secret scanning"}}},
+	{"GSK152", "GitHub Code Security not enabled", "code_security", "GitHub Code Security", SeverityMedium, true, false, nil},
+	{"GSK153", "GitHub Advanced Security bundle not enabled", "advanced_security", "GitHub Advanced Security bundle", SeverityInfo, true, false, nil},
 }
 
 type organizationSecurityRule struct {
@@ -107,6 +108,16 @@ func needsOrganizationSecurityDefaults(rules []Rule) bool {
 }
 
 func checkRepositorySecuritySetting(f *RepositoryFacts, def repositorySecurityRule) Outcome {
+	if def.orgOwnedOnly {
+		// GitHub reports these settings as disabled even where they cannot be configured.
+		switch f.Repo.GetOwner().GetType() {
+		case "Organization":
+		case "":
+			return Skip("could not determine repository owner type")
+		default:
+			return Skip(fmt.Sprintf("%s is only available for organization-owned repositories", def.name))
+		}
+	}
 	if def.privateOnly {
 		if f.Repo == nil {
 			return Skip("could not determine repository visibility")

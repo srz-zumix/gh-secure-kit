@@ -2502,7 +2502,9 @@ cannot be determined, and do not inspect or create lockfiles.
 The read-only Advanced Security checks (GSK147-GSK155, GSK527-GSK550) inspect
 repository security settings, organization default security configurations for
 new repositories, and AI Scan settings. Disabled applicable settings fail;
-unavailable, unsupported, or `not_set` settings skip. Organization defaults
+unavailable, unsupported, or `not_set` settings skip. GSK147-GSK151 skip for
+user-owned repositories because GitHub reports those settings as `disabled`
+even though they cannot be configured there. Organization defaults
 do not establish the effective settings of existing repositories; organization
 AI Scan checks report the stored organization setting, while enterprise policy
 and repository opt-outs can affect actual use. Review license costs, AI credit
